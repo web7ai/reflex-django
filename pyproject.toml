@@ -4,10 +4,10 @@ version = "0.1.2"
 description = "Run a Django backend (Django ORM, Django Admin) alongside a Reflex app."
 license = "Apache-2.0"
 readme = "README.md"
-authors = [{ name = "Reflex Contributors" }]
+authors = [{ name = "Mohannad Irshedat" }]
 maintainers = [
-    { name = "Reflex Contributors" },
-    { email = "maintainers@reflex.dev" },
+    { name = "Mohannad Irshedat" },
+    { email = "mohannadirshedat77@gmail.com" },
 ]
 requires-python = ">=3.12,<4.0"
 keywords = ["reflex", "django", "asgi", "fullstack", "orm", "admin"]
@@ -39,10 +39,10 @@ classifiers = [
 reflex-django = "reflex_django.cli:main"
 
 [project.urls]
-homepage = "https://reflex.dev"
-documentation = "https://github.com/reflex-dev/reflex/tree/main/packages/reflex-django"
-repository = "https://github.com/reflex-dev/reflex"
-changelog = "https://github.com/reflex-dev/reflex/releases"
+homepage = "https://github.com/mohannadirshedat/reflex-django"
+documentation = "https://github.com/mohannadirshedat/reflex-django"
+repository = "https://github.com/mohannadirshedat/reflex-django"
+changelog = "https://github.com/mohannadirshedat/reflex-django"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reflex_django"]

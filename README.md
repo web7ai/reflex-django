@@ -7,7 +7,8 @@
 3. [How to set up](#how-to-set-up)
 4. [Commands](#commands)
 5. [States, context, and bridges](#states-context-and-bridges)
-6. [Declarative model CRUD (mixins)](#declarative-model-crud-mixins)
+6. [Declarative session login (mixins)](#declarative-session-login-mixins)
+7. [Declarative model CRUD (mixins)](#declarative-model-crud-mixins)
 
 ---
 
@@ -144,7 +145,7 @@ Any subcommand name other than the special cases below is forwarded to Django’
 
 ## States, context, and bridges
 
-This section walks through Reflex state, Django’s per-event request context (context variables), the two bridges, and the helper states that mirror Django into Reflex UI state—each with a small example. For **declarative Django model CRUD** as a generated `rx.State` subclass, see [Declarative model CRUD (mixins)](#declarative-model-crud-mixins) below.
+This section walks through Reflex state, Django’s per-event request context (context variables), the two bridges, and the helper states that mirror Django into Reflex UI state—each with a small example. For **declarative Django session login/logout** as a generated `rx.State` subclass, see [Declarative session login (mixins)](#declarative-session-login-mixins). For **declarative Django model CRUD**, see [Declarative model CRUD (mixins)](#declarative-model-crud-mixins) below.
 
 ### Reflex `rx.State` (baseline)
 
@@ -324,6 +325,44 @@ async def audit_banner(self):
     self.snapshot_json = user_snapshot(current_user())  # dict for display
     assert current_user().is_authenticated  # real check for protected actions
 ```
+
+---
+
+## Declarative session login (mixins)
+
+**`reflex_django.mixins.session_auth`** (re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a frozen **`SessionAuthConfig`**: username/password/error string fields, input setters, an **`on_load`**-style handler that refreshes **`DjangoUserState`** and optionally redirects already-authenticated users, **`submit_login`** (async **`aauthenticate`** / **`alogin`** on **`current_request()`**), and **`logout`** (**`alogout`** then redirect).
+
+**Requirements.** The **event bridge** must be enabled so **`current_request()`** carries the session for each Reflex event. Django 6+ async auth (**`django.contrib.auth`**) is used inside handlers.
+
+### How it works
+
+1. Define **`SessionAuthConfig`** with redirect paths (for example **`post_login_redirect`**, **`post_logout_redirect`**, **`redirect_when_authenticated`** or `None` to skip).
+2. Call **`session_auth_mixin(cfg, base=DjangoUserState)`** (or **`base=`** your app state that already subclasses **`DjangoUserState`**). The returned class is named **`SessionAuthState`** by default (see **`state_class_name`** in config).
+3. Subclass it if you want a stable app-specific name (for example **`LoginState`**).
+
+**`state_module=`** defaults to the caller’s **`__name__`** so the generated class is registered on **`sys.modules`** for Reflex pickling.
+
+### Example
+
+```python
+import reflex as rx
+from reflex_django.auth_state import DjangoUserState
+from reflex_django.mixins.session_auth import SessionAuthConfig, session_auth_mixin
+
+_LOGIN_CFG = SessionAuthConfig(
+    post_login_redirect="/notes",
+    post_logout_redirect="/login",
+    redirect_when_authenticated="/notes",
+)
+
+
+class LoginState(session_auth_mixin(_LOGIN_CFG, base=DjangoUserState)):
+    """Login page; wire ``on_load=LoginState.on_load_login``, etc."""
+
+# app.add_page(login_page, route="/login", on_load=LoginState.on_load_login)
+```
+
+Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`password_var`**, **`error_var`**, event names (**`on_load_event`**, **`submit_event`**, **`logout_event`**), message strings **`session_unavailable_message`** / **`invalid_credentials_message`**, and **`state_class_name`** (defaults to **`SessionAuthState`**; set a unique value if you generate more than one session-auth state under the same **`base=`** parent, since Reflex disallows duplicate substate names).
 
 ---
 

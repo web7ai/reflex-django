@@ -92,7 +92,7 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
 | CLI (programmatic) | `django_cli` |
 
-**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`).
+**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes declarative **`ModelCRUDConfig` / `crud_mixin`** and **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`.
 
 ---
 
