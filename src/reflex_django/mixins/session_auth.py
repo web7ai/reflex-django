@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import sys
 import types
 from dataclasses import dataclass
@@ -13,6 +14,49 @@ from django.contrib.auth import aauthenticate, alogin, alogout
 
 from reflex_django.auth_state import DjangoUserState
 from reflex_django.context import current_request
+from reflex_django.session_js import session_cookie_clear_js, session_cookie_set_js
+
+
+def _defer_nav_js(path: str) -> str:
+    href = json.dumps(path)
+    return f"setTimeout(function(){{ window.location.href = {href}; }}, 50);"
+
+
+def _sync_session_cookie_then_nav(
+    request: Any,
+    path: str,
+    *,
+    clear_cookie: bool = False,
+) -> Any:
+    """Mirror Django session to ``document.cookie``, then hard-navigate.
+
+    Reflex events do not run ``SessionMiddleware``, so the browser often never
+    receives ``Set-Cookie`` after ``alogin`` / ``alogout``. Without syncing the
+    session key here, the next document load can still send a stale ``sessionid``.
+    See :mod:`reflex_django.session_js` and ``SESSION_COOKIE_HTTPONLY``.
+
+    Navigation is deferred briefly so the cookie write is applied before the
+    next load.
+    """
+    go = _defer_nav_js(path)
+    if clear_cookie:
+        js = f"{session_cookie_clear_js()} {go}"
+    else:
+        sk = getattr(request.session, "session_key", None) or ""
+        js = f"{session_cookie_set_js(sk)} {go}" if sk else go
+    return rx.call_script(js)
+
+
+async def _session_async_save(request: Any) -> None:
+    """Persist the session row after mutating it in an async Reflex handler."""
+    session = getattr(request, "session", None)
+    if session is None:
+        return
+    asave = getattr(session, "asave", None)
+    if callable(asave):
+        await asave()
+        return
+    session.save()
 
 
 @dataclass(frozen=True)
@@ -31,6 +75,12 @@ class SessionAuthConfig:
     session_unavailable_message: str = "Session unavailable. Reload the page."
     invalid_credentials_message: str = "Invalid username or password."
     state_class_name: str = "SessionAuthState"
+    #: When set, registers an extra handler that reads credentials from
+    #: ``form_data`` (avoids stale bound state on fast submit). Keys default to
+    #: ``username`` / ``password`` for HTML ``name=`` attributes.
+    submit_form_event: str | None = "submit_login_form"
+    form_username_key: str = "username"
+    form_password_key: str = "password"
 
 
 def session_auth_mixin(
@@ -44,6 +94,12 @@ def session_auth_mixin(
     Uses Django async session auth (:func:`~django.contrib.auth.aauthenticate`,
     :func:`~django.contrib.auth.alogin`, :func:`~django.contrib.auth.alogout`)
     and :func:`reflex_django.context.current_request` inside Reflex event handlers.
+
+    After successful login or logout, the mixin mirrors the session cookie into
+    ``document.cookie`` (see :mod:`reflex_django.session_js`) and performs a
+    short deferred full-page navigation. Reflex's synthetic request path does
+    not run ``SessionMiddleware``, so ``rx.redirect`` alone often leaves the
+    browser without an updated ``sessionid``.
 
     Args:
         cfg: Declarative session auth configuration.
@@ -75,6 +131,8 @@ def session_auth_mixin(
     when_auth = cfg.redirect_when_authenticated
     msg_no_session = cfg.session_unavailable_message
     msg_bad = cfg.invalid_credentials_message
+    form_u = cfg.form_username_key
+    form_p = cfg.form_password_key
 
     cls_name = cfg.state_class_name
 
@@ -91,9 +149,12 @@ def session_auth_mixin(
 
         async def on_load_impl(self: Any) -> Any:
             await self.refresh_django_user_fields()
-            if when_auth is not None and self.is_authenticated:
-                return rx.redirect(when_auth)
-            return None
+            if when_auth is None or not self.is_authenticated:
+                return None
+            request = current_request()
+            if request is None:
+                return rx.call_script(_defer_nav_js(when_auth))
+            return _sync_session_cookie_then_nav(request, when_auth)
 
         ns[cfg.on_load_event] = rx.event(on_load_impl)
 
@@ -118,6 +179,13 @@ def session_auth_mixin(
         ns[f"set_{u_var}"] = make_user_setter()
         ns[f"set_{p_var}"] = make_pass_setter()
 
+        async def _finish_login(self: Any, request: Any, user: Any) -> Any:
+            await alogin(request, user)
+            await _session_async_save(request)
+            setattr(self, p_var, "")
+            await self.refresh_django_user_fields()
+            return _sync_session_cookie_then_nav(request, post_in)
+
         async def submit_impl(self: Any) -> Any:
             setattr(self, e_var, "")
             request = current_request()
@@ -133,19 +201,43 @@ def session_auth_mixin(
                 setattr(self, e_var, msg_bad)
                 setattr(self, p_var, "")
                 return
-            await alogin(request, user)
-            setattr(self, p_var, "")
-            await self.refresh_django_user_fields()
-            return rx.redirect(post_in)
+            return await _finish_login(self, request, user)
 
         ns[cfg.submit_event] = rx.event(submit_impl)
+
+        if cfg.submit_form_event:
+
+            async def submit_form_impl(self: Any, form_data: dict[str, Any]) -> Any:
+                username = str(form_data.get(form_u, "")).strip()
+                password = str(form_data.get(form_p, ""))
+                setattr(self, u_var, username)
+                setattr(self, p_var, password)
+                setattr(self, e_var, "")
+                request = current_request()
+                if request is None:
+                    setattr(self, e_var, msg_no_session)
+                    return
+                user = await aauthenticate(
+                    request,
+                    username=username,
+                    password=password,
+                )
+                if user is None:
+                    setattr(self, e_var, msg_bad)
+                    setattr(self, p_var, "")
+                    return
+                return await _finish_login(self, request, user)
+
+            ns[cfg.submit_form_event] = rx.event(submit_form_impl)
 
         async def logout_impl(self: Any) -> Any:
             request = current_request()
             if request is not None:
                 await alogout(request)
             await self.refresh_django_user_fields()
-            return rx.redirect(post_out)
+            if request is None:
+                return rx.call_script(_defer_nav_js(post_out))
+            return _sync_session_cookie_then_nav(request, post_out, clear_cookie=True)
 
         ns[cfg.logout_event] = rx.event(logout_impl)
 

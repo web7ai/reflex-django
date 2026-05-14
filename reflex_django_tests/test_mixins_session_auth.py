@@ -35,6 +35,7 @@ def test_session_auth_mixin_builds_state_and_registers_module() -> None:
     assert ann["login_error"] is str
     assert hasattr(Cls, "on_load_login")
     assert hasattr(Cls, "submit_login")
+    assert hasattr(Cls, "submit_login_form")
     assert hasattr(Cls, "logout")
     assert hasattr(Cls, "set_login_username")
     assert hasattr(Cls, "set_login_password")
@@ -56,6 +57,7 @@ def test_session_auth_mixin_custom_field_and_event_names() -> None:
         on_load_event="ol",
         submit_event="sub",
         logout_event="lo",
+        submit_form_event=None,
         state_class_name="SessionAuthAltState",
     )
     Cls = session_auth_mixin(cfg, base=_AppStub, state_module=__name__)
@@ -67,6 +69,7 @@ def test_session_auth_mixin_custom_field_and_event_names() -> None:
     assert hasattr(Cls, "lo")
     assert hasattr(Cls, "set_u")
     assert hasattr(Cls, "set_p")
+    assert not hasattr(Cls, "submit_login_form")
 
 
 def test_mixins_package_reexports_session_auth() -> None:

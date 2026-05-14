@@ -100,7 +100,10 @@ from reflex_django import ReflexDjangoPlugin
 config = rx.Config(
     app_name="{app_name}",
     plugins=[
-        ReflexDjangoPlugin(settings_module="django_settings"),
+        ReflexDjangoPlugin(
+            settings_module="django_settings",
+            install_event_bridge=True,
+        ),
         rx.plugins.SitemapPlugin(),
         rx.plugins.TailwindV4Plugin(),
     ],
@@ -115,7 +118,7 @@ Starter [Reflex](https://reflex.dev) app with [reflex-django](https://pypi.org/p
 
 - `rxconfig.py` — `ReflexDjangoPlugin(settings_module="django_settings")` plus Sitemap and Tailwind v4 plugins
 - `django_settings.py` — production-style Django settings (no bundled auto-settings warning)
-- `{app_name}/{app_name}.py` — sample home page with a link to `/admin`
+- `{app_name}/{app_name}.py` — home page, **`/login`** with declarative session auth (`session_auth_mixin`), and a link to `/admin`
 - `.env.example` — copy to `.env` and adjust for deployment
 
 ## Requirements
@@ -131,7 +134,7 @@ uv run reflex-django createsuperuser
 uv run reflex run
 ```
 
-Then open the URL printed for Reflex and visit **`/admin`** on the same host (create a superuser first).
+Then open the URL printed for Reflex. Use **`/login`** for Django session sign-in (same users as `/admin`), or visit **`/admin`** on the same host (create a superuser first).
 
 ## Django commands
 
@@ -173,17 +176,88 @@ from __future__ import annotations
 
 import reflex as rx
 
+from reflex_django.auth_state import DjangoUserState
+from reflex_django.mixins import SessionAuthConfig, session_auth_mixin
 
-class State(rx.State):
-    """Add reactive state for your app here."""
+_LOGIN_CFG = SessionAuthConfig(
+    post_login_redirect="/",
+    post_logout_redirect="/login",
+    redirect_when_authenticated="/",
+)
+
+
+class LoginState(session_auth_mixin(_LOGIN_CFG, base=DjangoUserState)):
+    """Session login; wire ``on_load=LoginState.on_load_login`` on the login route."""
 
     pass
+
+
+def login_page() -> rx.Component:
+    return rx.center(
+        rx.box(
+            rx.form.root(
+                rx.vstack(
+                    rx.heading("Sign in", size="6"),
+                    rx.input(
+                        placeholder="Username",
+                        name="username",
+                        width="100%",
+                    ),
+                    rx.input(
+                        placeholder="Password",
+                        name="password",
+                        type="password",
+                        width="100%",
+                    ),
+                    rx.cond(
+                        LoginState.login_error != "",
+                        rx.text(LoginState.login_error, color="red", size="2"),
+                        rx.fragment(),
+                    ),
+                    rx.button("Sign in", type="submit", width="100%"),
+                    spacing="3",
+                    width="100%",
+                    max_width="22rem",
+                ),
+                on_submit=LoginState.submit_login_form,
+                width="100%",
+            ),
+            border_width="1px",
+            border_radius="lg",
+            padding="2rem",
+            width="100%",
+            max_width="24rem",
+        ),
+        padding="2rem",
+        min_height="100vh",
+    )
 
 
 def index() -> rx.Component:
     return rx.center(
         rx.vstack(
             rx.heading("Welcome to reflex-django", size="9"),
+            rx.cond(
+                LoginState.is_authenticated,
+                rx.vstack(
+                    rx.hstack(
+                        rx.text("Signed in as"),
+                        rx.text(LoginState.username, weight="bold"),
+                        rx.text("."),
+                        spacing="1",
+                        align="center",
+                    ),
+                    rx.button("Log out", on_click=LoginState.logout, variant="soft"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.vstack(
+                    rx.text("You are not signed in."),
+                    rx.link("Sign in with Django session →", href="/login"),
+                    spacing="1",
+                    align="center",
+                ),
+            ),
             rx.text(
                 "Django admin, ORM, and sessions run alongside this Reflex app "
                 "in one ASGI process.",
@@ -193,6 +267,8 @@ def index() -> rx.Component:
                 "First time: run ",
                 rx.code("uv run reflex-django createsuperuser"),
                 " then sign in at ",
+                rx.code("/login"),
+                " or ",
                 rx.code("/admin"),
                 ".",
             ),
@@ -213,7 +289,8 @@ def index() -> rx.Component:
 
 
 app = rx.App()
-app.add_page(index)
+app.add_page(index, on_load=LoginState.sync_from_django)
+app.add_page(login_page, route="/login", on_load=LoginState.on_load_login)
 '''
 
 _GITIGNORE_EXTRA = """
@@ -458,7 +535,7 @@ def main_argv_init(argv: list[str]) -> None:
     click.echo("  uv run reflex-django createsuperuser")
     click.echo("  uv run reflex run")
     click.echo("")
-    click.echo("Then open the app URL and visit /admin (same origin).")
+    click.echo("Then open the app URL: use /login for Reflex session auth or /admin (same origin).")
 
 
 def reflex_django_init_entry() -> None:

@@ -330,7 +330,9 @@ async def audit_banner(self):
 
 ## Declarative session login (mixins)
 
-**`reflex_django.mixins.session_auth`** (re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a frozen **`SessionAuthConfig`**: username/password/error string fields, input setters, an **`on_load`**-style handler that refreshes **`DjangoUserState`** and optionally redirects already-authenticated users, **`submit_login`** (async **`aauthenticate`** / **`alogin`** on **`current_request()`**), and **`logout`** (**`alogout`** then redirect).
+**`reflex_django.mixins.session_auth`** (re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a frozen **`SessionAuthConfig`**: username/password/error string fields, input setters, an **`on_load`**-style handler that refreshes **`DjangoUserState`** and optionally redirects already-authenticated users, **`submit_login`** (async **`aauthenticate`** / **`alogin`** on **`current_request()`**), optional **`submit_login_form`** (same flow using **`form_data`** from **`rx.form.root`** — avoids stale bound fields on fast submit), and **`logout`** (**`alogout`** then navigation).
+
+Successful login calls **`await request.session.asave()`** then mirrors the new session key into **`document.cookie`** via **`rx.call_script`** (see **`reflex_django.session_js`**) and performs a short deferred full-page navigation. Reflex’s synthetic request path does not run Django’s **`SessionMiddleware`**, so **`rx.redirect`** alone often leaves the browser without an updated **`sessionid`**; **`logout`** clears the cookie the same way before navigating.
 
 **Requirements.** The **event bridge** must be enabled so **`current_request()`** carries the session for each Reflex event. Django 6+ async auth (**`django.contrib.auth`**) is used inside handlers.
 
@@ -362,7 +364,7 @@ class LoginState(session_auth_mixin(_LOGIN_CFG, base=DjangoUserState)):
 # app.add_page(login_page, route="/login", on_load=LoginState.on_load_login)
 ```
 
-Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`password_var`**, **`error_var`**, event names (**`on_load_event`**, **`submit_event`**, **`logout_event`**), message strings **`session_unavailable_message`** / **`invalid_credentials_message`**, and **`state_class_name`** (defaults to **`SessionAuthState`**; set a unique value if you generate more than one session-auth state under the same **`base=`** parent, since Reflex disallows duplicate substate names).
+Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`password_var`**, **`error_var`**, event names (**`on_load_event`**, **`submit_event`**, **`logout_event`**, optional **`submit_form_event`** defaulting to **`submit_login_form`** — set to **`None`** to omit), **`form_username_key`** / **`form_password_key`** (HTML field names for the form submit handler, default **`username`** / **`password`**), message strings **`session_unavailable_message`** / **`invalid_credentials_message`**, and **`state_class_name`** (defaults to **`SessionAuthState`**; set a unique value if you generate more than one session-auth state under the same **`base=`** parent, since Reflex disallows duplicate substate names).
 
 ---
 
