@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `django_is_staff` → `is_staff`, `django_is_superuser` → `is_superuser`,
   `django_group_names` → `group_names`.
 
+## [0.1.2] — 2026-05-14
+
+### Added
+
+- `reflex_django.mixins.crud`: declarative `ModelCRUDConfig` and `crud_mixin()` factory
+  for Reflex state with Django ORM list + CRUD event handlers (optional `base` state
+  class and `state_module` for pickle-safe dynamic subclasses). Re-exported from
+  `reflex_django.mixins`.
+
 ## [0.1.0] — 2026-05-14
 
 ### Added
@@ -24,4 +33,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Reflex (`ReflexDjangoPlugin`), `DjangoEventBridge`, auth/session/locale
   bridging, context processors, helpers, and CLI entry point `reflex-django`.
 
+[0.1.2]: https://pypi.org/project/reflex-django/
 [0.1.0]: https://pypi.org/project/reflex-django/

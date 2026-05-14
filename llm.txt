@@ -1,0 +1,192 @@
+# reflex-django — LLM and agent guide
+
+This file orients coding agents and LLMs: how reflex-django fits Reflex + Django, what to import, how to configure it safely, and common mistakes. For tutorials and longer examples, read `README.md` in this directory.
+
+---
+
+## Metadata
+
+| Item | Value |
+|------|--------|
+| Package | `reflex-django` (import: `reflex_django`) |
+| Purpose | Run a Django ASGI app (ORM, admin, sessions, auth, i18n) alongside a Reflex app in **one process** under `reflex run`. |
+| Python | `>=3.12,<4.0` |
+| Django | `>=6.0,<7.0` |
+| Reflex | `>=0.9.2,<1.0` |
+| License | Apache-2.0 (see `LICENSE`) |
+
+---
+
+## What it is / what it is not
+
+**Is:** A Reflex **plugin** (`ReflexDjangoPlugin`) that (1) initializes Django early from `rxconfig.py`, (2) wraps Reflex’s ASGI stack with a **path-prefix dispatcher** so selected HTTP paths go to Django and the rest to Reflex, and (3) optionally installs **Reflex event middleware** (`DjangoEventBridge`) that builds a synthetic `HttpRequest` per Socket.IO event and binds it in **context variables** so helpers like `current_user()` work inside `@rx.event` handlers.
+
+**Is not:** A single merged URL router. Reflex UI traffic and `/_event/…` are **not** ordinary Django views. Django HTTP middleware does **not** run for Reflex events unless you rely on the **event bridge** (default on), which reconstructs session, user, and optional locale for that event only.
+
+---
+
+## Agent setup checklist
+
+Do these in order:
+
+1. Add dependencies: `uv add reflex reflex-django` (or equivalent).
+2. Scaffold Reflex: `uv run reflex init frontend` (app name/layout per Reflex CLI).
+3. Create a Django project (e.g. `uv run django-admin startproject backend .`) so you have `manage.py` and a settings module (e.g. `backend.settings`).
+4. In **`INSTALLED_APPS`**, include Django contrib apps you need (`auth`, `sessions`, `admin`, `staticfiles`, …) and **`reflex_django`** when you use bundled helpers (states, admin registration, etc.).
+5. In **`rxconfig.py`**, add the plugin with your settings module:
+
+   ```python
+   import reflex as rx
+   from reflex_django import ReflexDjangoPlugin
+
+   config = rx.Config(
+       app_name="myapp",
+       plugins=[ReflexDjangoPlugin(settings_module="backend.settings")],
+   )
+   ```
+
+6. Align **`ROOT_URLCONF`** (and `urlpatterns`) with plugin prefixes: `backend_prefix`, `admin_prefix` (default `"/admin"`), and `extra_prefixes`. Mismatched prefixes are a frequent bug.
+7. Run: `uv run reflex run`.
+
+---
+
+## Architecture (compact)
+
+```text
+Browser
+  │ HTTP matching admin / api / static path prefixes…
+  ├──────────────────────────────► Django ASGI (same process)
+  │
+  │ Reflex pages, assets, Socket.IO /_event/…
+  └──────────────────────────────► Reflex ASGI
+                                         │
+                                         ▼
+                             Reflex event → DjangoEventBridge
+                                         → contextvars (current_request, …)
+                                         → your @rx.event handlers
+```
+
+- **HTTP bridge:** Implemented via `ReflexDjangoPlugin.post_compile` appending an `api_transformer` that wraps the inner app (`src/reflex_django/plugin.py`, `src/reflex_django/asgi.py`).
+- **Event bridge:** `DjangoEventBridge` Reflex middleware (`src/reflex_django/middleware.py`) calls `begin_event_request` / `end_event_request` (`src/reflex_django/context.py`).
+- **ASGI lifespan:** Owned by Reflex, not duplicated for Django in the same way as a standalone Django-only deploy—see README “Architecture” for nuance.
+
+---
+
+## Public API (package `reflex_django`)
+
+These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-loaded** (see next section).
+
+| Area | Symbols |
+|------|---------|
+| Plugin | `ReflexDjangoPlugin` |
+| Django init | `configure_django` |
+| ASGI | `build_django_asgi`, `make_dispatcher` |
+| Per-event context | `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
+| Event middleware | `DjangoEventBridge` |
+| Reflex state helpers | `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
+| Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
+| Authz (events) | `django_login_required`, `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` |
+| User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
+| ORM helper | `Model` (abstract Django model base + Reflex serializer) |
+| Admin | `register_admin` |
+| Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
+| CLI (programmatic) | `django_cli` |
+
+**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`).
+
+---
+
+## Critical rule: lazy imports on `reflex_django`
+
+Many public attributes are resolved via **PEP 562** `__getattr__` so submodules that touch the Django ORM, admin, or HTTP stack are not imported until **after** `django.setup()`-compatible initialization.
+
+**Do:** Import `from reflex_django import …` in application code after `rxconfig` / plugin construction in normal Reflex startup. Prefer the package root for documented names.
+
+**Avoid:** Import patterns that pull Django models or heavy `reflex_django` submodules at **import time before** settings and `configure_django()` have run (e.g. circular imports from models imported at the top of modules that load before `rxconfig`). If tests need a request binding, use `begin_event_request` / `end_event_request` carefully (see tests under `reflex_django_tests/`).
+
+---
+
+## `ReflexDjangoPlugin` configuration
+
+| Argument | Role |
+|----------|------|
+| `settings_module` | Dotted path (e.g. `"backend.settings"`). Sets `DJANGO_SETTINGS_MODULE` via `setdefault` and runs `configure_django`. |
+| `backend_prefix` | Optional prefix for **your** Django HTTP routes (e.g. `"/api"`). Exported to env as `REFLEX_DJANGO_API_PREFIX` when non-empty. |
+| `admin_prefix` | Django admin mount (default `"/admin"`). Sets `REFLEX_DJANGO_ADMIN_PREFIX`. |
+| `extra_prefixes` | Additional path prefixes forwarded to Django. |
+| `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
+
+**Static files:** If `django.contrib.staticfiles` is in `INSTALLED_APPS` and `STATIC_URL` is a **path** (not `://` CDN URL), the plugin adds that URL as a forwarded prefix so Django can serve statics (`_static_prefixes` in `plugin.py`).
+
+---
+
+## Django settings (`REFLEX_DJANGO_*` and related)
+
+Consolidated from `src/reflex_django/default_settings.py` and related modules:
+
+| Setting | Meaning |
+|---------|---------|
+| `REFLEX_DJANGO_AUTO_SETTINGS` | `True` in bundled defaults; plugin **warns** that you should use your own settings + stable `SECRET_KEY` for production. |
+| `REFLEX_DJANGO_ADMIN_PREFIX` | Admin URL prefix; kept in sync with plugin env (`default_settings`, `urls.py`). |
+| `REFLEX_DJANGO_CONTEXT_PROCESSORS` | Non-empty tuple of dotted callables `(request) -> dict` or async; used **exclusively** by `collect_reflex_context`. You must return **JSON-serializable** dicts. |
+| `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | When `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty and this is `True`, run `TEMPLATES[*].OPTIONS["context_processors"]` with sanitization (see `reflex_context.py`). |
+| `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `django_login_required` when anonymous. |
+| `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
+| `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`middleware.py`). |
+| `REFLEX_DJANGO_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
+
+Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX_DJANGO_STATIC_ROOT`, `REFLEX_DJANGO_SECRET_KEY`, `REFLEX_DJANGO_DEBUG`, `REFLEX_DJANGO_ALLOWED_HOSTS`, `REFLEX_DJANGO_URLCONF`. Database URL can fall back from Reflex config `db_url` to a local SQLite file.
+
+---
+
+## Security and best practices
+
+1. **Authorize on the server inside event handlers** using `current_user()`, `require_login_user()`, or `await auser_has_perm(user, "app.codename")`. Never trust `DjangoUserState` fields alone for permission or ownership checks—they are a **UI snapshot** synchronized to the client.
+2. Use **`django_login_required`** to redirect anonymous users (`rx.redirect` to `REFLEX_DJANGO_LOGIN_URL` or an explicit path).
+3. **`user_snapshot(user)`** (`from reflex_django import user_snapshot`) is for display, logging, or custom processors—not a substitute for live `User` checks on mutations.
+4. Anything assigned to Reflex **`rx.State`** fields that sync to the browser must be **JSON-serializable**. Custom `REFLEX_DJANGO_CONTEXT_PROCESSORS` must not leak secrets or non-JSON objects.
+5. Prefer **`async def`** event handlers when calling Django’s async APIs (`aget_user` is already used in the bridge for `request.user`).
+
+---
+
+## Reflex + Django ORM
+
+- Optional abstract base **`Model`** (`src/reflex_django/model.py`): subclass for tables; run migrations through the CLI below. Importing `reflex_django.model` calls `configure_django()`.
+- Registered **serializer** turns Django `Model` instances into JSON-friendly dicts (includes PK) for Reflex wire format.
+
+---
+
+## CLI
+
+- **Via Reflex:** `uv run reflex django <subcommand>` — e.g. `migrate`, `makemigrations`, `createsuperuser`, `shell`, `collectstatic`, `help`. Loads `rxconfig` first so `ReflexDjangoPlugin` sets `DJANGO_SETTINGS_MODULE` and prefixes, then `configure_django()`.
+- **Standalone:** `uv run reflex-django <subcommand>` — forwards to Django’s `execute_from_command_line` the same way (see `src/reflex_django/cli.py`).
+- **`reflex django init`:** Exists for scaffolding but is **beta**; README recommends the **manual** setup checklist for production-minded projects.
+
+---
+
+## Testing and advanced use
+
+- Use **`begin_event_request(request)`** / **`end_event_request()`** to bind a synthetic request in tests or advanced flows (normally the bridge does this). Examples: `reflex_django_tests/`.
+- **`collect_reflex_context(request)`** is async; pass `current_request()` inside a bridged event, or `None` for an empty dict.
+
+---
+
+## Common mistakes
+
+| Mistake | Why it fails |
+|---------|----------------|
+| Plugin prefixes do not match `ROOT_URLCONF` | Django returns 404 or Reflex handles paths unexpectedly. |
+| Using `DjangoUserState` for authorization | Client-visible; can be stale or tampered with—use `current_user()` / permissions on the server. |
+| Putting non-JSON values into Reflex state or explicit context processors | Serialization errors or subtle runtime failures. |
+| `install_event_bridge=False` but still expecting `current_user()` from sessions | No synthetic request / session binding from the bridge. |
+| Heavy imports before Django setup / `rxconfig` | Breaks lazy-loading assumptions; circular import issues. |
+| Relying on Django HTTP middleware for Reflex-only actions | Events are not full HTTP requests; use the event bridge and explicit checks. |
+
+---
+
+## Pointers for deeper reading
+
+- `README.md` — full architecture, examples for states, bridges, context processors.
+- `CHANGELOG.md` — version-to-version changes.
+- `RELEASING.md` — maintainer release process.
+- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `authz.py`, `auth_state.py`, `i18n_state.py`, `reflex_context.py`, `model.py`, `cli.py`.

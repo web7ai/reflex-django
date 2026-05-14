@@ -7,6 +7,7 @@
 3. [How to set up](#how-to-set-up)
 4. [Commands](#commands)
 5. [States, context, and bridges](#states-context-and-bridges)
+6. [Declarative model CRUD (mixins)](#declarative-model-crud-mixins)
 
 ---
 
@@ -143,7 +144,7 @@ Any subcommand name other than the special cases below is forwarded to Django’
 
 ## States, context, and bridges
 
-This section walks through Reflex state, Django’s per-event request context (context variables), the two bridges, and the helper states that mirror Django into Reflex UI state—each with a small example.
+This section walks through Reflex state, Django’s per-event request context (context variables), the two bridges, and the helper states that mirror Django into Reflex UI state—each with a small example. For **declarative Django model CRUD** as a generated `rx.State` subclass, see [Declarative model CRUD (mixins)](#declarative-model-crud-mixins) below.
 
 ### Reflex `rx.State` (baseline)
 
@@ -323,3 +324,81 @@ async def audit_banner(self):
     self.snapshot_json = user_snapshot(current_user())  # dict for display
     assert current_user().is_authenticated  # real check for protected actions
 ```
+
+---
+
+## Declarative model CRUD (mixins)
+
+**`reflex_django.mixins.crud`** (also re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a small declarative config so you can list, create, edit, and delete rows of a Django model without hand-writing the same event wiring each time.
+
+**Requirements.** Django must be configured (plugin + `INSTALLED_APPS` including your app and auth/session as usual). The **event bridge** must be enabled so `django_login_required()` and `require_login_user()` see the session user. CRUD handlers use the default **`django_login_required()`** wrapper (anonymous users are redirected; login URL from `REFLEX_DJANGO_LOGIN_URL` unless you customize handlers yourself—see **`reflex_django.authz`**).
+
+### How it works
+
+1. You define a frozen **`ModelCRUDConfig`** pointing at your **`models.Model`**, the state attribute names you want on the client (`list_var`, `error_var`), which model fields appear in create/edit forms (`form_fields`), and optional **`owner_field`** (for example `"user"`) so queries and writes are scoped to **`require_login_user()`**.
+2. You call **`crud_mixin(cfg, base=…)`**. It returns a new class named **`{Model.__name__}CRUDState`** with:
+   - A **list** of row dicts under `list_var` (default serializer uses `model_to_dict` plus `id`, JSON-friendly datetimes).
+   - String fields **`form_<name>`** and **`edit_<name>`** for each entry in `form_fields`, plus **`editing_id`** (`-1` when not editing).
+   - **`refresh_method`**: async reload from the ORM (respects `owner_field`, `ordering`).
+   - **`on_load_event`**: async `on_load` target to call your refresh (login required).
+   - **`add_event`** / **`delete_event`**: create and delete (login required).
+   - **`start_edit`**, **`save_edit`**, **`cancel_edit`**: edit lifecycle (`cancel_edit` clears local edit state only and is not login-gated).
+   - **`set_form_<field>`** / **`set_edit_<field>`**: `@rx.event` setters for inputs.
+3. You **subclass** that generated class when you need a stable app-specific name or extra state:
+
+   ```python
+   class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=AppState)):
+       """Auth and shared session live on ``AppState``."""
+   ```
+
+**`base=`** should be your app’s shared **`rx.State`** subclass (for example one that holds login UI or `DjangoUserState` mixins) so the CRUD state participates in the same inheritance tree as the rest of your app.
+
+**`state_module=`** defaults to the **calling module’s** `__name__` so the dynamic class is registered on **`sys.modules`** for Reflex pickling. Pass it explicitly if you build state from a helper function in another module.
+
+### Example
+
+```python
+from django.conf import settings
+from django.db import models
+
+import reflex as rx
+from reflex_django.mixins.crud import ModelCRUDConfig, crud_mixin
+
+
+class Note(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    content = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+_NOTE_CRUD_CONFIG = ModelCRUDConfig(
+    model=Note,
+    list_var="notes",
+    form_fields=("title", "content"),
+    error_var="notes_error",
+    owner_field="user",
+    ordering=("-created_at",),
+    required_for_create=("title",),
+    refresh_method="_refresh_note_rows",
+    on_load_event="on_load_notes",
+    add_event="add_note",
+    delete_event="delete_note",
+)
+
+
+class AppState(rx.State):
+    """Shared app base (login fields, etc.)."""
+    pass
+
+
+class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=AppState)):
+    """Notes CRUD; list lives in ``notes``, errors in ``notes_error``."""
+
+# Typical page wiring (names match config):
+# app.add_page(notes_page, route="/notes", on_load=NotesState.on_load_notes)
+```
+
+In your page component, bind inputs to **`NotesState.form_title`**, **`NotesState.set_form_title`**, and so on; call **`NotesState.add_note`**, **`NotesState.start_edit`**, **`NotesState.save_edit`**, **`NotesState.cancel_edit`**, **`NotesState.delete_note`** as `on_click` / table actions; render **`NotesState.notes`** (list of dicts, each with **`id`**) with **`rx.foreach`**.
+
+Configurable **`ModelCRUDConfig`** fields include **`row_serializer`**, **`exclude_from_row`**, **`owner_field=None`** (no user scoping), and the default event names **`refresh_method`**, **`on_load_event`**, **`add_event`**, **`delete_event`** when you do not want the stock `on_load_items` / `add_item` names.
