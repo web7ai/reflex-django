@@ -101,10 +101,10 @@ def password_reset_confirm_page() -> rx.Component:
                         on_submit=DjangoAuthState.submit_password_reset_confirm,
                         width="100%",
                     ),
-                    error_callout(
-                        DjangoAuthState.reset_error
-                        if DjangoAuthState.reset_error != ""
-                        else auth.messages["reset_invalid_link"]
+                    rx.cond(
+                        DjangoAuthState.reset_error != "",
+                        error_callout(DjangoAuthState.reset_error),
+                        error_callout(auth.messages["reset_invalid_link"]),
                     ),
                 ),
             ),
