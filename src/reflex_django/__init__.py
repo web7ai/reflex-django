@@ -28,6 +28,16 @@ from reflex_django.plugin import ReflexDjangoPlugin
 
 if TYPE_CHECKING:
     from reflex_django.admin import register as register_admin
+    from reflex_django.auth import (
+        AuthSettings,
+        DjangoAuthState,
+        add_auth_pages,
+        autoload,
+        get_auth_settings,
+        pages as auth_pages,
+        login_required,
+        routes as auth_routes,
+    )
     from reflex_django.auth_state import DjangoUserState, user_snapshot
     from reflex_django.authz import (
         ReflexDjangoAuthError,
@@ -59,6 +69,8 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "AuthSettings",
+    "DjangoAuthState",
     "DjangoContextState",
     "DjangoEventBridge",
     "DjangoI18nState",
@@ -66,7 +78,11 @@ __all__ = [
     "Model",
     "ReflexDjangoAuthError",
     "ReflexDjangoPlugin",
+    "add_auth_pages",
+    "auth_pages",
+    "auth_routes",
     "auser_has_perm",
+    "autoload",
     "begin_event_request",
     "build_django_asgi",
     "builtin_i18n_context",
@@ -79,9 +95,11 @@ __all__ = [
     "current_user",
     "django_cli",
     "django_login_required",
+    "get_auth_settings",
     "end_event_request",
     "make_dispatcher",
     "register_admin",
+    "login_required",
     "require_login_user",
     "session_cookie_clear_js",
     "session_cookie_name_and_suffix",
@@ -118,7 +136,15 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "current_user": ("reflex_django.context", "current_user"),
     "django_login_required": ("reflex_django.authz", "django_login_required"),
     "end_event_request": ("reflex_django.context", "end_event_request"),
+    "AuthSettings": ("reflex_django.auth.settings", "AuthSettings"),
+    "DjangoAuthState": ("reflex_django.auth.state", "DjangoAuthState"),
+    "add_auth_pages": ("reflex_django.auth.registry", "add_auth_pages"),
+    "auth_pages": ("reflex_django.auth", "pages"),
+    "auth_routes": ("reflex_django.auth", "routes"),
+    "autoload": ("reflex_django.auth.registry", "autoload"),
+    "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
     "register_admin": ("reflex_django.admin", "register"),
+    "login_required": ("reflex_django.auth.decorators", "login_required"),
     "require_login_user": ("reflex_django.authz", "require_login_user"),
     "session_cookie_clear_js": ("reflex_django.session_js", "session_cookie_clear_js"),
     "session_cookie_name_and_suffix": (

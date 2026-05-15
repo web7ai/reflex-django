@@ -333,6 +333,78 @@ async def audit_banner(self):
 
 ---
 
+## Canned authentication pages
+
+Inspired by [reflex-local-auth](https://github.com/masenf/reflex-local-auth), **reflex-django** ships ready-made login, registration, and password-reset pages backed by **Django sessions** and the stock **`User`** model.
+
+### Quick start
+
+In **`django_settings.py`** (or your settings module):
+
+```python
+REFLEX_DJANGO_AUTH = {
+    "SIGNUP_ENABLED": True,
+    "PASSWORD_RESET_ENABLED": True,
+    "LOGIN_URL": "/login",
+    "SIGNUP_URL": "/register",
+    "LOGIN_REDIRECT_URL": "/",
+}
+
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@localhost"
+```
+
+In your Reflex app module:
+
+```python
+import reflex as rx
+from reflex_django.auth import add_auth_pages, login_required, routes
+from reflex_django.auth.state import DjangoAuthState
+
+app = rx.App()
+add_auth_pages(app)
+
+@rx.page()
+@login_required
+def dashboard():
+    return rx.heading("Members only")
+```
+
+### Settings (`REFLEX_DJANGO_AUTH`)
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `ENABLED` | `True` | Master switch for canned pages |
+| `SIGNUP_ENABLED` | `True` | Register page at `SIGNUP_URL` |
+| `PASSWORD_RESET_ENABLED` | `True` | Forgot-password flow |
+| `LOGIN_URL` | `/login` | Login route (also used by `django_login_required`) |
+| `SIGNUP_URL` | `/register` | Registration route |
+| `PASSWORD_RESET_URL` | `/password-reset` | Request reset email |
+| `PASSWORD_RESET_CONFIRM_URL` | `/password-reset/confirm/[uid]/[token]` | Set new password |
+| `LOGIN_REDIRECT_URL` | `/` | After successful login |
+| `LOGOUT_REDIRECT_URL` | `/login` | After logout |
+| `SIGNUP_REDIRECT_URL` | `/login` | After registration (auto sign-in) |
+| `REDIRECT_AUTHENTICATED_USER` | `/` | When visiting login/register while signed in |
+| `EMAIL_REQUIRED` | `False` | Require email on signup |
+| `PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
+| `MESSAGES` | (built-in dict) | User-facing copy |
+
+Legacy **`REFLEX_DJANGO_LOGIN_URL`** is still read when `LOGIN_URL` is omitted from the dict.
+
+### Security notes
+
+- **`@login_required`** only redirects in the UI (like reflex-local-auth). Use **`@django_login_required`** or **`require_login_user()`** on event handlers that return private data.
+- Password-reset emails use Django’s token generator; use a stable **`SECRET_KEY`** in production.
+- Registration creates active users immediately; set **`SIGNUP_ENABLED=False`** if only admins should create accounts.
+
+### Customization
+
+- Import **`reflex_django.auth.pages`** and register your own components on the same routes.
+- Subclass or extend **`DjangoAuthState`** (built from session login + registration + reset mixins).
+- For hand-built forms, keep using **`session_auth_mixin`** (see below).
+
+---
+
 ## Declarative session login (mixins)
 
 **`reflex_django.mixins.session_auth`** (re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a frozen **`SessionAuthConfig`**: username/password/error string fields, input setters, an **`on_load`**-style handler that refreshes **`DjangoUserState`** and optionally redirects already-authenticated users, **`submit_login`** (async **`aauthenticate`** / **`alogin`** on **`current_request()`**), optional **`submit_login_form`** (same flow using **`form_data`** from **`rx.form.root`** — avoids stale bound fields on fast submit), and **`logout`** (**`alogout`** then navigation).

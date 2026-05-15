@@ -55,6 +55,11 @@ class ReflexDjangoPlugin(Plugin):
         install_event_bridge: Whether to register :class:`DjangoEventBridge`
             as a Reflex event middleware. When ``True`` (the default), Reflex
             Socket.IO events see ``current_user()``, ``current_session()`` etc.
+        install_auth_pages: When ``True``, call
+            :func:`reflex_django.auth.autoload` during plugin setup so canned
+            login/register/reset pages are registered. Prefer calling
+            :func:`reflex_django.auth.add_auth_pages` explicitly in your app
+            module for clarity.
     """
 
     settings_module: str | None = None
@@ -62,6 +67,7 @@ class ReflexDjangoPlugin(Plugin):
     admin_prefix: str = "/admin"
     extra_prefixes: tuple[str, ...] = ()
     install_event_bridge: bool = True
+    install_auth_pages: bool = False
 
     def __post_init__(self) -> None:
         """Export Django env vars and run :func:`configure_django` when the plugin is built.
@@ -184,6 +190,17 @@ class ReflexDjangoPlugin(Plugin):
             from reflex_django.middleware import DjangoEventBridge
 
             app.add_middleware(DjangoEventBridge())
+
+        if self.install_auth_pages:
+            try:
+                from reflex_django.auth import autoload
+
+                autoload()
+            except Exception as exc:
+                console.warn(
+                    "reflex-django install_auth_pages=True but autoload failed: "
+                    f"{exc}. Call add_auth_pages(app) in your app module instead."
+                )
 
     @staticmethod
     def _warn_if_using_auto_settings(settings_module: str) -> None:

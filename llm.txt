@@ -86,13 +86,14 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Reflex state helpers | `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
 | Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
 | Authz (events) | `django_login_required`, `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` |
+| Canned auth UI | `add_auth_pages`, `autoload`, `login_required`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
 | User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
 | ORM helper | `Model` (abstract Django model base + Reflex serializer) |
 | Admin | `register_admin` |
 | Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
 | CLI (programmatic) | `django_cli` |
 
-**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes declarative **`ModelCRUDConfig` / `crud_mixin`** and **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`.
+**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes declarative **`ModelCRUDConfig` / `crud_mixin`** and **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned login/register/password-reset pages via **`add_auth_pages(app)`** and **`REFLEX_DJANGO_AUTH`** in Django settings (allauth-style dict).
 
 ---
 
@@ -115,6 +116,7 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 | `admin_prefix` | Django admin mount (default `"/admin"`). Sets `REFLEX_DJANGO_ADMIN_PREFIX`. |
 | `extra_prefixes` | Additional path prefixes forwarded to Django. |
 | `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
+| `install_auth_pages` | Default `False`. When `True`, attempts `reflex_django.auth.autoload()` (prefer explicit `add_auth_pages(app)` in the app module). |
 
 **Static files:** If `django.contrib.staticfiles` is in `INSTALLED_APPS` and `STATIC_URL` is a **path** (not `://` CDN URL), the plugin adds that URL as a forwarded prefix so Django can serve statics (`_static_prefixes` in `plugin.py`).
 
@@ -130,7 +132,10 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 | `REFLEX_DJANGO_ADMIN_PREFIX` | Admin URL prefix; kept in sync with plugin env (`default_settings`, `urls.py`). |
 | `REFLEX_DJANGO_CONTEXT_PROCESSORS` | Non-empty tuple of dotted callables `(request) -> dict` or async; used **exclusively** by `collect_reflex_context`. You must return **JSON-serializable** dicts. |
 | `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | When `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty and this is `True`, run `TEMPLATES[*].OPTIONS["context_processors"]` with sanitization (see `reflex_context.py`). |
-| `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `django_login_required` when anonymous. |
+| `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `django_login_required` when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |
+| `REFLEX_DJANGO_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
+| `EMAIL_BACKEND` / `DEFAULT_FROM_EMAIL` | Required for password-reset emails (console backend OK in dev). |
+| `REFLEX_DJANGO_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
 | `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
 | `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`middleware.py`). |
 | `REFLEX_DJANGO_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |

@@ -46,10 +46,9 @@ def test_run_reflex_django_init_calls_uv_sequence(tmp_path: Path, monkeypatch) -
     assert (root / "rxconfig.py").read_text(encoding="utf-8").count("ReflexDjangoPlugin")
     assert "LocaleMiddleware" in (root / "django_settings.py").read_text(encoding="utf-8")
     app_py = (root / "myapp" / "myapp.py").read_text(encoding="utf-8")
-    assert "session_auth_mixin" in app_py
-    assert "LoginState" in app_py
-    assert "submit_login_form" in app_py
-    assert "rx.form.root" in app_py
+    assert "add_auth_pages" in app_py
+    assert "DjangoAuthState" in app_py
+    assert "routes.LOGIN_ROUTE" in app_py
     assert "install_event_bridge=True" in (root / "rxconfig.py").read_text(encoding="utf-8")
     assert any(c[1][:2] == ("init", "--name") for c in calls)
     assert any(c[1][:3] == ("add", "reflex>=0.9.2,<1.0") for c in calls)

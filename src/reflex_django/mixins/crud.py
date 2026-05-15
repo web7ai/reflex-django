@@ -23,8 +23,13 @@ def _default_row_serializer(
     exclude_fields: frozenset[str],
 ) -> dict[str, Any]:
     """JSON-friendly row dict; datetimes as ``%Y-%m-%d %H:%M`` strings."""
+    # Django 6+ ``model_to_dict`` always skips non-editable fields (e.g. timestamps).
     data = model_to_dict(instance, exclude=list(exclude_fields))
     data["id"] = instance.pk
+    for field in instance._meta.concrete_fields:
+        if field.name in exclude_fields or field.name in data:
+            continue
+        data[field.name] = field.value_from_object(instance)
     for key, val in list(data.items()):
         if isinstance(val, datetime):
             data[key] = val.strftime("%Y-%m-%d %H:%M")

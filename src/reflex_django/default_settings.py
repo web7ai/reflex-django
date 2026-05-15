@@ -121,6 +121,45 @@ REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS: bool = False
 # Redirect target for :func:`reflex_django.django_login_required` when anonymous.
 REFLEX_DJANGO_LOGIN_URL = "/login"
 
+# Canned Reflex auth pages (login, register, password reset). See reflex_django.auth.
+REFLEX_DJANGO_AUTH = {
+    "ENABLED": True,
+    "SIGNUP_ENABLED": True,
+    "PASSWORD_RESET_ENABLED": True,
+    "LOGIN_URL": "/login",
+    "SIGNUP_URL": "/register",
+    "PASSWORD_RESET_URL": "/password-reset",
+    "PASSWORD_RESET_CONFIRM_URL": "/password-reset/confirm/[uid]/[token]",
+    "LOGIN_REDIRECT_URL": "/",
+    "LOGOUT_REDIRECT_URL": "/login",
+    "SIGNUP_REDIRECT_URL": "/login",
+    "REDIRECT_AUTHENTICATED_USER": "/",
+    "EMAIL_REQUIRED": False,
+    "USERNAME_MIN_LENGTH": 1,
+    "PASSWORD_MIN_LENGTH": 8,
+    "MESSAGES": {
+        "invalid_credentials": "Invalid username or password.",
+        "username_taken": "That username is already taken.",
+        "email_taken": "That email is already registered.",
+        "password_mismatch": "Passwords do not match.",
+        "password_too_short": "Password is too short.",
+        "username_required": "Username is required.",
+        "email_required": "Email is required.",
+        "reset_email_sent": (
+            "If an account exists for that address, you will receive reset instructions."
+        ),
+        "reset_success": "Your password has been set. You can sign in now.",
+        "reset_invalid_link": "This reset link is invalid or has expired.",
+        "registration_success": "Account created successfully.",
+    },
+}
+
+# Origin for password-reset links when no HTTP request is bound (optional).
+# REFLEX_DJANGO_SITE_ORIGIN = "http://localhost:3000"
+
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@localhost"
+
 # When True, :meth:`reflex_django.DjangoUserState.sync_from_django` loads group names.
 REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS = False
 

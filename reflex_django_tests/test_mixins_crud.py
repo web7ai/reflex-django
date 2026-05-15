@@ -7,7 +7,11 @@ from typing import Any
 
 import reflex as rx
 
-from reflex_django.mixins.crud import ModelCRUDConfig, crud_mixin
+from reflex_django.mixins.crud import (
+    ModelCRUDConfig,
+    _default_row_serializer,
+    crud_mixin,
+)
 
 
 class _FakeRowModel:
@@ -60,6 +64,27 @@ def test_crud_mixin_accepts_custom_base() -> None:
     Cls = crud_mixin(cfg, base=_AppStub, state_module=__name__)
     assert issubclass(Cls, _AppStub)
     assert issubclass(Cls, rx.State)
+
+
+def test_default_row_serializer_includes_auto_now_add_fields() -> None:
+    from datetime import datetime
+
+    from django.db import models
+
+    class _Stamped(models.Model):
+        title = models.CharField(max_length=32)
+        created_at = models.DateTimeField(auto_now_add=True)
+
+        class Meta:
+            app_label = "reflex_django_tests"
+
+    row = _Stamped(
+        pk=1,
+        title="x",
+        created_at=datetime(2024, 1, 2, 3, 4),
+    )
+    data = _default_row_serializer(row, exclude_fields=frozenset())
+    assert data["created_at"] == "2024-01-02 03:04"
 
 
 def test_mixins_package_reexports() -> None:
