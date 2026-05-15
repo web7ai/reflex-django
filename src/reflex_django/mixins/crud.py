@@ -45,6 +45,7 @@ class ModelCRUDConfig:
     ordering: tuple[str, ...] = ("-created_at",)
     required_for_create: tuple[str, ...] = ()
     row_serializer: Callable[..., dict[str, Any]] | None = None
+    row_serializer_class: type[Any] | None = None
     refresh_method: str = "_refresh_rows"
     on_load_event: str = "on_load_items"
     add_event: str = "add_item"
@@ -99,8 +100,11 @@ def crud_mixin(
         if cfg.required_for_create
         else {cfg.form_fields[0]}
     )
+    row_serializer_class = cfg.row_serializer_class
     if cfg.row_serializer is not None:
         row_fn = cfg.row_serializer
+    elif row_serializer_class is not None:
+        row_fn = None
     else:
         row_fn = functools.partial(
             _default_row_serializer,
@@ -136,9 +140,16 @@ def crud_mixin(
             if owner:
                 qs = qs.filter(**{owner: user})
             qs = qs.order_by(*order)
-            rows: list[dict[str, Any]] = []
-            async for n in qs:
-                rows.append(row_fn(n, exclude_fields=exclude_row))
+            if row_serializer_class is not None:
+                rows = await row_serializer_class(
+                    qs,
+                    many=True,
+                    exclude_fields=exclude_row,
+                ).adata()
+            else:
+                rows = []
+                async for n in qs:
+                    rows.append(row_fn(n, exclude_fields=exclude_row))  # type: ignore[misc]
             setattr(self, list_var, rows)
 
         ns[cfg.refresh_method] = refresh_impl

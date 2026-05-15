@@ -90,6 +90,7 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Canned auth UI | `add_auth_pages`, `autoload`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
 | User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
 | ORM helper | `Model` (abstract Django model base + Reflex serializer) |
+| Model serializers | `ReflexDjangoModelSerializer` (`Meta.fields` / `exclude`, `.data`, `.adata`, queryset `many=True`) |
 | Admin | `register_admin` |
 | Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
 | CLI (programmatic) | `django_cli` |

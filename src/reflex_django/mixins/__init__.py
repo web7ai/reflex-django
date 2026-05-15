@@ -9,6 +9,7 @@ __all__ = [
     "SessionAuthConfig",
     "_default_row_serializer",
     "crud_mixin",
+    "ReflexDjangoModelSerializer",
     "serialize_model_row",
     "session_auth_mixin",
 ]
@@ -18,6 +19,10 @@ _LAZY: dict[str, tuple[str, str]] = {
     "SessionAuthConfig": ("reflex_django.mixins.session_auth", "SessionAuthConfig"),
     "_default_row_serializer": ("reflex_django.mixins.crud", "_default_row_serializer"),
     "crud_mixin": ("reflex_django.mixins.crud", "crud_mixin"),
+    "ReflexDjangoModelSerializer": (
+        "reflex_django.serializers",
+        "ReflexDjangoModelSerializer",
+    ),
     "serialize_model_row": ("reflex_django.serialization", "serialize_model_row"),
     "session_auth_mixin": ("reflex_django.mixins.session_auth", "session_auth_mixin"),
 }

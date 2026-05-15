@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         routes as auth_routes,
     )
     from reflex_django.auth_state import DjangoUserState, user_snapshot
+    from reflex_django.serializers import ReflexDjangoModelSerializer
     from reflex_django.states import AppState
     from reflex_django.context import (
         begin_event_request,
@@ -76,6 +77,7 @@ __all__ = [
     "DjangoUserState",
     "Model",
     "ReflexDjangoAuthError",
+    "ReflexDjangoModelSerializer",
     "ReflexDjangoPlugin",
     "add_auth_pages",
     "auth_pages",
@@ -115,6 +117,10 @@ __all__ = [
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "AppState": ("reflex_django.states", "AppState"),
+    "ReflexDjangoModelSerializer": (
+        "reflex_django.serializers",
+        "ReflexDjangoModelSerializer",
+    ),
     "DjangoContextState": ("reflex_django.reflex_context", "DjangoContextState"),
     "DjangoEventBridge": ("reflex_django.middleware", "DjangoEventBridge"),
     "DjangoI18nState": ("reflex_django.i18n_state", "DjangoI18nState"),

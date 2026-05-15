@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `reflex_django.states.AppState`: abstract base for app domain/routing state
   (subclass instead of mixing auth into CRUD bases).
+- `reflex_django.serializers.ReflexDjangoModelSerializer`: DRF-style declarative
+  serializers (`Meta.fields` / `exclude`, `.data`, `.adata`) with queryset
+  `many=True` (no `djangorestframework`). `ModelCRUDConfig.row_serializer_class`
+  integrates with `crud_mixin`.
 
 ### Changed (breaking)
 

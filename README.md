@@ -449,6 +449,34 @@ Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`passw
 
 ---
 
+## Model serializers (DRF-style, no DRF)
+
+**`reflex_django.serializers.ReflexDjangoModelSerializer`** turns Django models into JSON-friendly row dicts for Reflex state—same ergonomics as DRF’s `Serializer(queryset, many=True).data`, without `djangorestframework`.
+
+```python
+from reflex_django.auth.shortcuts import require_login_user
+from reflex_django.serializers import ReflexDjangoModelSerializer
+
+class NoteSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Note
+        fields = ("id", "title", "content", "created_at")
+        # or: exclude = ("user",)
+
+async def _load_notes(self) -> None:
+    self.notes_error = ""
+    user = require_login_user()
+    qs = Note.objects.filter(user=user).order_by("-created_at")
+    self.notes = await NoteSerializer(qs, many=True).adata()
+```
+
+- **One assignment** — the serializer iterates the queryset internally (no manual `async for` + `append`).
+- **`NoteSerializer(note).data`** for a single instance.
+- **`row_serializer_class=NoteSerializer`** on **`ModelCRUDConfig`** wires the same serializer into **`crud_mixin`** refresh.
+- Low-level **`serialize_model_row`** remains available in **`reflex_django.serialization`**.
+
+---
+
 ## Declarative model CRUD (mixins)
 
 **`reflex_django.mixins.crud`** (also re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a small declarative config so you can list, create, edit, and delete rows of a Django model without hand-writing the same event wiring each time.
@@ -531,6 +559,6 @@ class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=MyAppState)):
 
 In your page component, bind inputs to **`NotesState.form_title`**, **`NotesState.set_form_title`**, and so on; call **`NotesState.add_note`**, **`NotesState.start_edit`**, **`NotesState.save_edit`**, **`NotesState.cancel_edit`**, **`NotesState.delete_note`** as `on_click` / table actions; render **`NotesState.notes`** (list of dicts, each with **`id`**) with **`rx.foreach`**.
 
-Configurable **`ModelCRUDConfig`** fields include **`row_serializer`** (override the default; rarely needed for timestamps), **`row_datetime_format`** (default `"%Y-%m-%d %H:%M"`), **`row_date_format`** (default `"%Y-%m-%d"`), **`exclude_from_row`**, **`owner_field=None`** (no user scoping), and the default event names **`refresh_method`**, **`on_load_event`**, **`add_event`**, **`delete_event`** when you do not want the stock `on_load_items` / `add_item` names.
+Configurable **`ModelCRUDConfig`** fields include **`row_serializer_class`** (declarative **`ReflexDjangoModelSerializer`** subclass), **`row_serializer`** (callable override), **`row_datetime_format`** (default `"%Y-%m-%d %H:%M"`), **`row_date_format`** (default `"%Y-%m-%d"`), **`exclude_from_row`**, **`owner_field=None`** (no user scoping), and the default event names **`refresh_method`**, **`on_load_event`**, **`add_event`**, **`delete_event`** when you do not want the stock `on_load_items` / `add_item` names.
 
 **Timestamps in list rows.** Django 6+ [`model_to_dict`](https://docs.djangoproject.com/en/stable/ref/forms/models/#django.forms.models.model_to_dict) skips non-editable fields such as `auto_now_add` / `auto_now`. The built-in row serializer merges those from the model instance and formats them for Reflex state, so table cells like `note["created_at"]` work without a custom **`row_serializer`**.

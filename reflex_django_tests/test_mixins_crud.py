@@ -116,6 +116,24 @@ def test_model_crud_config_row_datetime_format() -> None:
     assert data["created_at"] == "2024/05/06"
 
 
+def test_crud_mixin_row_serializer_class_on_config() -> None:
+    from reflex_django.serializers import ReflexDjangoModelSerializer
+
+    class _RowSerializer(ReflexDjangoModelSerializer):
+        class Meta:
+            model = _FakeRowModel  # type: ignore[arg-type]
+            fields = ("title",)
+
+    cfg = ModelCRUDConfig(
+        model=_FakeRowModel,  # type: ignore[arg-type]
+        list_var="items",
+        form_fields=("title",),
+        error_var="items_error",
+        row_serializer_class=_RowSerializer,
+    )
+    assert cfg.row_serializer_class is _RowSerializer
+
+
 def test_mixins_package_reexports() -> None:
     from reflex_django.mixins import ModelCRUDConfig as MC
     from reflex_django.mixins import crud_mixin as cm
