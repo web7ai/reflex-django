@@ -129,7 +129,7 @@ REFLEX_DJANGO_AUTH = {
     "LOGIN_URL": "/login",
     "SIGNUP_URL": "/register",
     "PASSWORD_RESET_URL": "/password-reset",
-    "PASSWORD_RESET_CONFIRM_URL": "/password-reset/confirm/[uid]/[token]",
+    "PASSWORD_RESET_CONFIRM_URL": "/password-reset/confirm/[uid]/[key]",
     "LOGIN_REDIRECT_URL": "/",
     "LOGOUT_REDIRECT_URL": "/login",
     "SIGNUP_REDIRECT_URL": "/login",

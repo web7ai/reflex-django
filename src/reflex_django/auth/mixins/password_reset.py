@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import inspect
+import re
 import sys
 import types
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote, unquote, urljoin
 
 import reflex as rx
 from asgiref.sync import sync_to_async
@@ -15,8 +16,8 @@ from django.conf import settings as django_settings
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
 from reflex_django.auth.settings import AuthSettings
 from reflex_django.context import current_request
@@ -28,12 +29,13 @@ class PasswordResetConfig:
     """Password reset routes and copy."""
 
     password_reset_url: str = "/password-reset"
-    password_reset_confirm_url: str = "/password-reset/confirm/[uid]/[token]"
+    password_reset_confirm_url: str = "/password-reset/confirm/[uid]/[key]"
     login_url: str = "/login"
     error_var: str = "reset_error"
     success_var: str = "reset_success"
     email_sent_var: str = "reset_email_sent"
     confirm_valid_var: str = "reset_link_valid"
+    confirm_loaded_var: str = "reset_confirm_loaded"
     request_event: str = "submit_password_reset_request"
     confirm_event: str = "submit_password_reset_confirm"
     on_load_confirm_event: str = "on_load_password_reset_confirm"
@@ -57,20 +59,103 @@ def _msg(cfg: PasswordResetConfig, key: str, default: str) -> str:
 
 
 def _confirm_path_for(uid: str, token: str, template: str) -> str:
+    uid_seg = quote(uid, safe="")
+    token_seg = quote(token, safe="")
     return (
-        template.replace("[uid]", uid)
-        .replace("[token]", token)
-        .replace("{uid}", uid)
-        .replace("{token}", token)
+        template.replace("[uid]", uid_seg)
+        .replace("[token]", token_seg)
+        .replace("[key]", token_seg)
+        .replace("{uid}", uid_seg)
+        .replace("{token}", token_seg)
+        .replace("{key}", token_seg)
     )
 
 
-def _page_params(state: Any) -> dict[str, Any]:
-    page = getattr(getattr(state, "router", None), "page", None)
-    params = getattr(page, "params", None)
-    if isinstance(params, dict):
-        return params
+def _reset_uid_and_token(params: dict[str, Any]) -> tuple[str, str]:
+    """Return ``(uid, token)`` from route params.
+
+    Prefer ``key`` over ``token`` because Reflex uses a top-level ``token`` router
+    field for the websocket session id, which can shadow dynamic ``[token]`` args.
+    """
+    uid = str(params.get("uid", "") or "")
+    reset_token = str(
+        params.get("key", "") or params.get("token", "") or params.get("reset_token", "") or ""
+    )
+    return uid, reset_token
+
+
+def _params_from_confirm_path(path: str, template: str) -> dict[str, str]:
+    """Parse uid and reset token from the current pathname."""
+    path = unquote(path.split("?", 1)[0].rstrip("/") or "/")
+    template_path = template.split("?", 1)[0].rstrip("/") or "/"
+    if not template_path.startswith("/"):
+        template_path = "/" + template_path
+
+    pattern = re.escape(template_path)
+    for placeholder, group in (
+        ("[uid]", "uid"),
+        ("{uid}", "uid"),
+        ("[key]", "key"),
+        ("{key}", "key"),
+        ("[token]", "token"),
+        ("{token}", "token"),
+        ("[reset_token]", "reset_token"),
+        ("{reset_token}", "reset_token"),
+    ):
+        pattern = pattern.replace(re.escape(placeholder), rf"(?P<{group}>[^/]+)")
+
+    match = re.match(rf"^{pattern}/?$", path)
+    if not match:
+        return {}
+
+    groups = {k: unquote(v) for k, v in match.groupdict().items() if v}
+    uid = groups.get("uid", "")
+    reset_token = groups.get("key") or groups.get("token") or groups.get("reset_token") or ""
+    if uid and reset_token:
+        return {"uid": uid, "key": reset_token}
     return {}
+
+
+def _page_params(state: Any, *, confirm_template: str | None = None) -> dict[str, str]:
+    """Collect dynamic route params from router query, state, and pathname."""
+    params: dict[str, str] = {}
+
+    page = getattr(getattr(state, "router", None), "page", None)
+    raw_page_params = getattr(page, "params", None)
+    if isinstance(raw_page_params, dict):
+        params.update({str(k): str(v) for k, v in raw_page_params.items() if v is not None})
+
+    router_data = getattr(state, "router_data", None) or {}
+    query = router_data.get("query")
+    if isinstance(query, dict):
+        for key, value in query.items():
+            if value is not None and str(key) not in params:
+                params[str(key)] = str(value)
+
+    for name in ("uid", "key", "token", "reset_token"):
+        if name in params:
+            continue
+        value = getattr(state, name, None)
+        if value is not None and str(value).strip() != "":
+            params[name] = str(value)
+
+    uid, reset_token = _reset_uid_and_token(params)
+    if (not uid or not reset_token) and confirm_template:
+        path = ""
+        if page is not None:
+            path = str(getattr(page, "path", "") or "")
+        if not path:
+            path = str(router_data.get("pathname", "") or router_data.get("path", "") or "")
+        parsed = _params_from_confirm_path(path, confirm_template)
+        for key, value in parsed.items():
+            if key not in params and value:
+                params[key] = value
+
+    return params
+
+
+def _decode_uid(uid: str) -> str:
+    return force_str(urlsafe_base64_decode(uid))
 
 
 def populate_password_reset_state(
@@ -85,6 +170,7 @@ def populate_password_reset_state(
     s_var = cfg.success_var
     sent_var = cfg.email_sent_var
     valid_var = cfg.confirm_valid_var
+    loaded_var = cfg.confirm_loaded_var
     login_url = cfg.login_url
     confirm_template = cfg.password_reset_confirm_url
 
@@ -92,10 +178,12 @@ def populate_password_reset_state(
     annotations[s_var] = bool
     annotations[sent_var] = bool
     annotations[valid_var] = bool
+    annotations[loaded_var] = bool
     ns[e_var] = ""
     ns[s_var] = False
     ns[sent_var] = False
     ns[valid_var] = False
+    ns[loaded_var] = False
 
     async def submit_password_reset_request_impl(
         self: Any,
@@ -145,17 +233,18 @@ def populate_password_reset_state(
     async def on_load_password_reset_confirm_impl(self: Any) -> Any:
         setattr(self, e_var, "")
         setattr(self, valid_var, False)
-        raw_params = _page_params(self)
-        uid = str(raw_params.get("uid", "") or "")
-        token = str(raw_params.get("token", "") or "")
+        setattr(self, loaded_var, False)
+        raw_params = _page_params(self, confirm_template=confirm_template)
+        uid, token = _reset_uid_and_token(raw_params)
+        uid = unquote(uid)
+        token = unquote(token)
 
         def _check() -> bool:
             from django.contrib.auth import get_user_model
-            from django.utils.http import urlsafe_base64_decode
 
             user_model = get_user_model()
             try:
-                pk = urlsafe_base64_decode(uid).decode()
+                pk = _decode_uid(uid)
                 user = user_model.objects.get(pk=pk)
             except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
                 return False
@@ -163,6 +252,7 @@ def populate_password_reset_state(
 
         ok = bool(uid and token and await sync_to_async(_check)())
         setattr(self, valid_var, ok)
+        setattr(self, loaded_var, True)
         if not ok:
             setattr(
                 self,
@@ -185,19 +275,19 @@ def populate_password_reset_state(
         if not getattr(self, valid_var, False):
             return
 
-        raw_params = _page_params(self)
-        uid = str(raw_params.get("uid", "") or "")
-        token = str(raw_params.get("token", "") or "")
+        raw_params = _page_params(self, confirm_template=confirm_template)
+        uid, token = _reset_uid_and_token(raw_params)
+        uid = unquote(uid)
+        token = unquote(token)
         password = str(form_data.get("new_password", ""))
         confirm = str(form_data.get("confirm_password", ""))
 
         def _confirm() -> str | None:
             from django.contrib.auth import get_user_model
-            from django.utils.http import urlsafe_base64_decode
 
             user_model = get_user_model()
             try:
-                pk = urlsafe_base64_decode(uid).decode()
+                pk = _decode_uid(uid)
                 user = user_model.objects.get(pk=pk)
             except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
                 return _msg(

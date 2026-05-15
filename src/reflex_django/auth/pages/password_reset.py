@@ -102,9 +102,16 @@ def password_reset_confirm_page() -> rx.Component:
                         width="100%",
                     ),
                     rx.cond(
-                        DjangoAuthState.reset_error != "",
-                        error_callout(DjangoAuthState.reset_error),
-                        error_callout(auth.messages["reset_invalid_link"]),
+                        DjangoAuthState.reset_confirm_loaded,
+                        rx.cond(
+                            DjangoAuthState.reset_error != "",
+                            error_callout(DjangoAuthState.reset_error),
+                            error_callout(auth.messages["reset_invalid_link"]),
+                        ),
+                        rx.center(
+                            rx.text("Checking reset link…", size="2", color="gray"),
+                            width="100%",
+                        ),
                     ),
                 ),
             ),

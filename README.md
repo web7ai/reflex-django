@@ -380,7 +380,7 @@ def dashboard():
 | `LOGIN_URL` | `/login` | Login route (also used by `django_login_required`) |
 | `SIGNUP_URL` | `/register` | Registration route |
 | `PASSWORD_RESET_URL` | `/password-reset` | Request reset email |
-| `PASSWORD_RESET_CONFIRM_URL` | `/password-reset/confirm/[uid]/[token]` | Set new password |
+| `PASSWORD_RESET_CONFIRM_URL` | `/password-reset/confirm/[uid]/[key]` | Set new password (`[key]` avoids clashing with Reflex's session `token`; `[token]` still supported) |
 | `LOGIN_REDIRECT_URL` | `/` | After successful login |
 | `LOGOUT_REDIRECT_URL` | `/login` | After logout |
 | `SIGNUP_REDIRECT_URL` | `/login` | After registration (auto sign-in) |

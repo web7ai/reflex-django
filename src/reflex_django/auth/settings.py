@@ -33,7 +33,7 @@ class AuthSettings:
     login_url: str = "/login"
     signup_url: str = "/register"
     password_reset_url: str = "/password-reset"
-    password_reset_confirm_url: str = "/password-reset/confirm/[uid]/[token]"
+    password_reset_confirm_url: str = "/password-reset/confirm/[uid]/[key]"
     login_redirect_url: str = "/"
     logout_redirect_url: str = "/login"
     signup_redirect_url: str = "/login"
@@ -88,7 +88,7 @@ def get_auth_settings() -> AuthSettings:
         password_reset_confirm_url=str(
             raw.get(
                 "PASSWORD_RESET_CONFIRM_URL",
-                "/password-reset/confirm/[uid]/[token]",
+                "/password-reset/confirm/[uid]/[key]",
             )
         ),
         login_redirect_url=str(raw.get("LOGIN_REDIRECT_URL", "/")),
