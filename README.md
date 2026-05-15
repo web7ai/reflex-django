@@ -380,7 +380,7 @@ def dashboard():
 | `ENABLED` | `True` | Master switch for canned pages |
 | `SIGNUP_ENABLED` | `True` | Register page at `SIGNUP_URL` |
 | `PASSWORD_RESET_ENABLED` | `True` | Forgot-password flow |
-| `LOGIN_URL` | `/login` | Login route (also used by `django_login_required`) |
+| `LOGIN_URL` | `/login` | Login route (also used by `login_required` on event handlers) |
 | `SIGNUP_URL` | `/register` | Registration route |
 | `PASSWORD_RESET_URL` | `/password-reset` | Request reset email |
 | `PASSWORD_RESET_CONFIRM_URL` | `/password-reset/confirm/[uid]/[key]` | Set new password (`[key]` avoids clashing with Reflex's session `token`; `[token]` still supported) |
@@ -397,7 +397,7 @@ Legacy **`REFLEX_DJANGO_LOGIN_URL`** is still read when `LOGIN_URL` is omitted f
 
 ### Security notes
 
-- **`@login_required`** only redirects in the UI (like reflex-local-auth). Use **`@django_login_required`** or **`require_login_user()`** on event handlers that return private data.
+- **`@login_required`** on pages only redirects in the UI (like reflex-local-auth). Use **`@login_required`** on event handlers or **`require_login_user()`** when handlers return private data.
 - Password-reset emails use Django’s token generator; use a stable **`SECRET_KEY`** in production.
 - Registration creates active users immediately; set **`SIGNUP_ENABLED=False`** if only admins should create accounts.
 
@@ -453,7 +453,7 @@ Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`passw
 
 **`reflex_django.mixins.crud`** (also re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a small declarative config so you can list, create, edit, and delete rows of a Django model without hand-writing the same event wiring each time.
 
-**Requirements.** Django must be configured (plugin + `INSTALLED_APPS` including your app and auth/session as usual). The **event bridge** must be enabled so `django_login_required()` and `require_login_user()` see the session user. CRUD handlers use the default **`django_login_required()`** wrapper (anonymous users are redirected; login URL from `REFLEX_DJANGO_LOGIN_URL` unless you customize handlers yourself—see **`reflex_django.authz`**).
+**Requirements.** Django must be configured (plugin + `INSTALLED_APPS` including your app and auth/session as usual). The **event bridge** must be enabled so `login_required` and `require_login_user()` see the session user. CRUD handlers use the default **`login_required`** wrapper (anonymous users are redirected; login URL from `REFLEX_DJANGO_LOGIN_URL` unless you customize handlers yourself—see **`reflex_django.auth.decorators`**).
 
 ### How it works
 

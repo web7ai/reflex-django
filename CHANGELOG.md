@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (breaking)
 
+- Removed `reflex_django.authz`. Auth helpers live under `reflex_django.auth`:
+  `require_login_user`, `auser_has_perm`, and `ReflexDjangoAuthError` in
+  `reflex_django.auth.shortcuts`; `login_required` in `reflex_django.auth.decorators`.
+- Removed `django_login_required`. Use `login_required` for both pages and event
+  handlers (Django-style API with optional `login_url=`).
+
 - `DjangoUserState` snapshot field names no longer use a `django_` prefix:
   `django_user_id` → `user_id`, `django_username` → `username`,
   `django_email` → `email`, `django_first_name` → `first_name`,

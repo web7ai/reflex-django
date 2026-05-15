@@ -7,22 +7,28 @@ from typing import Any
 __all__ = [
     "AuthSettings",
     "DjangoAuthState",
+    "ReflexDjangoAuthError",
     "add_auth_pages",
+    "auser_has_perm",
     "autoload",
     "get_auth_settings",
-    "pages",
     "login_required",
+    "pages",
+    "require_login_user",
     "routes",
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
     "AuthSettings": ("reflex_django.auth.settings", "AuthSettings"),
     "DjangoAuthState": ("reflex_django.auth.state", "DjangoAuthState"),
+    "ReflexDjangoAuthError": ("reflex_django.auth.shortcuts", "ReflexDjangoAuthError"),
     "add_auth_pages": ("reflex_django.auth.registry", "add_auth_pages"),
+    "auser_has_perm": ("reflex_django.auth.shortcuts", "auser_has_perm"),
     "autoload": ("reflex_django.auth.registry", "autoload"),
     "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
-    "pages": ("reflex_django.auth.pages", None),
     "login_required": ("reflex_django.auth.decorators", "login_required"),
+    "pages": ("reflex_django.auth.pages", None),
+    "require_login_user": ("reflex_django.auth.shortcuts", "require_login_user"),
     "routes": ("reflex_django.auth.routes", None),
 }
 

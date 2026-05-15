@@ -118,7 +118,7 @@ REFLEX_DJANGO_CONTEXT_PROCESSORS: tuple[str, ...] = ()
 # runs TEMPLATES[*].OPTIONS["context_processors"] and drops / adapts non-JSON keys.
 REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS: bool = False
 
-# Redirect target for :func:`reflex_django.django_login_required` when anonymous.
+# Redirect target for :func:`reflex_django.auth.decorators.login_required` when anonymous.
 REFLEX_DJANGO_LOGIN_URL = "/login"
 
 # Canned Reflex auth pages (login, register, password reset). See reflex_django.auth.

@@ -13,7 +13,7 @@ from typing import Any
 import reflex as rx
 from django.db import models
 
-from reflex_django.authz import django_login_required, require_login_user
+from reflex_django.auth.shortcuts import require_login_user
 from reflex_django.serialization import serialize_model_row
 
 
@@ -57,7 +57,7 @@ class ModelCRUDConfig:
 def crud_mixin(
     cfg: ModelCRUDConfig,
     *,
-    base: type[rx.State] = rx.State,
+    base: type[rx.State] | None = None,
     state_module: str | None = None,
 ) -> type[rx.State]:
     """Build a concrete :class:`reflex.state.State` subclass with list + form fields + CRUD events.
@@ -82,6 +82,11 @@ def crud_mixin(
             state_mod = str(frame.f_back.f_globals.get("__name__", __name__))
     finally:
         del frame
+
+    from reflex_django.auth.decorators import login_required
+
+    if base is None:
+        base = rx.State
 
     Model = cfg.model
     list_var = cfg.list_var
@@ -141,7 +146,7 @@ def crud_mixin(
         async def on_load_impl(self: Any) -> None:
             await getattr(self, cfg.refresh_method)()
 
-        ns[cfg.on_load_event] = rx.event(django_login_required()(on_load_impl))
+        ns[cfg.on_load_event] = rx.event(login_required(on_load_impl))
 
         for fname in form_fields:
 
@@ -198,7 +203,7 @@ def crud_mixin(
                 setattr(self, f"form_{fn}", "")
             await getattr(self, cfg.refresh_method)()
 
-        ns[cfg.add_event] = rx.event(django_login_required()(add_impl))
+        ns[cfg.add_event] = rx.event(login_required(add_impl))
 
         async def start_edit_impl(self: Any, item_id: int) -> None:
             setattr(self, err_key, "")
@@ -216,7 +221,7 @@ def crud_mixin(
             for fn in form_fields:
                 setattr(self, f"edit_{fn}", getattr(n, fn))
 
-        ns["start_edit"] = rx.event(django_login_required()(start_edit_impl))
+        ns["start_edit"] = rx.event(login_required(start_edit_impl))
 
         async def save_edit_impl(self: Any) -> None:
             setattr(self, err_key, "")
@@ -249,7 +254,7 @@ def crud_mixin(
                 setattr(self, f"edit_{fn}", "")
             await getattr(self, cfg.refresh_method)()
 
-        ns["save_edit"] = rx.event(django_login_required()(save_edit_impl))
+        ns["save_edit"] = rx.event(login_required(save_edit_impl))
 
         async def cancel_edit_impl(self: Any) -> None:
             setattr(self, "editing_id", -1)
@@ -271,7 +276,7 @@ def crud_mixin(
                     setattr(self, f"edit_{fn}", "")
             await getattr(self, cfg.refresh_method)()
 
-        ns[cfg.delete_event] = rx.event(django_login_required()(delete_impl))
+        ns[cfg.delete_event] = rx.event(login_required(delete_impl))
 
     cls_name = f"{Model.__name__}CRUDState"
     cls = types.new_class(cls_name, (base,), {}, exec_body)

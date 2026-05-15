@@ -85,8 +85,9 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Event middleware | `DjangoEventBridge` |
 | Reflex state helpers | `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
 | Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
-| Authz (events) | `django_login_required`, `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` |
-| Canned auth UI | `add_auth_pages`, `autoload`, `login_required`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
+| Auth shortcuts | `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` (`reflex_django.auth.shortcuts`) |
+| Auth decorators | `login_required` (pages and event handlers; `reflex_django.auth.decorators`) |
+| Canned auth UI | `add_auth_pages`, `autoload`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
 | User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
 | ORM helper | `Model` (abstract Django model base + Reflex serializer) |
 | Admin | `register_admin` |
@@ -132,7 +133,7 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 | `REFLEX_DJANGO_ADMIN_PREFIX` | Admin URL prefix; kept in sync with plugin env (`default_settings`, `urls.py`). |
 | `REFLEX_DJANGO_CONTEXT_PROCESSORS` | Non-empty tuple of dotted callables `(request) -> dict` or async; used **exclusively** by `collect_reflex_context`. You must return **JSON-serializable** dicts. |
 | `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | When `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty and this is `True`, run `TEMPLATES[*].OPTIONS["context_processors"]` with sanitization (see `reflex_context.py`). |
-| `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `django_login_required` when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |
+| `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `login_required` on event handlers when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |
 | `REFLEX_DJANGO_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
 | `EMAIL_BACKEND` / `DEFAULT_FROM_EMAIL` | Required for password-reset emails (console backend OK in dev). |
 | `REFLEX_DJANGO_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
@@ -147,7 +148,7 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 ## Security and best practices
 
 1. **Authorize on the server inside event handlers** using `current_user()`, `require_login_user()`, or `await auser_has_perm(user, "app.codename")`. Never trust `DjangoUserState` fields alone for permission or ownership checks—they are a **UI snapshot** synchronized to the client.
-2. Use **`django_login_required`** to redirect anonymous users (`rx.redirect` to `REFLEX_DJANGO_LOGIN_URL` or an explicit path).
+2. Use **`@login_required`** on event handlers to redirect anonymous users (`rx.redirect` to `REFLEX_DJANGO_LOGIN_URL` or `login_url=...`).
 3. **`user_snapshot(user)`** (`from reflex_django import user_snapshot`) is for display, logging, or custom processors—not a substitute for live `User` checks on mutations.
 4. Anything assigned to Reflex **`rx.State`** fields that sync to the browser must be **JSON-serializable**. Custom `REFLEX_DJANGO_CONTEXT_PROCESSORS` must not leak secrets or non-JSON objects.
 5. Prefer **`async def`** event handlers when calling Django’s async APIs (`aget_user` is already used in the bridge for `request.user`).
@@ -194,4 +195,4 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 - `README.md` — full architecture, examples for states, bridges, context processors.
 - `CHANGELOG.md` — version-to-version changes.
 - `RELEASING.md` — maintainer release process.
-- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `authz.py`, `auth_state.py`, `i18n_state.py`, `reflex_context.py`, `model.py`, `cli.py`.
+- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `auth/`, `auth_state.py`, `i18n_state.py`, `reflex_context.py`, `model.py`, `cli.py`.

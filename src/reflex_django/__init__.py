@@ -31,20 +31,17 @@ if TYPE_CHECKING:
     from reflex_django.auth import (
         AuthSettings,
         DjangoAuthState,
+        ReflexDjangoAuthError,
         add_auth_pages,
+        auser_has_perm,
         autoload,
         get_auth_settings,
-        pages as auth_pages,
         login_required,
+        pages as auth_pages,
+        require_login_user,
         routes as auth_routes,
     )
     from reflex_django.auth_state import DjangoUserState, user_snapshot
-    from reflex_django.authz import (
-        ReflexDjangoAuthError,
-        auser_has_perm,
-        django_login_required,
-        require_login_user,
-    )
     from reflex_django.context import (
         begin_event_request,
         current_language,
@@ -94,7 +91,6 @@ __all__ = [
     "current_session",
     "current_user",
     "django_cli",
-    "django_login_required",
     "get_auth_settings",
     "end_event_request",
     "make_dispatcher",
@@ -121,8 +117,8 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "DjangoI18nState": ("reflex_django.i18n_state", "DjangoI18nState"),
     "DjangoUserState": ("reflex_django.auth_state", "DjangoUserState"),
     "Model": ("reflex_django.model", "Model"),
-    "ReflexDjangoAuthError": ("reflex_django.authz", "ReflexDjangoAuthError"),
-    "auser_has_perm": ("reflex_django.authz", "auser_has_perm"),
+    "ReflexDjangoAuthError": ("reflex_django.auth.shortcuts", "ReflexDjangoAuthError"),
+    "auser_has_perm": ("reflex_django.auth.shortcuts", "auser_has_perm"),
     "begin_event_request": ("reflex_django.context", "begin_event_request"),
     "builtin_i18n_context": ("reflex_django.reflex_context", "builtin_i18n_context"),
     "builtin_user_context": ("reflex_django.reflex_context", "builtin_user_context"),
@@ -134,7 +130,6 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "current_request": ("reflex_django.context", "current_request"),
     "current_session": ("reflex_django.context", "current_session"),
     "current_user": ("reflex_django.context", "current_user"),
-    "django_login_required": ("reflex_django.authz", "django_login_required"),
     "end_event_request": ("reflex_django.context", "end_event_request"),
     "AuthSettings": ("reflex_django.auth.settings", "AuthSettings"),
     "DjangoAuthState": ("reflex_django.auth.state", "DjangoAuthState"),
@@ -145,7 +140,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
     "register_admin": ("reflex_django.admin", "register"),
     "login_required": ("reflex_django.auth.decorators", "login_required"),
-    "require_login_user": ("reflex_django.authz", "require_login_user"),
+    "require_login_user": ("reflex_django.auth.shortcuts", "require_login_user"),
     "session_cookie_clear_js": ("reflex_django.session_js", "session_cookie_clear_js"),
     "session_cookie_name_and_suffix": (
         "reflex_django.session_js",
