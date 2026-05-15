@@ -106,6 +106,27 @@ async def test_lifespan_always_goes_to_reflex() -> None:
     assert django.scopes == []
 
 
+async def test_http_reserved_subpath_under_backend_prefix_goes_to_reflex() -> None:
+    django = _Recorder("django")
+    reflex = _Recorder("reflex")
+    transformer = make_dispatcher(django, backend_prefixes=("/api",))
+    dispatch = transformer(reflex)
+
+    await dispatch(
+        {"type": "http", "path": "/api/_event"},
+        _noop_receive,
+        _noop_send,
+    )
+    await dispatch(
+        {"type": "http", "path": "/api/_upload"},
+        _noop_receive,
+        _noop_send,
+    )
+
+    assert django.scopes == []
+    assert [s["path"] for s in reflex.scopes] == ["/api/_event", "/api/_upload"]
+
+
 async def test_exact_prefix_match_routes_to_django() -> None:
     django = _Recorder("django")
     reflex = _Recorder("reflex")

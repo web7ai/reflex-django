@@ -10,10 +10,9 @@ Exposes two helpers:
   Django and everything else (including Socket.IO ``/_event``, ``/_upload``,
   ``/_health``, and the compiled frontend mount) to Reflex.
 
-The dispatcher only inspects ``scope["type"] == "http" | "websocket"`` and
-``scope["path"]``. ASGI lifespan events are always forwarded to Reflex's inner
-app, because Reflex owns the lifespan handler via
-:meth:`reflex.app_mixins.LifespanMixin._run_lifespan_tasks`.
+The dispatcher only inspects ``scope["type"]`` and ``scope["path"]``. ASGI
+lifespan events are always forwarded to Reflex's inner app, because Reflex owns
+the lifespan handler via :meth:`reflex.app_mixins.LifespanMixin._run_lifespan_tasks`.
 """
 
 from __future__ import annotations
@@ -121,6 +120,68 @@ def _path_matches(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
 
 
+def _path_suffix_under_prefix(path: str, prefix: str) -> str:
+    """Return the path remainder after ``prefix``, including a leading ``/``."""
+    if path == prefix:
+        return "/"
+    return path[len(prefix) :]
+
+
+def _is_reserved_reflex_subpath(path: str, prefix: str) -> bool:
+    """True when ``path`` is under ``prefix`` but targets a Reflex-only endpoint."""
+    suffix = _path_suffix_under_prefix(path, prefix)
+    for reserved in RESERVED_REFLEX_PREFIXES:
+        if suffix == reserved or suffix.startswith(reserved + "/"):
+            return True
+    return False
+
+
+def _should_route_to_django(scope: ASGIScope, path: str, prefixes: tuple[str, ...]) -> bool:
+    """Decide whether an ASGI scope should be forwarded to Django."""
+    scope_type = scope.get("type")
+    if scope_type not in ("http", "websocket"):
+        return False
+
+    for prefix in prefixes:
+        if not _path_matches(path, prefix):
+            continue
+        if scope_type == "http" and _is_reserved_reflex_subpath(path, prefix):
+            return False
+        return True
+    return False
+
+
+def _patch_http_only_static_mounts(app: ASGIApp) -> ASGIApp:
+    """Replace frontend ``StaticFiles`` mounts so WebSockets do not match them.
+
+    In production Reflex appends a catch-all ``Mount("/", StaticFiles(...))``.
+    Starlette ``Mount.matches`` accepts WebSocket scopes, but ``StaticFiles``
+    only handles HTTP and raises ``AssertionError`` otherwise. Patching those
+    mounts to match HTTP only lets Socket.IO and other WebSocket routes work.
+    """
+    try:
+        from starlette.applications import Starlette
+        from starlette.routing import Match, Mount
+        from starlette.staticfiles import StaticFiles
+    except ImportError:
+        return app
+
+    if not isinstance(app, Starlette):
+        return app
+
+    class HttpOnlyMount(Mount):
+        def matches(self, scope: ASGIScope) -> tuple[Any, ASGIScope]:
+            if scope.get("type") != "http":
+                return Match.NONE, {}
+            return super().matches(scope)
+
+    for index, route in enumerate(app.routes):
+        if isinstance(route, Mount) and isinstance(route.app, StaticFiles):
+            app.routes[index] = HttpOnlyMount(route.path, route.app, name=route.name)
+
+    return app
+
+
 def make_dispatcher(
     django_asgi: ASGIApp,
     *,
@@ -152,6 +213,8 @@ def make_dispatcher(
     _check_reserved(normalized)
 
     def transformer(reflex_asgi: ASGIApp) -> ASGIApp:
+        reflex_asgi = _patch_http_only_static_mounts(reflex_asgi)
+
         async def dispatch(
             scope: ASGIScope, receive: ASGIReceive, send: ASGISend
         ) -> None:
@@ -161,7 +224,7 @@ def make_dispatcher(
                 return
 
             path = scope.get("path", "")
-            if any(_path_matches(path, prefix) for prefix in normalized):
+            if _should_route_to_django(scope, path, normalized):
                 await django_asgi(scope, receive, send)
                 return
 

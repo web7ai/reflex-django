@@ -121,6 +121,35 @@ def test_post_compile_appends_after_existing_sequence(
     assert callable(app.api_transformer[2])
 
 
+def test_pre_compile_registers_vite_proxy_modify_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_django_build(monkeypatch)
+    modify_tasks: list[tuple[str, object]] = []
+
+    plugin = ReflexDjangoPlugin(
+        backend_prefix="/api",
+        extra_prefixes=("/billing",),
+        install_event_bridge=False,
+    )
+    plugin.pre_compile(
+        add_modify_task=lambda path, fn: modify_tasks.append((path, fn)),
+        add_save_task=lambda *a, **k: None,
+        radix_themes_plugin=None,
+        unevaluated_pages=[],
+    )
+
+    assert len(modify_tasks) == 1
+    assert modify_tasks[0][0] == "vite.config.js"
+    patched = modify_tasks[0][1](  # type: ignore[operator]
+        "export default defineConfig({ server: { port: 1, }, });"
+    )
+    assert "reflex-django-proxy" in patched
+    assert '"/api":' in patched
+    assert '"/admin":' in patched
+    assert '"/billing":' in patched
+
+
 def test_post_compile_extra_prefixes_propagate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

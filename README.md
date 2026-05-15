@@ -212,6 +212,11 @@ ReflexDjangoPlugin(
 
 Your `ROOT_URLCONF` must define routes under those prefixes so Django can serve them.
 
+**Development vs production routing**
+
+- **Development** (`reflex run`): Reflex runs Vite on `frontend_port` and the ASGI backend on `backend_port`. The plugin injects matching `server.proxy` rules into `.web/vite.config.js` so Django prefixes (`/admin`, `/api`, `extra_prefixes`, etc.) work from the **frontend URL** (for example `http://localhost:3000/admin`). You can also use the backend URL directly (`http://localhost:8000/admin`).
+- **Production** (`reflex run --env prod`): A single server serves the compiled frontend and the backend. The same path-prefix dispatcher applies. The plugin also patches Reflex's catch-all `StaticFiles` mount so WebSocket connections (for example Socket.IO at `/_event`) are not routed into `StaticFiles`, which only accepts HTTP.
+
 ### Bridge 2 — `DjangoEventBridge` (Reflex middleware)
 
 **`DjangoEventBridge`** runs at the start of each Reflex event. It constructs a synthetic `HttpRequest`, attaches the session, optionally runs locale negotiation when `USE_I18N` and `REFLEX_DJANGO_I18N_EVENT_BRIDGE` allow it, and sets `request.user` using **`aget_user`**. It then calls `begin_event_request(request)` so `current_user()` and friends work in your handlers.

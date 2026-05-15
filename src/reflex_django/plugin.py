@@ -115,6 +115,25 @@ class ReflexDjangoPlugin(Plugin):
             return ()
         return (url,)
 
+    def pre_compile(self, **context: Any) -> None:
+        """Inject Vite dev-server proxy rules for Django path prefixes."""
+        from reflex_base import constants
+        from reflex_base.config import get_config
+
+        from reflex_django.vite_proxy import inject_vite_dev_proxy
+
+        prefixes = self._all_prefixes()
+        if not prefixes:
+            return
+
+        target = get_config().api_url.rstrip("/")
+        context["add_modify_task"](
+            constants.ReactRouter.VITE_CONFIG_FILE,
+            lambda content: inject_vite_dev_proxy(
+                content, target=target, prefixes=prefixes
+            ),
+        )
+
     def post_compile(self, **context: Any) -> None:
         """Attach the Django dispatcher to ``app.api_transformer``.
 
