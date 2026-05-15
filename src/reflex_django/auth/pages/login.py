@@ -11,6 +11,11 @@ from reflex_django.auth.pages.components import (
     error_callout,
     input_100w,
 )
+from reflex_django.auth.login_fields import (
+    login_identifier_autocomplete,
+    login_identifier_label,
+    login_identifier_placeholder,
+)
 from reflex_django.auth.settings import get_auth_settings
 from reflex_django.auth.state import DjangoAuthState
 
@@ -18,13 +23,20 @@ from reflex_django.auth.state import DjangoAuthState
 def login_page() -> rx.Component:
     """Render the login form."""
     auth = get_auth_settings()
+    id_label = login_identifier_label(auth.login_fields)
+    id_placeholder = login_identifier_placeholder(auth.login_fields)
+    id_autocomplete = login_identifier_autocomplete(auth.login_fields)
     return auth_page_shell(
         auth_card(
             rx.heading("Sign in", size="7"),
             rx.form(
                 rx.vstack(
-                    rx.text("Username"),
-                    input_100w("username", placeholder="Username", autocomplete="username"),
+                    rx.text(id_label),
+                    input_100w(
+                        "username",
+                        placeholder=id_placeholder,
+                        autocomplete=id_autocomplete,
+                    ),
                     rx.text("Password"),
                     input_100w(
                         "password",

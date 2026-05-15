@@ -55,6 +55,7 @@ REFLEX_DJANGO_AUTH = {
     "LOGOUT_REDIRECT_URL": "/login",
     "SIGNUP_REDIRECT_URL": "/login",
     "REDIRECT_AUTHENTICATED_USER": "/",
+    "LOGIN_FIELDS": ["username"],
     "EMAIL_REQUIRED": False,
 }
 

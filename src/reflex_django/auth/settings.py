@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from reflex_django.auth.login_fields import (
+    DEFAULT_LOGIN_FIELDS,
+    default_invalid_credentials_message,
+    normalize_login_fields,
+)
+
 
 _DEFAULT_MESSAGES: dict[str, str] = {
     "invalid_credentials": "Invalid username or password.",
@@ -41,6 +47,8 @@ class AuthSettings:
     email_required: bool = False
     username_min_length: int = 1
     password_min_length: int = 8
+    #: Allowed login identifiers for the canned login form (``username``, ``email``, or both).
+    login_fields: tuple[str, ...] = DEFAULT_LOGIN_FIELDS
     messages: dict[str, str] = field(default_factory=lambda: dict(_DEFAULT_MESSAGES))
 
 
@@ -77,6 +85,11 @@ def get_auth_settings() -> AuthSettings:
 
     login_url = str(raw.get("LOGIN_URL", legacy_login))
     logout_url = str(raw.get("LOGOUT_REDIRECT_URL", login_url))
+    login_fields = normalize_login_fields(raw.get("LOGIN_FIELDS", DEFAULT_LOGIN_FIELDS))
+    messages = _merge_messages(raw.get("MESSAGES"))
+    user_messages = raw.get("MESSAGES")
+    if not isinstance(user_messages, Mapping) or "invalid_credentials" not in user_messages:
+        messages["invalid_credentials"] = default_invalid_credentials_message(login_fields)
 
     return AuthSettings(
         enabled=bool(raw.get("ENABLED", True)),
@@ -100,7 +113,8 @@ def get_auth_settings() -> AuthSettings:
         email_required=bool(raw.get("EMAIL_REQUIRED", False)),
         username_min_length=int(raw.get("USERNAME_MIN_LENGTH", 1)),
         password_min_length=int(raw.get("PASSWORD_MIN_LENGTH", 8)),
-        messages=_merge_messages(raw.get("MESSAGES")),
+        login_fields=login_fields,
+        messages=messages,
     )
 
 

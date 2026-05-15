@@ -348,6 +348,9 @@ REFLEX_DJANGO_AUTH = {
     "LOGIN_URL": "/login",
     "SIGNUP_URL": "/register",
     "LOGIN_REDIRECT_URL": "/",
+    # "LOGIN_FIELDS": ["username"],           # default
+    # "LOGIN_FIELDS": ["email"],              # email only
+    # "LOGIN_FIELDS": ["username", "email"],  # username or email
 }
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -385,6 +388,7 @@ def dashboard():
 | `LOGOUT_REDIRECT_URL` | `/login` | After logout |
 | `SIGNUP_REDIRECT_URL` | `/login` | After registration (auto sign-in) |
 | `REDIRECT_AUTHENTICATED_USER` | `/` | When visiting login/register while signed in |
+| `LOGIN_FIELDS` | `["username"]` | Login identifier(s): `"username"`, `"email"`, or both (e.g. `["username", "email"]`) |
 | `EMAIL_REQUIRED` | `False` | Require email on signup |
 | `PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
 | `MESSAGES` | (built-in dict) | User-facing copy |

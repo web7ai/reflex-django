@@ -42,6 +42,7 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
         post_logout_redirect=auth.logout_redirect_url,
         redirect_when_authenticated=auth.redirect_authenticated_user,
         invalid_credentials_message=auth.messages["invalid_credentials"],
+        login_fields=auth.login_fields,
         state_class_name="DjangoAuthState",
     )
     reg_cfg = RegistrationConfig.from_auth_settings(auth)

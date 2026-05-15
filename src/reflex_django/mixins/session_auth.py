@@ -10,8 +10,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import reflex as rx
-from django.contrib.auth import aauthenticate, alogin, alogout
+from django.contrib.auth import alogin, alogout
 
+from reflex_django.auth.login_fields import (
+    DEFAULT_LOGIN_FIELDS,
+    aauthenticate_login_fields,
+)
 from reflex_django.auth_state import DjangoUserState
 from reflex_django.context import current_request
 from reflex_django.session_js import session_cookie_clear_js, session_cookie_set_js
@@ -81,6 +85,7 @@ class SessionAuthConfig:
     submit_form_event: str | None = "submit_login_form"
     form_username_key: str = "username"
     form_password_key: str = "password"
+    login_fields: tuple[str, ...] = DEFAULT_LOGIN_FIELDS
 
 
 def populate_session_auth_state(
@@ -101,6 +106,7 @@ def populate_session_auth_state(
     msg_bad = cfg.invalid_credentials_message
     form_u = cfg.form_username_key
     form_p = cfg.form_password_key
+    login_fields = cfg.login_fields
 
     annotations[u_var] = str
     annotations[p_var] = str
@@ -154,10 +160,11 @@ def populate_session_auth_state(
         if request is None:
             setattr(self, e_var, msg_no_session)
             return
-        user = await aauthenticate(
+        user = await aauthenticate_login_fields(
             request,
-            username=getattr(self, u_var).strip(),
-            password=getattr(self, p_var),
+            getattr(self, u_var).strip(),
+            getattr(self, p_var),
+            login_fields,
         )
         if user is None:
             setattr(self, e_var, msg_bad)
@@ -179,10 +186,11 @@ def populate_session_auth_state(
             if request is None:
                 setattr(self, e_var, msg_no_session)
                 return
-            user = await aauthenticate(
+            user = await aauthenticate_login_fields(
                 request,
-                username=username,
-                password=password,
+                username,
+                password,
+                login_fields,
             )
             if user is None:
                 setattr(self, e_var, msg_bad)

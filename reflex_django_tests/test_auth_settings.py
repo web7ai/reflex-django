@@ -18,6 +18,7 @@ def test_get_auth_settings_defaults() -> None:
     assert auth.password_reset_enabled is True
     assert auth.login_url == "/login"
     assert auth.signup_url == "/register"
+    assert auth.login_fields == ("username",)
     assert "invalid_credentials" in auth.messages
 
 
