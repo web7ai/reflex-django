@@ -40,6 +40,25 @@ def test_serialize_django_model_includes_pk_and_fields() -> None:
     assert result["published"] is True
 
 
+def test_serialize_django_model_includes_auto_timestamps() -> None:
+    from datetime import datetime
+
+    class _Stamped(Model):
+        title = models.CharField(max_length=32)
+        created_at = models.DateTimeField(auto_now_add=True)
+
+        class Meta:
+            app_label = "reflex_django"
+
+    row = _Stamped(
+        id=7,
+        title="ts",
+        created_at=datetime(2024, 2, 3, 4, 5),
+    )
+    result = serialize_django_model(row)
+    assert result["created_at"] == "2024-02-03 04:05"
+
+
 def test_serialize_django_model_preserves_pk_when_unsaved() -> None:
     post = _Post(title="draft")
 

@@ -2,38 +2,35 @@
 
 from __future__ import annotations
 
+import functools
 import inspect
 import sys
 import types
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 import reflex as rx
 from django.db import models
-from django.forms.models import model_to_dict
 
 from reflex_django.authz import django_login_required, require_login_user
+from reflex_django.serialization import serialize_model_row
 
 
 def _default_row_serializer(
     instance: models.Model,
     *,
     exclude_fields: frozenset[str],
+    datetime_format: str = "%Y-%m-%d %H:%M",
+    date_format: str = "%Y-%m-%d",
 ) -> dict[str, Any]:
-    """JSON-friendly row dict; datetimes as ``%Y-%m-%d %H:%M`` strings."""
-    # Django 6+ ``model_to_dict`` always skips non-editable fields (e.g. timestamps).
-    data = model_to_dict(instance, exclude=list(exclude_fields))
-    data["id"] = instance.pk
-    for field in instance._meta.concrete_fields:
-        if field.name in exclude_fields or field.name in data:
-            continue
-        data[field.name] = field.value_from_object(instance)
-    for key, val in list(data.items()):
-        if isinstance(val, datetime):
-            data[key] = val.strftime("%Y-%m-%d %H:%M")
-    return data
+    """JSON-friendly row dict using :func:`reflex_django.serialization.serialize_model_row`."""
+    return serialize_model_row(
+        instance,
+        exclude_fields=exclude_fields,
+        datetime_format=datetime_format,
+        date_format=date_format,
+    )
 
 
 @dataclass(frozen=True)
@@ -53,6 +50,8 @@ class ModelCRUDConfig:
     add_event: str = "add_item"
     delete_event: str = "delete_item"
     exclude_from_row: frozenset[str] = frozenset()
+    row_datetime_format: str = "%Y-%m-%d %H:%M"
+    row_date_format: str = "%Y-%m-%d"
 
 
 def crud_mixin(
@@ -95,7 +94,14 @@ def crud_mixin(
         if cfg.required_for_create
         else {cfg.form_fields[0]}
     )
-    row_fn = cfg.row_serializer or _default_row_serializer
+    if cfg.row_serializer is not None:
+        row_fn = cfg.row_serializer
+    else:
+        row_fn = functools.partial(
+            _default_row_serializer,
+            datetime_format=cfg.row_datetime_format,
+            date_format=cfg.row_date_format,
+        )
     exclude_row = frozenset(cfg.exclude_from_row)
     if owner:
         exclude_row = exclude_row | frozenset({owner})

@@ -459,7 +459,7 @@ Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`passw
 
 1. You define a frozen **`ModelCRUDConfig`** pointing at your **`models.Model`**, the state attribute names you want on the client (`list_var`, `error_var`), which model fields appear in create/edit forms (`form_fields`), and optional **`owner_field`** (for example `"user"`) so queries and writes are scoped to **`require_login_user()`**.
 2. You call **`crud_mixin(cfg, base=…)`**. It returns a new class named **`{Model.__name__}CRUDState`** with:
-   - A **list** of row dicts under `list_var` (default serializer uses `model_to_dict` plus `id`, JSON-friendly datetimes).
+   - A **list** of row dicts under `list_var` (default serializer includes all concrete fields—`created_at`, `updated_at`, etc.—even when Django 6+ `model_to_dict` omits non-editable auto fields; values are JSON-friendly strings for datetimes/dates).
    - String fields **`form_<name>`** and **`edit_<name>`** for each entry in `form_fields`, plus **`editing_id`** (`-1` when not editing).
    - **`refresh_method`**: async reload from the ORM (respects `owner_field`, `ordering`).
    - **`on_load_event`**: async `on_load` target to call your refresh (login required).
@@ -523,4 +523,6 @@ class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=AppState)):
 
 In your page component, bind inputs to **`NotesState.form_title`**, **`NotesState.set_form_title`**, and so on; call **`NotesState.add_note`**, **`NotesState.start_edit`**, **`NotesState.save_edit`**, **`NotesState.cancel_edit`**, **`NotesState.delete_note`** as `on_click` / table actions; render **`NotesState.notes`** (list of dicts, each with **`id`**) with **`rx.foreach`**.
 
-Configurable **`ModelCRUDConfig`** fields include **`row_serializer`**, **`exclude_from_row`**, **`owner_field=None`** (no user scoping), and the default event names **`refresh_method`**, **`on_load_event`**, **`add_event`**, **`delete_event`** when you do not want the stock `on_load_items` / `add_item` names.
+Configurable **`ModelCRUDConfig`** fields include **`row_serializer`** (override the default; rarely needed for timestamps), **`row_datetime_format`** (default `"%Y-%m-%d %H:%M"`), **`row_date_format`** (default `"%Y-%m-%d"`), **`exclude_from_row`**, **`owner_field=None`** (no user scoping), and the default event names **`refresh_method`**, **`on_load_event`**, **`add_event`**, **`delete_event`** when you do not want the stock `on_load_items` / `add_item` names.
+
+**Timestamps in list rows.** Django 6+ [`model_to_dict`](https://docs.djangoproject.com/en/stable/ref/forms/models/#django.forms.models.model_to_dict) skips non-editable fields such as `auto_now_add` / `auto_now`. The built-in row serializer merges those from the model instance and formats them for Reflex state, so table cells like `note["created_at"]` work without a custom **`row_serializer`**.

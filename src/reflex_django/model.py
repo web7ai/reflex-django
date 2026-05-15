@@ -45,8 +45,8 @@ class Model(models.Model):
 def _model_to_dict(value: models.Model) -> dict[str, Any]:
     """Serialize a Django Model instance to a JSON-friendly dict.
 
-    Includes the primary key (which ``model_to_dict`` omits by default) so
-    front-end consumers can round-trip the record.
+    Includes non-editable fields (timestamps) omitted by Django 6+
+    :func:`~django.forms.models.model_to_dict`, plus the primary key as ``id``.
 
     Args:
         value: The Django model instance to serialize.
@@ -54,14 +54,9 @@ def _model_to_dict(value: models.Model) -> dict[str, Any]:
     Returns:
         A dict containing the model's field values and primary key.
     """
-    from django.forms.models import model_to_dict
+    from reflex_django.serialization import serialize_model_row
 
-    data = model_to_dict(value)
-    meta = value._meta  # pyright: ignore[reportAttributeAccessIssue]
-    pk_name = meta.pk.name if meta.pk is not None else "id"
-    if pk_name not in data:
-        data[pk_name] = value.pk
-    return data
+    return serialize_model_row(value, exclude_fields=frozenset())
 
 
 @serializer(to=dict)

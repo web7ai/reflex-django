@@ -87,6 +87,35 @@ def test_default_row_serializer_includes_auto_now_add_fields() -> None:
     assert data["created_at"] == "2024-01-02 03:04"
 
 
+def test_model_crud_config_row_datetime_format() -> None:
+    from datetime import datetime
+
+    from django.db import models
+
+    class _Row(models.Model):
+        title = models.CharField(max_length=32)
+        created_at = models.DateTimeField(auto_now_add=True)
+
+        class Meta:
+            app_label = "reflex_django_tests"
+
+    cfg = ModelCRUDConfig(
+        model=_Row,  # type: ignore[arg-type]
+        list_var="items",
+        form_fields=("title",),
+        error_var="items_error",
+        row_datetime_format="%Y/%m/%d",
+    )
+    row = _Row(pk=1, title="t", created_at=datetime(2024, 5, 6, 7, 8))
+    data = _default_row_serializer(
+        row,
+        exclude_fields=frozenset(),
+        datetime_format=cfg.row_datetime_format,
+        date_format=cfg.row_date_format,
+    )
+    assert data["created_at"] == "2024/05/06"
+
+
 def test_mixins_package_reexports() -> None:
     from reflex_django.mixins import ModelCRUDConfig as MC
     from reflex_django.mixins import crud_mixin as cm
