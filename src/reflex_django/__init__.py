@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         routes as auth_routes,
     )
     from reflex_django.auth_state import DjangoUserState, user_snapshot
+    from reflex_django.states import AppState
     from reflex_django.context import (
         begin_event_request,
         current_language,
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "AppState",
     "AuthSettings",
     "DjangoAuthState",
     "DjangoContextState",
@@ -112,6 +114,7 @@ __all__ = [
 # ``INSTALLED_APPS``). Resolve them on first attribute access instead so the
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
+    "AppState": ("reflex_django.states", "AppState"),
     "DjangoContextState": ("reflex_django.reflex_context", "DjangoContextState"),
     "DjangoEventBridge": ("reflex_django.middleware", "DjangoEventBridge"),
     "DjangoI18nState": ("reflex_django.i18n_state", "DjangoI18nState"),

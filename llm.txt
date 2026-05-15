@@ -83,7 +83,7 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | ASGI | `build_django_asgi`, `make_dispatcher` |
 | Per-event context | `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
 | Event middleware | `DjangoEventBridge` |
-| Reflex state helpers | `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
+| Reflex state helpers | `AppState`, `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
 | Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
 | Auth shortcuts | `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` (`reflex_django.auth.shortcuts`) |
 | Auth decorators | `login_required` (pages and event handlers; `reflex_django.auth.decorators`) |

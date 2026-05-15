@@ -469,11 +469,16 @@ Configurable **`SessionAuthConfig`** fields include **`username_var`**, **`passw
 3. You **subclass** that generated class when you need a stable app-specific name or extra state:
 
    ```python
-   class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=AppState)):
-       """Auth and shared session live on ``AppState``."""
+   from reflex_django.states import AppState
+
+   class MyAppState(AppState):
+       pass
+
+   class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=MyAppState)):
+       """Domain CRUD; shared routing lives on ``MyAppState``."""
    ```
 
-**`base=`** should be your app’s shared **`rx.State`** subclass (for example one that holds login UI or `DjangoUserState` mixins) so the CRUD state participates in the same inheritance tree as the rest of your app.
+**`base=`** should be your app’s shared :class:`~reflex_django.states.AppState` subclass (domain/routing). Use :class:`~reflex_django.DjangoUserState` for auth snapshots, not as the CRUD base.
 
 **`state_module=`** defaults to the **calling module’s** `__name__` so the dynamic class is registered on **`sys.modules`** for Reflex pickling. Pass it explicitly if you build state from a helper function in another module.
 
@@ -509,12 +514,15 @@ _NOTE_CRUD_CONFIG = ModelCRUDConfig(
 )
 
 
-class AppState(rx.State):
-    """Shared app base (login fields, etc.)."""
+from reflex_django.states import AppState
+
+
+class MyAppState(AppState):
+    """Shared app base (routing, domain fields)."""
     pass
 
 
-class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=AppState)):
+class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=MyAppState)):
     """Notes CRUD; list lives in ``notes``, errors in ``notes_error``."""
 
 # Typical page wiring (names match config):

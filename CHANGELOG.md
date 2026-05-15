@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `reflex_django.states.AppState`: abstract base for app domain/routing state
+  (subclass instead of mixing auth into CRUD bases).
+
 ### Changed (breaking)
 
 - Removed `reflex_django.authz`. Auth helpers live under `reflex_django.auth`:
