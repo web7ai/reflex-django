@@ -56,6 +56,132 @@ def _msg(cfg: RegistrationConfig, key: str, default: str) -> str:
     return default
 
 
+def populate_registration_state(
+    ns: dict[str, Any],
+    cfg: RegistrationConfig,
+    *,
+    cls_name: str,
+    annotations: dict[str, type],
+) -> None:
+    """Add registration fields and handlers to ``ns`` (flat state build)."""
+    e_var = cfg.error_var
+    s_var = cfg.success_var
+    when_auth = cfg.redirect_when_authenticated
+    post_signup = cfg.signup_redirect_url
+    min_user = cfg.username_min_length
+    min_pass = cfg.password_min_length
+    email_req = cfg.email_required
+
+    annotations[e_var] = str
+    annotations[s_var] = bool
+    ns[e_var] = ""
+    ns[s_var] = False
+
+    async def on_load_register_impl(self: Any) -> Any:
+        await self.refresh_django_user_fields()
+        if when_auth is None or not self.is_authenticated:
+            return None
+        request = current_request()
+        if request is None:
+            from reflex_django.mixins.session_auth import _defer_nav_js
+
+            return rx.call_script(_defer_nav_js(when_auth))
+        return _sync_session_cookie_then_nav(request, when_auth)
+
+    ns[cfg.on_load_event] = rx.event(on_load_register_impl)
+
+    async def handle_registration_impl(self: Any, form_data: dict[str, Any]) -> Any:
+        setattr(self, e_var, "")
+        setattr(self, s_var, False)
+        username = str(form_data.get("username", "")).strip()
+        email = str(form_data.get("email", "")).strip()
+        password = str(form_data.get("password", ""))
+        confirm = str(form_data.get("confirm_password", ""))
+
+        if len(username) < min_user:
+            setattr(
+                self,
+                e_var,
+                _msg(cfg, "username_required", "Username is required."),
+            )
+            return
+        if email_req and not email:
+            setattr(
+                self,
+                e_var,
+                _msg(cfg, "email_required", "Email is required."),
+            )
+            return
+        if password != confirm:
+            setattr(
+                self,
+                e_var,
+                _msg(cfg, "password_mismatch", "Passwords do not match."),
+            )
+            return
+        if len(password) < min_pass:
+            setattr(
+                self,
+                e_var,
+                _msg(cfg, "password_too_short", "Password is too short."),
+            )
+            return
+
+        user_model = get_user_model()
+
+        def _username_exists() -> bool:
+            return user_model.objects.filter(username=username).exists()
+
+        def _email_exists() -> bool:
+            if not email:
+                return False
+            return user_model.objects.filter(email__iexact=email).exists()
+
+        if await sync_to_async(_username_exists)():
+            setattr(
+                self,
+                e_var,
+                _msg(cfg, "username_taken", "That username is already taken."),
+            )
+            return
+        if email and await sync_to_async(_email_exists)():
+            setattr(
+                self,
+                e_var,
+                _msg(cfg, "email_taken", "That email is already registered."),
+            )
+            return
+
+        def _validate_pw() -> None:
+            validate_password(password, user=user_model(username=username))
+
+        try:
+            await sync_to_async(_validate_pw)()
+        except ValidationError as exc:
+            setattr(self, e_var, " ".join(exc.messages))
+            return
+
+        request = current_request()
+        if request is None:
+            setattr(self, e_var, "Session unavailable. Reload the page.")
+            return
+
+        def _create_user() -> Any:
+            user = user_model(username=username, email=email or "")
+            user.set_password(password)
+            user.save()
+            return user
+
+        user = await sync_to_async(_create_user)()
+        await alogin(request, user)
+        await _session_async_save(request)
+        await self.refresh_django_user_fields()
+        setattr(self, s_var, True)
+        return _sync_session_cookie_then_nav(request, post_signup)
+
+    ns[cfg.submit_event] = rx.event(handle_registration_impl)
+
+
 def registration_mixin(
     cfg: RegistrationConfig,
     *,
@@ -74,127 +200,18 @@ def registration_mixin(
     finally:
         del frame
 
-    e_var = cfg.error_var
-    s_var = cfg.success_var
-    when_auth = cfg.redirect_when_authenticated
-    post_signup = cfg.signup_redirect_url
     cls_name = cfg.state_class_name
-    min_user = cfg.username_min_length
-    min_pass = cfg.password_min_length
-    email_req = cfg.email_required
 
     def exec_body(ns: dict[str, Any]) -> None:
         ns["__module__"] = state_mod
-        ann = dict(getattr(base, "__annotations__", {}))
-        ann[e_var] = str
-        ann[s_var] = bool
-        ns["__annotations__"] = ann
-        ns[e_var] = ""
-        ns[s_var] = False
-
-        async def on_load_register_impl(self: Any) -> Any:
-            await self.refresh_django_user_fields()
-            if when_auth is None or not self.is_authenticated:
-                return None
-            request = current_request()
-            if request is None:
-                from reflex_django.mixins.session_auth import _defer_nav_js
-
-                return rx.call_script(_defer_nav_js(when_auth))
-            return _sync_session_cookie_then_nav(request, when_auth)
-
-        ns[cfg.on_load_event] = rx.event(on_load_register_impl)
-
-        async def handle_registration_impl(self: Any, form_data: dict[str, Any]) -> Any:
-            setattr(self, e_var, "")
-            setattr(self, s_var, False)
-            username = str(form_data.get("username", "")).strip()
-            email = str(form_data.get("email", "")).strip()
-            password = str(form_data.get("password", ""))
-            confirm = str(form_data.get("confirm_password", ""))
-
-            if len(username) < min_user:
-                setattr(
-                    self,
-                    e_var,
-                    _msg(cfg, "username_required", "Username is required."),
-                )
-                return
-            if email_req and not email:
-                setattr(
-                    self,
-                    e_var,
-                    _msg(cfg, "email_required", "Email is required."),
-                )
-                return
-            if password != confirm:
-                setattr(
-                    self,
-                    e_var,
-                    _msg(cfg, "password_mismatch", "Passwords do not match."),
-                )
-                return
-            if len(password) < min_pass:
-                setattr(
-                    self,
-                    e_var,
-                    _msg(cfg, "password_too_short", "Password is too short."),
-                )
-                return
-
-            user_model = get_user_model()
-
-            def _username_exists() -> bool:
-                return user_model.objects.filter(username=username).exists()
-
-            def _email_exists() -> bool:
-                if not email:
-                    return False
-                return user_model.objects.filter(email__iexact=email).exists()
-
-            if await sync_to_async(_username_exists)():
-                setattr(
-                    self,
-                    e_var,
-                    _msg(cfg, "username_taken", "That username is already taken."),
-                )
-                return
-            if email and await sync_to_async(_email_exists)():
-                setattr(
-                    self,
-                    e_var,
-                    _msg(cfg, "email_taken", "That email is already registered."),
-                )
-                return
-
-            def _validate_pw() -> None:
-                validate_password(password, user=user_model(username=username))
-
-            try:
-                await sync_to_async(_validate_pw)()
-            except ValidationError as exc:
-                setattr(self, e_var, " ".join(exc.messages))
-                return
-
-            request = current_request()
-            if request is None:
-                setattr(self, e_var, "Session unavailable. Reload the page.")
-                return
-
-            def _create_user() -> Any:
-                user = user_model(username=username, email=email or "")
-                user.set_password(password)
-                user.save()
-                return user
-
-            user = await sync_to_async(_create_user)()
-            await alogin(request, user)
-            await _session_async_save(request)
-            await self.refresh_django_user_fields()
-            setattr(self, s_var, True)
-            return _sync_session_cookie_then_nav(request, post_signup)
-
-        ns[cfg.submit_event] = rx.event(handle_registration_impl)
+        annotations = dict(getattr(base, "__annotations__", {}))
+        populate_registration_state(
+            ns,
+            cfg,
+            cls_name=cls_name,
+            annotations=annotations,
+        )
+        ns["__annotations__"] = annotations
 
     cls = types.new_class(cls_name, (base,), {}, exec_body)
     mod_obj = sys.modules.get(state_mod)

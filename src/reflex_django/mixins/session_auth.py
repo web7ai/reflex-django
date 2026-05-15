@@ -83,6 +83,127 @@ class SessionAuthConfig:
     form_password_key: str = "password"
 
 
+def populate_session_auth_state(
+    ns: dict[str, Any],
+    cfg: SessionAuthConfig,
+    *,
+    cls_name: str,
+    annotations: dict[str, type],
+) -> None:
+    """Add session login/logout fields and handlers to ``ns`` (flat state build)."""
+    u_var = cfg.username_var
+    p_var = cfg.password_var
+    e_var = cfg.error_var
+    post_in = cfg.post_login_redirect
+    post_out = cfg.post_logout_redirect
+    when_auth = cfg.redirect_when_authenticated
+    msg_no_session = cfg.session_unavailable_message
+    msg_bad = cfg.invalid_credentials_message
+    form_u = cfg.form_username_key
+    form_p = cfg.form_password_key
+
+    annotations[u_var] = str
+    annotations[p_var] = str
+    annotations[e_var] = str
+    ns[u_var] = ""
+    ns[p_var] = ""
+    ns[e_var] = ""
+
+    async def on_load_impl(self: Any) -> Any:
+        await self.refresh_django_user_fields()
+        if when_auth is None or not self.is_authenticated:
+            return None
+        request = current_request()
+        if request is None:
+            return rx.call_script(_defer_nav_js(when_auth))
+        return _sync_session_cookie_then_nav(request, when_auth)
+
+    ns[cfg.on_load_event] = rx.event(on_load_impl)
+
+    def make_user_setter() -> Any:
+        @rx.event
+        def set_username(self: Any, v: str) -> None:
+            setattr(self, u_var, v)
+
+        set_username.__name__ = f"set_{u_var}"
+        set_username.__qualname__ = f"{cls_name}.set_{u_var}"
+        return set_username
+
+    def make_pass_setter() -> Any:
+        @rx.event
+        def set_password(self: Any, v: str) -> None:
+            setattr(self, p_var, v)
+
+        set_password.__name__ = f"set_{p_var}"
+        set_password.__qualname__ = f"{cls_name}.set_{p_var}"
+        return set_password
+
+    ns[f"set_{u_var}"] = make_user_setter()
+    ns[f"set_{p_var}"] = make_pass_setter()
+
+    async def _finish_login(self: Any, request: Any, user: Any) -> Any:
+        await alogin(request, user)
+        await _session_async_save(request)
+        setattr(self, p_var, "")
+        await self.refresh_django_user_fields()
+        return _sync_session_cookie_then_nav(request, post_in)
+
+    async def submit_impl(self: Any) -> Any:
+        setattr(self, e_var, "")
+        request = current_request()
+        if request is None:
+            setattr(self, e_var, msg_no_session)
+            return
+        user = await aauthenticate(
+            request,
+            username=getattr(self, u_var).strip(),
+            password=getattr(self, p_var),
+        )
+        if user is None:
+            setattr(self, e_var, msg_bad)
+            setattr(self, p_var, "")
+            return
+        return await _finish_login(self, request, user)
+
+    ns[cfg.submit_event] = rx.event(submit_impl)
+
+    if cfg.submit_form_event:
+
+        async def submit_form_impl(self: Any, form_data: dict[str, Any]) -> Any:
+            username = str(form_data.get(form_u, "")).strip()
+            password = str(form_data.get(form_p, ""))
+            setattr(self, u_var, username)
+            setattr(self, p_var, password)
+            setattr(self, e_var, "")
+            request = current_request()
+            if request is None:
+                setattr(self, e_var, msg_no_session)
+                return
+            user = await aauthenticate(
+                request,
+                username=username,
+                password=password,
+            )
+            if user is None:
+                setattr(self, e_var, msg_bad)
+                setattr(self, p_var, "")
+                return
+            return await _finish_login(self, request, user)
+
+        ns[cfg.submit_form_event] = rx.event(submit_form_impl)
+
+    async def logout_impl(self: Any) -> Any:
+        request = current_request()
+        if request is not None:
+            await alogout(request)
+        await self.refresh_django_user_fields()
+        if request is None:
+            return rx.call_script(_defer_nav_js(post_out))
+        return _sync_session_cookie_then_nav(request, post_out, clear_cookie=True)
+
+    ns[cfg.logout_event] = rx.event(logout_impl)
+
+
 def session_auth_mixin(
     cfg: SessionAuthConfig,
     *,
@@ -138,108 +259,14 @@ def session_auth_mixin(
 
     def exec_body(ns: dict[str, Any]) -> None:
         ns["__module__"] = state_mod
-        ns["__annotations__"] = {
-            u_var: str,
-            p_var: str,
-            e_var: str,
-        }
-        ns[u_var] = ""
-        ns[p_var] = ""
-        ns[e_var] = ""
-
-        async def on_load_impl(self: Any) -> Any:
-            await self.refresh_django_user_fields()
-            if when_auth is None or not self.is_authenticated:
-                return None
-            request = current_request()
-            if request is None:
-                return rx.call_script(_defer_nav_js(when_auth))
-            return _sync_session_cookie_then_nav(request, when_auth)
-
-        ns[cfg.on_load_event] = rx.event(on_load_impl)
-
-        def make_user_setter() -> Any:
-            @rx.event
-            def set_username(self: Any, v: str) -> None:
-                setattr(self, u_var, v)
-
-            set_username.__name__ = f"set_{u_var}"
-            set_username.__qualname__ = f"{cls_name}.set_{u_var}"
-            return set_username
-
-        def make_pass_setter() -> Any:
-            @rx.event
-            def set_password(self: Any, v: str) -> None:
-                setattr(self, p_var, v)
-
-            set_password.__name__ = f"set_{p_var}"
-            set_password.__qualname__ = f"{cls_name}.set_{p_var}"
-            return set_password
-
-        ns[f"set_{u_var}"] = make_user_setter()
-        ns[f"set_{p_var}"] = make_pass_setter()
-
-        async def _finish_login(self: Any, request: Any, user: Any) -> Any:
-            await alogin(request, user)
-            await _session_async_save(request)
-            setattr(self, p_var, "")
-            await self.refresh_django_user_fields()
-            return _sync_session_cookie_then_nav(request, post_in)
-
-        async def submit_impl(self: Any) -> Any:
-            setattr(self, e_var, "")
-            request = current_request()
-            if request is None:
-                setattr(self, e_var, msg_no_session)
-                return
-            user = await aauthenticate(
-                request,
-                username=getattr(self, u_var).strip(),
-                password=getattr(self, p_var),
-            )
-            if user is None:
-                setattr(self, e_var, msg_bad)
-                setattr(self, p_var, "")
-                return
-            return await _finish_login(self, request, user)
-
-        ns[cfg.submit_event] = rx.event(submit_impl)
-
-        if cfg.submit_form_event:
-
-            async def submit_form_impl(self: Any, form_data: dict[str, Any]) -> Any:
-                username = str(form_data.get(form_u, "")).strip()
-                password = str(form_data.get(form_p, ""))
-                setattr(self, u_var, username)
-                setattr(self, p_var, password)
-                setattr(self, e_var, "")
-                request = current_request()
-                if request is None:
-                    setattr(self, e_var, msg_no_session)
-                    return
-                user = await aauthenticate(
-                    request,
-                    username=username,
-                    password=password,
-                )
-                if user is None:
-                    setattr(self, e_var, msg_bad)
-                    setattr(self, p_var, "")
-                    return
-                return await _finish_login(self, request, user)
-
-            ns[cfg.submit_form_event] = rx.event(submit_form_impl)
-
-        async def logout_impl(self: Any) -> Any:
-            request = current_request()
-            if request is not None:
-                await alogout(request)
-            await self.refresh_django_user_fields()
-            if request is None:
-                return rx.call_script(_defer_nav_js(post_out))
-            return _sync_session_cookie_then_nav(request, post_out, clear_cookie=True)
-
-        ns[cfg.logout_event] = rx.event(logout_impl)
+        annotations = dict(getattr(base, "__annotations__", {}))
+        populate_session_auth_state(
+            ns,
+            cfg,
+            cls_name=cls_name,
+            annotations=annotations,
+        )
+        ns["__annotations__"] = annotations
 
     cls = types.new_class(cls_name, (base,), {}, exec_body)
     mod_obj = sys.modules.get(state_mod)
@@ -248,4 +275,4 @@ def session_auth_mixin(
     return cls
 
 
-__all__ = ["SessionAuthConfig", "session_auth_mixin"]
+__all__ = ["SessionAuthConfig", "populate_session_auth_state", "session_auth_mixin"]

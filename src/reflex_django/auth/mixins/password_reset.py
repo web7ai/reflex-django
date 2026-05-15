@@ -73,6 +73,168 @@ def _page_params(state: Any) -> dict[str, Any]:
     return {}
 
 
+def populate_password_reset_state(
+    ns: dict[str, Any],
+    cfg: PasswordResetConfig,
+    *,
+    cls_name: str,
+    annotations: dict[str, type],
+) -> None:
+    """Add password reset fields and handlers to ``ns`` (flat state build)."""
+    e_var = cfg.error_var
+    s_var = cfg.success_var
+    sent_var = cfg.email_sent_var
+    valid_var = cfg.confirm_valid_var
+    login_url = cfg.login_url
+    confirm_template = cfg.password_reset_confirm_url
+
+    annotations[e_var] = str
+    annotations[s_var] = bool
+    annotations[sent_var] = bool
+    annotations[valid_var] = bool
+    ns[e_var] = ""
+    ns[s_var] = False
+    ns[sent_var] = False
+    ns[valid_var] = False
+
+    async def submit_password_reset_request_impl(
+        self: Any,
+        form_data: dict[str, Any],
+    ) -> Any:
+        setattr(self, e_var, "")
+        setattr(self, sent_var, False)
+        email = str(form_data.get("email", "")).strip()
+        request = current_request()
+
+        def _send() -> None:
+            from django.contrib.auth import get_user_model as _get_user_model
+
+            user_model = _get_user_model()
+            users = list(user_model.objects.filter(email__iexact=email))
+            if not users:
+                return
+            user = users[0]
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            path = _confirm_path_for(uid, token, confirm_template)
+            if request is not None and hasattr(request, "build_absolute_uri"):
+                reset_url = request.build_absolute_uri(path)
+            else:
+                origin = str(
+                    getattr(django_settings, "REFLEX_DJANGO_SITE_ORIGIN", "")
+                ).rstrip("/")
+                reset_url = urljoin(origin + "/", path.lstrip("/")) if origin else path
+            subject = "Password reset"
+            body = (
+                f"Use the link below to reset your password:\n\n{reset_url}\n\n"
+                "If you did not request this, you can ignore this email."
+            )
+            send_mail(
+                subject,
+                body,
+                django_settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+
+        await sync_to_async(_send)()
+        setattr(self, sent_var, True)
+
+    ns[cfg.request_event] = rx.event(submit_password_reset_request_impl)
+
+    async def on_load_password_reset_confirm_impl(self: Any) -> Any:
+        setattr(self, e_var, "")
+        setattr(self, valid_var, False)
+        raw_params = _page_params(self)
+        uid = str(raw_params.get("uid", "") or "")
+        token = str(raw_params.get("token", "") or "")
+
+        def _check() -> bool:
+            from django.contrib.auth import get_user_model
+            from django.utils.http import urlsafe_base64_decode
+
+            user_model = get_user_model()
+            try:
+                pk = urlsafe_base64_decode(uid).decode()
+                user = user_model.objects.get(pk=pk)
+            except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
+                return False
+            return default_token_generator.check_token(user, token)
+
+        ok = bool(uid and token and await sync_to_async(_check)())
+        setattr(self, valid_var, ok)
+        if not ok:
+            setattr(
+                self,
+                e_var,
+                _msg(
+                    cfg,
+                    "reset_invalid_link",
+                    "This reset link is invalid or has expired.",
+                ),
+            )
+
+    ns[cfg.on_load_confirm_event] = rx.event(on_load_password_reset_confirm_impl)
+
+    async def submit_password_reset_confirm_impl(
+        self: Any,
+        form_data: dict[str, Any],
+    ) -> Any:
+        setattr(self, e_var, "")
+        setattr(self, s_var, False)
+        if not getattr(self, valid_var, False):
+            return
+
+        raw_params = _page_params(self)
+        uid = str(raw_params.get("uid", "") or "")
+        token = str(raw_params.get("token", "") or "")
+        password = str(form_data.get("new_password", ""))
+        confirm = str(form_data.get("confirm_password", ""))
+
+        def _confirm() -> str | None:
+            from django.contrib.auth import get_user_model
+            from django.utils.http import urlsafe_base64_decode
+
+            user_model = get_user_model()
+            try:
+                pk = urlsafe_base64_decode(uid).decode()
+                user = user_model.objects.get(pk=pk)
+            except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
+                return _msg(
+                    cfg,
+                    "reset_invalid_link",
+                    "This reset link is invalid or has expired.",
+                )
+            if not default_token_generator.check_token(user, token):
+                return _msg(
+                    cfg,
+                    "reset_invalid_link",
+                    "This reset link is invalid or has expired.",
+                )
+            form = SetPasswordForm(
+                user,
+                data={
+                    "new_password1": password,
+                    "new_password2": confirm,
+                },
+            )
+            if not form.is_valid():
+                return " ".join(
+                    err for errs in form.errors.values() for err in errs
+                )
+            form.save()
+            return None
+
+        err = await sync_to_async(_confirm)()
+        if err:
+            setattr(self, e_var, err)
+            return
+        setattr(self, s_var, True)
+        return rx.call_script(_defer_nav_js(login_url))
+
+    ns[cfg.confirm_event] = rx.event(submit_password_reset_confirm_impl)
+
+
 def password_reset_mixin(
     cfg: PasswordResetConfig,
     *,
@@ -91,163 +253,18 @@ def password_reset_mixin(
     finally:
         del frame
 
-    e_var = cfg.error_var
-    s_var = cfg.success_var
-    sent_var = cfg.email_sent_var
-    valid_var = cfg.confirm_valid_var
-    login_url = cfg.login_url
-    confirm_template = cfg.password_reset_confirm_url
     cls_name = cfg.state_class_name
 
     def exec_body(ns: dict[str, Any]) -> None:
         ns["__module__"] = state_mod
-        ann = dict(getattr(base, "__annotations__", {}))
-        ann[e_var] = str
-        ann[s_var] = bool
-        ann[sent_var] = bool
-        ann[valid_var] = bool
-        ns["__annotations__"] = ann
-        ns[e_var] = ""
-        ns[s_var] = False
-        ns[sent_var] = False
-        ns[valid_var] = False
-
-        async def submit_password_reset_request_impl(
-            self: Any,
-            form_data: dict[str, Any],
-        ) -> Any:
-            setattr(self, e_var, "")
-            setattr(self, sent_var, False)
-            email = str(form_data.get("email", "")).strip()
-            request = current_request()
-
-            def _send() -> None:
-                from django.contrib.auth import get_user_model as _get_user_model
-
-                user_model = _get_user_model()
-                users = list(user_model.objects.filter(email__iexact=email))
-                if not users:
-                    return
-                user = users[0]
-                uid = urlsafe_base64_encode(force_bytes(user.pk))
-                token = default_token_generator.make_token(user)
-                path = _confirm_path_for(uid, token, confirm_template)
-                if request is not None and hasattr(request, "build_absolute_uri"):
-                    reset_url = request.build_absolute_uri(path)
-                else:
-                    origin = str(
-                        getattr(django_settings, "REFLEX_DJANGO_SITE_ORIGIN", "")
-                    ).rstrip("/")
-                    reset_url = urljoin(origin + "/", path.lstrip("/")) if origin else path
-                subject = "Password reset"
-                body = (
-                    f"Use the link below to reset your password:\n\n{reset_url}\n\n"
-                    "If you did not request this, you can ignore this email."
-                )
-                send_mail(
-                    subject,
-                    body,
-                    django_settings.DEFAULT_FROM_EMAIL,
-                    [email],
-                    fail_silently=False,
-                )
-
-            await sync_to_async(_send)()
-            setattr(self, sent_var, True)
-
-        ns[cfg.request_event] = rx.event(submit_password_reset_request_impl)
-
-        async def on_load_password_reset_confirm_impl(self: Any) -> Any:
-            setattr(self, e_var, "")
-            setattr(self, valid_var, False)
-            raw_params = _page_params(self)
-            uid = str(raw_params.get("uid", "") or "")
-            token = str(raw_params.get("token", "") or "")
-
-            def _check() -> bool:
-                from django.contrib.auth import get_user_model
-                from django.utils.http import urlsafe_base64_decode
-
-                user_model = get_user_model()
-                try:
-                    pk = urlsafe_base64_decode(uid).decode()
-                    user = user_model.objects.get(pk=pk)
-                except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
-                    return False
-                return default_token_generator.check_token(user, token)
-
-            ok = bool(uid and token and await sync_to_async(_check)())
-            setattr(self, valid_var, ok)
-            if not ok:
-                setattr(
-                    self,
-                    e_var,
-                    _msg(
-                        cfg,
-                        "reset_invalid_link",
-                        "This reset link is invalid or has expired.",
-                    ),
-                )
-
-        ns[cfg.on_load_confirm_event] = rx.event(on_load_password_reset_confirm_impl)
-
-        async def submit_password_reset_confirm_impl(
-            self: Any,
-            form_data: dict[str, Any],
-        ) -> Any:
-            setattr(self, e_var, "")
-            setattr(self, s_var, False)
-            if not getattr(self, valid_var, False):
-                return
-
-            raw_params = _page_params(self)
-            uid = str(raw_params.get("uid", "") or "")
-            token = str(raw_params.get("token", "") or "")
-            password = str(form_data.get("new_password", ""))
-            confirm = str(form_data.get("confirm_password", ""))
-
-            def _confirm() -> str | None:
-                from django.contrib.auth import get_user_model
-                from django.utils.http import urlsafe_base64_decode
-
-                user_model = get_user_model()
-                try:
-                    pk = urlsafe_base64_decode(uid).decode()
-                    user = user_model.objects.get(pk=pk)
-                except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
-                    return _msg(
-                        cfg,
-                        "reset_invalid_link",
-                        "This reset link is invalid or has expired.",
-                    )
-                if not default_token_generator.check_token(user, token):
-                    return _msg(
-                        cfg,
-                        "reset_invalid_link",
-                        "This reset link is invalid or has expired.",
-                    )
-                form = SetPasswordForm(
-                    user,
-                    data={
-                        "new_password1": password,
-                        "new_password2": confirm,
-                    },
-                )
-                if not form.is_valid():
-                    return " ".join(
-                        err for errs in form.errors.values() for err in errs
-                    )
-                form.save()
-                return None
-
-            err = await sync_to_async(_confirm)()
-            if err:
-                setattr(self, e_var, err)
-                return
-            setattr(self, s_var, True)
-            return rx.call_script(_defer_nav_js(login_url))
-
-        ns[cfg.confirm_event] = rx.event(submit_password_reset_confirm_impl)
+        annotations = dict(getattr(base, "__annotations__", {}))
+        populate_password_reset_state(
+            ns,
+            cfg,
+            cls_name=cls_name,
+            annotations=annotations,
+        )
+        ns["__annotations__"] = annotations
 
     cls = types.new_class(cls_name, (base,), {}, exec_body)
     mod_obj = sys.modules.get(state_mod)
@@ -256,4 +273,8 @@ def password_reset_mixin(
     return cls
 
 
-__all__ = ["PasswordResetConfig", "password_reset_mixin"]
+__all__ = [
+    "PasswordResetConfig",
+    "password_reset_mixin",
+    "populate_password_reset_state",
+]
