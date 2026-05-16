@@ -32,6 +32,7 @@ class ReflexDjangoModelSerializer:
         model: type[models.Model] | None = None
         fields: tuple[str, ...] | list[str] | None = None
         exclude: tuple[str, ...] | list[str] = ()
+        read_only_fields: tuple[str, ...] | list[str] = ()
         datetime_format: str = "%Y-%m-%d %H:%M"
         date_format: str = "%Y-%m-%d"
 
@@ -112,6 +113,79 @@ class ReflexDjangoModelSerializer:
         async for obj in self._iter_async():
             rows.append(self._serialize_one(obj))
         return rows
+
+    @classmethod
+    def get_model(cls) -> type[models.Model]:
+        """Return ``Meta.model`` (required on concrete serializer subclasses)."""
+        model = cls._meta_cls("model", None)
+        if model is None:
+            msg = f"{cls.__name__}.Meta.model is required."
+            raise TypeError(msg)
+        return model
+
+    @classmethod
+    def _meta_cls(cls, name: str, default: Any) -> Any:
+        meta = getattr(cls, "Meta", None)
+        if meta is None:
+            return default
+        return getattr(meta, name, default)
+
+    @classmethod
+    def _candidate_field_names(cls) -> frozenset[str]:
+        raw = cls._meta_cls("fields", None)
+        if raw is not None:
+            return frozenset(raw) | {"id"}
+        model = cls.get_model()
+        return frozenset(
+            f.name for f in model._meta.concrete_fields if f.name != "id"
+        ) | {"id"}
+
+    @classmethod
+    def _default_read_only_from_model(cls) -> frozenset[str]:
+        model = cls.get_model()
+        names: set[str] = {"id"}
+        for field in model._meta.concrete_fields:
+            if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
+                names.add(field.name)
+        return frozenset(names)
+
+    @classmethod
+    def get_read_only_field_names(
+        cls,
+        *,
+        owner_field: str | None = "user",
+        extra_read_only: frozenset[str] | None = None,
+    ) -> frozenset[str]:
+        """Resolved read-only names (defaults, serializer Meta, and extras)."""
+        names = set(cls._default_read_only_from_model())
+        names |= set(cls._meta_cls("read_only_fields", ()))
+        if owner_field:
+            names.add(owner_field)
+        if extra_read_only:
+            names |= set(extra_read_only)
+        return frozenset(names)
+
+    @classmethod
+    def writable_field_names(
+        cls,
+        *,
+        owner_field: str | None = "user",
+        read_only_fields: frozenset[str] | None = None,
+        form_fields: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        """Field names for flat ModelState form vars and setters."""
+        if form_fields is not None:
+            return tuple(form_fields)
+        readonly = (
+            read_only_fields
+            if read_only_fields is not None
+            else cls.get_read_only_field_names(owner_field=owner_field)
+        )
+        candidates = cls._candidate_field_names()
+        writable = tuple(
+            sorted(name for name in candidates if name not in readonly)
+        )
+        return writable
 
     @classmethod
     def list(

@@ -257,6 +257,8 @@ def index() -> rx.Component:
 
 app = rx.App()
 add_auth_pages(app)
+# Or register individually, e.g.:
+# app.add_page(LoginPage, route=routes.LOGIN_ROUTE, on_load=DjangoAuthState.on_load_login)
 app.add_page(index, on_load=DjangoAuthState.sync_from_django)
 '''
 

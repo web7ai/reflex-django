@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `reflex_django.state.ModelState`: declarative CRUD state from a
+  `ReflexDjangoModelSerializer` (`Meta.serializer`, flat form fields, combined
+  `save_*`, `read_only_fields`). Import with `AppState` from
+  `reflex_django.state` or lazy `from reflex_django import ModelState`.
+- `ReflexDjangoModelSerializer.Meta.read_only_fields` plus
+  `get_read_only_field_names()` and `writable_field_names()` for form vs list
+  field split.
 - `reflex_django.states.AppState`: abstract base for app domain/routing state
   (subclass instead of mixing auth into CRUD bases).
 - `reflex_django.serializers.ReflexDjangoModelSerializer`: DRF-style declarative

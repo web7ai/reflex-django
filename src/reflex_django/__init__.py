@@ -29,20 +29,31 @@ from reflex_django.plugin import ReflexDjangoPlugin
 if TYPE_CHECKING:
     from reflex_django.admin import register as register_admin
     from reflex_django.auth import (
+        AuthPageMeta,
         AuthSettings,
+        BaseAuthPage,
         DjangoAuthState,
+        LoginPage,
+        PasswordResetConfirmPage,
+        PasswordResetPage,
         ReflexDjangoAuthError,
+        RegisterPage,
         add_auth_pages,
         auser_has_perm,
         autoload,
         get_auth_settings,
         login_required,
         pages as auth_pages,
+        register_login_page,
+        register_password_reset_confirm_page,
+        register_password_reset_page,
+        register_register_page,
         require_login_user,
         routes as auth_routes,
     )
     from reflex_django.auth_state import DjangoUserState, user_snapshot
     from reflex_django.serializers import ReflexDjangoModelSerializer
+    from reflex_django.state import ModelState
     from reflex_django.states import AppState
     from reflex_django.context import (
         begin_event_request,
@@ -69,6 +80,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AppState",
+    "ModelState",
     "AuthSettings",
     "DjangoAuthState",
     "DjangoContextState",
@@ -117,6 +129,7 @@ __all__ = [
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "AppState": ("reflex_django.states", "AppState"),
+    "ModelState": ("reflex_django.state", "ModelState"),
     "ReflexDjangoModelSerializer": (
         "reflex_django.serializers",
         "ReflexDjangoModelSerializer",
@@ -146,6 +159,28 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "auth_pages": ("reflex_django.auth", "pages"),
     "auth_routes": ("reflex_django.auth", "routes"),
     "autoload": ("reflex_django.auth.registry", "autoload"),
+    "AuthPageMeta": ("reflex_django.auth.pages.base", "AuthPageMeta"),
+    "BaseAuthPage": ("reflex_django.auth.pages.base", "BaseAuthPage"),
+    "LoginPage": ("reflex_django.auth.pages", "LoginPage"),
+    "PasswordResetConfirmPage": (
+        "reflex_django.auth.pages",
+        "PasswordResetConfirmPage",
+    ),
+    "PasswordResetPage": ("reflex_django.auth.pages", "PasswordResetPage"),
+    "RegisterPage": ("reflex_django.auth.pages", "RegisterPage"),
+    "register_login_page": ("reflex_django.auth.registry", "register_login_page"),
+    "register_password_reset_confirm_page": (
+        "reflex_django.auth.registry",
+        "register_password_reset_confirm_page",
+    ),
+    "register_password_reset_page": (
+        "reflex_django.auth.registry",
+        "register_password_reset_page",
+    ),
+    "register_register_page": (
+        "reflex_django.auth.registry",
+        "register_register_page",
+    ),
     "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
     "register_admin": ("reflex_django.admin", "register"),
     "login_required": ("reflex_django.auth.decorators", "login_required"),

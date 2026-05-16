@@ -26,6 +26,33 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     "reset_success": "Your password has been set. You can sign in now.",
     "reset_invalid_link": "This reset link is invalid or has expired.",
     "registration_success": "Account created successfully.",
+    # Login page labels
+    "login_heading": "Sign in",
+    "login_submit": "Sign in",
+    "login_signup_link": "Create account",
+    "login_forgot_link": "Forgot password?",
+    # Register page labels
+    "register_heading": "Create an account",
+    "register_submit": "Sign up",
+    "register_signin_link": "Sign in",
+    "register_username_label": "Username",
+    "register_email_label": "Email",
+    "register_email_optional_label": "Email (optional)",
+    "register_password_label": "Password",
+    "register_confirm_password_label": "Confirm password",
+    # Password reset request labels
+    "reset_heading": "Reset password",
+    "reset_instructions": (
+        "Enter your account email and we will send reset instructions."
+    ),
+    "reset_submit": "Send reset link",
+    "reset_back_link": "Back to sign in",
+    # Password reset confirm labels
+    "reset_confirm_heading": "Choose a new password",
+    "reset_confirm_submit": "Update password",
+    "reset_confirm_loading": "Checking reset link…",
+    "reset_confirm_password_label": "New password",
+    "reset_confirm_confirm_label": "Confirm password",
 }
 
 

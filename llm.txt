@@ -83,19 +83,20 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | ASGI | `build_django_asgi`, `make_dispatcher` |
 | Per-event context | `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
 | Event middleware | `DjangoEventBridge` |
-| Reflex state helpers | `AppState`, `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
+| Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
 | Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
 | Auth shortcuts | `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` (`reflex_django.auth.shortcuts`) |
 | Auth decorators | `login_required` (pages and event handlers; `reflex_django.auth.decorators`) |
-| Canned auth UI | `add_auth_pages`, `autoload`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
+| Canned auth UI | `add_auth_pages`, `register_login_page`, `register_register_page`, `register_password_reset_page`, `register_password_reset_confirm_page`, `LoginPage`, `RegisterPage`, `PasswordResetPage`, `PasswordResetConfirmPage`, `autoload`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
 | User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
 | ORM helper | `Model` (abstract Django model base + Reflex serializer) |
-| Model serializers | `ReflexDjangoModelSerializer` (`Meta.fields` / `exclude`, `.data`, `.adata`, queryset `many=True`) |
+| Model serializers | `ReflexDjangoModelSerializer` (`Meta.fields` / `exclude` / `read_only_fields`, `.data`, `.adata`, queryset `many=True`) |
+| Declarative model CRUD state | `ModelState` (`reflex_django.state`; `Meta.serializer`, flat fields, `save_*`; subclass overrides via `cls.__dict__`) |
 | Admin | `register_admin` |
 | Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
 | CLI (programmatic) | `django_cli` |
 
-**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes declarative **`ModelCRUDConfig` / `crud_mixin`** and **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned login/register/password-reset pages via **`add_auth_pages(app)`** and **`REFLEX_DJANGO_AUTH`** in Django settings (allauth-style dict).
+**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes declarative **`ModelCRUDConfig` / `crud_mixin`** and **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
 
 ---
 

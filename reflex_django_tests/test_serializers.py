@@ -115,3 +115,23 @@ def test_class_alist_shortcut() -> None:
 def test_class_list_shortcut() -> None:
     data = _NoteFieldsSerializer.list([_note(1), _note(2)])
     assert len(data) == 2
+
+
+def test_get_read_only_includes_auto_and_serializer_meta() -> None:
+    readonly = _NoteFieldsSerializer.get_read_only_field_names(owner_field="user")
+    assert "id" in readonly
+    assert "created_at" in readonly
+    assert "user" in readonly
+
+
+def test_writable_field_names_excludes_read_only() -> None:
+    names = _NoteFieldsSerializer.writable_field_names(owner_field="user")
+    assert names == ("content", "title")
+    assert "created_at" not in names
+
+
+def test_writable_field_names_explicit_form_fields() -> None:
+    names = _NoteFieldsSerializer.writable_field_names(
+        form_fields=("title", "created_at"),
+    )
+    assert names == ("title", "created_at")

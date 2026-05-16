@@ -365,12 +365,45 @@ from reflex_django.auth import add_auth_pages, login_required, routes
 from reflex_django.auth.state import DjangoAuthState
 
 app = rx.App()
-add_auth_pages(app)
+add_auth_pages(app)  # quick start: all canned auth routes
 
 @rx.page()
 @login_required
 def dashboard():
     return rx.heading("Members only")
+```
+
+Register pages individually (custom routes, titles, or UI):
+
+```python
+from reflex_django.auth import (
+    LoginPage,
+    RegisterPage,
+    DjangoAuthState,
+    routes,
+)
+
+app = rx.App()
+app.add_page(
+    LoginPage,
+    route=routes.LOGIN_ROUTE,
+    title="Sign in",
+    on_load=DjangoAuthState.on_load_login,
+)
+app.add_page(
+    RegisterPage,
+    route=routes.SIGNUP_ROUTE,
+    title="Create account",
+    on_load=DjangoAuthState.on_load_register,
+)
+```
+
+Or use helpers that apply the same defaults as `add_auth_pages`:
+
+```python
+from reflex_django.auth import register_login_page, LoginPage
+
+register_login_page(app, page=LoginPage, route="/login")
 ```
 
 ### Settings (`REFLEX_DJANGO_AUTH`)
@@ -391,7 +424,9 @@ def dashboard():
 | `LOGIN_FIELDS` | `["username"]` | Login identifier(s): `"username"`, `"email"`, or both (e.g. `["username", "email"]`) |
 | `EMAIL_REQUIRED` | `False` | Require email on signup |
 | `PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
-| `MESSAGES` | (built-in dict) | User-facing copy |
+| `MESSAGES` | (built-in dict) | User-facing copy (errors, headings, button labels; see below) |
+
+**`MESSAGES` UI keys** (optional overrides): `login_heading`, `login_submit`, `login_signup_link`, `login_forgot_link`, `register_heading`, `register_submit`, `register_signin_link`, `register_username_label`, `register_email_label`, `register_email_optional_label`, `register_password_label`, `register_confirm_password_label`, `reset_heading`, `reset_instructions`, `reset_submit`, `reset_back_link`, `reset_confirm_heading`, `reset_confirm_submit`, `reset_confirm_loading`, `reset_confirm_password_label`, `reset_confirm_confirm_label`, plus error keys such as `invalid_credentials`, `reset_email_sent`, etc.
 
 Legacy **`REFLEX_DJANGO_LOGIN_URL`** is still read when `LOGIN_URL` is omitted from the dict.
 
@@ -403,9 +438,57 @@ Legacy **`REFLEX_DJANGO_LOGIN_URL`** is still read when `LOGIN_URL` is omitted f
 
 ### Customization
 
-- Import **`reflex_django.auth.pages`** and register your own components on the same routes.
-- Subclass or extend **`DjangoAuthState`** (built from session login + registration + reset mixins).
-- For hand-built forms, keep using **`session_auth_mixin`** (see below).
+Each canned page is a **`BaseAuthPage`** subclass with composable hooks (`heading`, `form_fields`, `footer_links`, …), **`state_cls`** (defaults to **`DjangoAuthState`**), and **`default_on_load`** (used by **`register_*_page`**).
+
+**Change copy via Django settings:**
+
+```python
+REFLEX_DJANGO_AUTH = {
+    "MESSAGES": {"login_heading": "Welcome back"},
+}
+```
+
+**Change one hook (keep form + handlers):**
+
+```python
+class BrandedLogin(LoginPage):
+    @classmethod
+    def heading_text(cls) -> str:
+        return "Welcome back"
+```
+
+**Add a form field:**
+
+```python
+class LoginWithRemember(LoginPage):
+    @classmethod
+    def form_fields(cls, auth):
+        return rx.vstack(
+            LoginPage.form_fields(auth),
+            rx.checkbox("Remember me", name="remember"),
+            spacing="3",
+            width="100%",
+        )
+```
+
+**Custom auth state** (must expose the same events, e.g. `submit_login_form`):
+
+```python
+from myapp.state import AppAuthState
+
+class AppLogin(LoginPage):
+    state_cls = AppAuthState
+
+register_login_page(app, page=AppLogin)  # uses AppLogin.default_on_load
+```
+
+**Full layout:** override **`render()`** or call **`super().form_body(auth)`** inside a custom **`render()`**.
+
+Form **`name=`** keys must match mixins: login `username` / `password`; register `username`, `email`, `password`, `confirm_password`; reset `email`; confirm `new_password`, `confirm_password`.
+
+- Import pages from **`reflex_django.auth`** or **`register_*_page`** / **`app.add_page(LoginPage, …)`**.
+- Reuse **`reflex_django.auth.pages.components`** for partial UI tweaks.
+- For hand-built forms, use **`session_auth_mixin`** (see below).
 
 ---
 
@@ -474,6 +557,59 @@ async def _load_notes(self) -> None:
 - **`NoteSerializer(note).data`** for a single instance.
 - **`row_serializer_class=NoteSerializer`** on **`ModelCRUDConfig`** wires the same serializer into **`crud_mixin`** refresh.
 - Low-level **`serialize_model_row`** remains available in **`reflex_django.serialization`**.
+
+---
+
+## Declarative model CRUD (`ModelState`)
+
+**`reflex_django.state.ModelState`** builds flat form fields and CRUD events from a
+**`ReflexDjangoModelSerializer`** (Django-style **`Meta.serializer`**). It does **not**
+use **`crud_mixin`**’s **`form_*` / `edit_*`** naming or separate **`add_item` /
+`save_edit`** events—new apps should prefer **`ModelState`** for a single
+**`save_note`**-style create/update flow.
+
+**Before (hand-written):** list var, error var, flat **`title`** / **`content`**,
+**`set_*`**, **`_load_notes`**, **`save_note`**, **`start_edit`**, **`delete_note`**, each
+with **`@login_required`** and ORM calls.
+
+**After:**
+
+```python
+from reflex_django.state import AppState, ModelState
+from reflex_django.serializers import ReflexDjangoModelSerializer
+
+
+class NoteSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Note
+        fields = ("id", "title", "content", "description", "created_at")
+        read_only_fields = ("id", "created_at")
+
+
+class NotesState(AppState, ModelState):
+    class Meta:
+        serializer = NoteSerializer
+        read_only_fields = ("user",)  # in list rows, not form/setters
+
+    # Optional: override any generated name in the class body:
+    # async def save_note(self): ...
+```
+
+Generated when not overridden in the subclass body:
+
+- **`notes`**, **`notes_error`**, **`editing_id`**, flat **`title`**, **`content`**, …
+- **`set_title`**, … (**`@rx.event`**)
+- **`_load_notes`**, **`on_load_notes`** (login required)
+- **`save_note`** (create or update from flat fields + **`editing_id`**)
+- **`start_edit`**, **`delete_note`**, **`cancel_edit`**, **`_clear_form`**
+
+**`read_only_fields`** on **`ModelState.Meta`** and/or the serializer merge with
+defaults (**`id`**, auto timestamp fields, **`owner_field`** default **`"user"`**).
+List rows still include those fields via the serializer; they are omitted from form
+vars unless you set **`Meta.form_fields`** explicitly.
+
+Import path: **`from reflex_django.state import ModelState, AppState`** (or lazy
+**`from reflex_django import ModelState`**).
 
 ---
 
