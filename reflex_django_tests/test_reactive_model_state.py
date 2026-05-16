@@ -227,6 +227,44 @@ def test_filter_queryset_applies_stored_filter() -> None:
     assert result is filtered
 
 
+def test_save_update_clears_fields_and_bumps_form_reset_key() -> None:
+    inst = mock.Mock(pk=2)
+    inst.name = "old"
+    inst.price = 0
+    inst.is_active = True
+
+    async def run() -> None:
+        with (
+            mock.patch(
+                "reflex_django.auth.decorators.current_user",
+            ) as cu,
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(RmProduct, "objects") as mgr,
+            mock.patch.object(ProductState, "refresh", new=mock.AsyncMock()),
+        ):
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            mgr.aget = mock.AsyncMock(return_value=inst)
+            inst.asave = mock.AsyncMock()
+            state = ProductState()
+            state.editing_id = 2
+            state.name = "updated"
+            state.price = 5
+            state.is_active = False
+            await state.save()
+            assert state.name == ""
+            assert state.price == 0
+            assert state.is_active is False
+            assert state.editing_id == -1
+            assert state.form_reset_key == 1
+
+    asyncio.run(run())
+
+
 def test_get_row_reads_from_list_var() -> None:
     state = ProductState()
     state.data = [

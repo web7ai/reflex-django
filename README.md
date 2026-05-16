@@ -674,7 +674,10 @@ def products_page() -> rx.Component:
             rx.button("Edit", on_click=ProductState.load(row["id"])),
             rx.button("Delete", on_click=ProductState.delete(row["id"])),
         )),
-        rx.input(value=ProductState.name, on_change=ProductState.set_name),
+        rx.form(
+            rx.input(value=ProductState.name, on_change=ProductState.set_name),
+            key=ProductState.form_reset_key,
+        ),
         rx.button("Save", on_click=ProductState.save),
         rx.button("New", on_click=ProductState.create),
         on_mount=ProductState.refresh,
@@ -705,8 +708,8 @@ class ProductState(ModelState):
 
 ```text
 on_mount / refresh  →  dispatch("load_list")  →  get_queryset → serialize → self.data
-load(42)            →  dispatch("start_edit") →  fill name, price, … ; editing_id = 42
-save()              →  dispatch("save")       →  create or update → reset form → refresh list
+load(42)            →  dispatch("start_edit") →  fill name, price, … ; editing_id = 42 ; bump form_reset_key
+save()              →  dispatch("save")       →  create or update → reset_state_fields → refresh list
 filter(is_active=True) →  store _queryset_filter → refresh
 ```
 
@@ -723,7 +726,7 @@ Each **`dispatch`** binds **`self.request`** / **`self.django_request`** when th
 1. At class definition time, **`AppStateMeta`** resolves your serializer and **`Meta`** options, declares Reflex vars, and wires default **`@rx.event`** handlers (unless you override them in the class body).
 2. **`on_load_notes`** (name derived from **`list_var`**) calls **`_load_notes`**, which runs **`dispatch("load_list")`** → queryset hooks → **`ReflexDjangoModelSerializer`** → assigns **`self.notes`**.
 3. **`save_note`** runs **`dispatch("save")`** → **`validate_state`** → create or update (when **`editing_id >= 0`**) → **`on_save_success`** → **`reset_state_fields`** (when **`Meta.reset_after_save`**, default **`True`**) → reload list.
-4. **`start_edit(id)`** loads the row into flat field vars and sets **`editing_id`**. **`delete_note(id)`** deletes and refreshes the list.
+4. **`start_edit(id)`** loads the row into flat field vars, sets **`editing_id`**, and bumps **`form_reset_key`** so bound forms show the loaded row. **`delete_note(id)`** deletes and refreshes the list.
 
 ```text
 Page on_load          →  on_load_notes  →  dispatch(load_list)  →  self.notes = [...]
@@ -909,12 +912,14 @@ For a model **`Note`**, defaults (override any name in the class body):
 | Editable vars | Flat fields from serializer writable columns, e.g. **`title`**, **`content`** |
 | Setters | **`set_title`**, **`set_content`**, … (**`@rx.event`**) |
 | Load | **`_load_notes`**, **`on_load_notes`** (login required by default) |
-| CRUD | **`save_note`**, **`save_note_form`** (optional), **`start_edit`**, **`delete_note`**, **`cancel_edit`**, **`reset_state_fields`** |
-| Form remount | **`form_reset_key`** (increments on reset; bind to **`rx.form(..., key=...)`**) |
+| CRUD | **`save_note`**, **`save_note_form`** (optional), **`start_edit`**, **`delete_note`**, **`cancel_edit`**, **`reset_state_fields`**, **`bump_form_reset_key`** |
+| Form remount | **`form_reset_key`** (increments on save reset, cancel, and **`start_edit`**; bind to **`rx.form(..., key=...)`**) |
 
-**`save_note`** creates when **`editing_id == -1`**, updates when **`editing_id >= 0`**. After a successful save, editable vars are cleared and **`form_reset_key`** bumps so **`rx.form`** remounts (fixes inputs that only use **`name=`** without **`value=`**).
+**`save_note`** creates when **`editing_id == -1`**, updates when **`editing_id >= 0`**. After a successful save, editable vars are cleared and **`form_reset_key`** bumps so **`rx.form`** remounts—required for both **`name=`**-only inputs and controlled **`value=`** / **`on_change=`** fields (especially **`rx.text_area`**) so the DOM does not keep stale text after update.
 
-Set **`Meta.reset_after_save = False`** to keep field values after save, or override **`on_save_success`** / call **`reset_state_fields()`** yourself.
+Set **`Meta.reset_after_save = False`** to keep field values after save, or override **`on_save_success`** / call **`reset_state_fields()`** yourself. Use **`bump_form_reset_key()`** when you only need a UI remount without clearing vars.
+
+See [Clearing forms](docs/reactive_model_state.md#clearing-forms-save-edit-cancel) in the ModelState guide.
 
 ### Configuration (`Meta` and class attributes)
 

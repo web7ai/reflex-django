@@ -35,6 +35,10 @@ class UpdateMixin(ObjectMixin, StateFieldsMixin):
         for sf in opts.state_fields:
             value = getattr(instance, sf.name, None)
             setattr(self, sf.name, sf.to_var(value))
+        if opts.field_errors_var:
+            setattr(self, opts.field_errors_var, {})
+        # Remount bound forms so inputs reflect loaded row values (not stale DOM).
+        self.bump_form_reset_key()
 
     async def handle_start_edit(self, ctx: ActionContext) -> None:
         opts = ctx.options

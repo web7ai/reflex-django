@@ -241,6 +241,88 @@ def test_save_note_create_calls_orm() -> None:
     asyncio.run(run())
 
 
+def test_save_note_update_clears_form() -> None:
+    user = mock.Mock(pk=3)
+    inst = mock.Mock(pk=9)
+    inst.title = "old"
+    inst.content = "old body"
+    inst.description = "old desc"
+
+    async def run() -> None:
+        with (
+            mock.patch(
+                "reflex_django.auth.shortcuts.require_login_user",
+                return_value=user,
+            ),
+            mock.patch(
+                "reflex_django.auth.decorators.current_user",
+            ) as cu,
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(MsNote, "objects") as mgr,
+            mock.patch.object(_NotesState, "_load_notes", new=mock.AsyncMock()),
+        ):
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            mgr.aget = mock.AsyncMock(return_value=inst)
+            inst.asave = mock.AsyncMock()
+            state = _NotesState()
+            state.editing_id = 9
+            state.title = "new title"
+            state.content = "new body"
+            state.description = "new desc"
+            await state.save_note()
+            mgr.aget.assert_awaited_once_with(pk=9, user_id=3)
+            inst.asave.assert_awaited_once()
+            assert inst.title == "new title"
+            assert state.title == ""
+            assert state.content == ""
+            assert state.description == ""
+            assert state.editing_id == -1
+            assert state.form_reset_key == 1
+
+    asyncio.run(run())
+
+
+def test_start_edit_bumps_form_reset_key() -> None:
+    user = mock.Mock(pk=1)
+    inst = mock.Mock(pk=4)
+    inst.title = "loaded"
+    inst.content = "body"
+    inst.description = ""
+
+    async def run() -> None:
+        with (
+            mock.patch(
+                "reflex_django.auth.shortcuts.require_login_user",
+                return_value=user,
+            ),
+            mock.patch(
+                "reflex_django.auth.decorators.current_user",
+            ) as cu,
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(MsNote, "objects") as mgr,
+        ):
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            mgr.aget = mock.AsyncMock(return_value=inst)
+            state = _NotesState()
+            assert state.form_reset_key == 0
+            await state.start_edit(4)
+            assert state.editing_id == 4
+            assert state.title == "loaded"
+            assert state.form_reset_key == 1
+
+    asyncio.run(run())
+
+
 def test_save_note_keeps_fields_when_reset_after_save_disabled() -> None:
     class _NoResetState(AppState, ModelCRUDView, UserScopedMixin):
         scope_field = "user_id"

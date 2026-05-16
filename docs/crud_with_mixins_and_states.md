@@ -209,16 +209,30 @@ See `reflex_django_tests/test_model_state.py` (`_CustomSaveState`).
 
 ## Page wiring
 
+Wrap editable fields in `rx.form(..., key=PostsState.form_reset_key)` so the form clears after save/update and reloads when entering edit mode ([Clearing forms](reactive_model_state.md#clearing-forms-save-edit-cancel)).
+
 ```python
 def blog_admin() -> rx.Component:
     return rx.vstack(
         rx.cond(PostsState.posts_error != "", rx.callout(PostsState.posts_error)),
-        rx.input(value=PostsState.title, on_change=PostsState.set_title),
-        rx.input(value=PostsState.slug, on_change=PostsState.set_slug),
-        rx.text_area(value=PostsState.body, on_change=PostsState.set_body),
-        rx.checkbox("Published", checked=PostsState.published, on_change=PostsState.set_published),
+        rx.form(
+            rx.vstack(
+                rx.input(value=PostsState.title, on_change=PostsState.set_title),
+                rx.input(value=PostsState.slug, on_change=PostsState.set_slug),
+                rx.text_area(value=PostsState.body, on_change=PostsState.set_body),
+                rx.checkbox(
+                    "Published",
+                    checked=PostsState.published,
+                    on_change=PostsState.set_published,
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            key=PostsState.form_reset_key,
+            width="100%",
+        ),
         rx.button("Save", on_click=PostsState.save_post),
-        rx.form(key=PostsState.form_reset_key),
+        rx.button("Cancel", on_click=PostsState.cancel_edit),
         rx.foreach(
             PostsState.posts,
             lambda p: rx.hstack(
@@ -261,6 +275,7 @@ No `save_*` / `delete_*` assembly.
 | `read_only_fields` | `()` | Extra non-editable fields |
 | `state_fields` | writable serializer fields | Explicit editable vars |
 | `reset_after_save` | `True` | Clear form after save |
+| `form_reset_var` | `"form_reset_key"` | Var bumped on reset / `start_edit`; bind to `rx.form(..., key=...)`; `None` disables |
 | `use_form_submit` | `False` | `save_*_form` from `form_data` |
 | `run_model_validation` | `False` | `Model.full_clean()` |
 | `structured_errors` | `False` | `{list_var}_field_errors` |

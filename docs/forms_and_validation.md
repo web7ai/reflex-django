@@ -15,8 +15,44 @@ Reflex forms, **state-field validation** on `ModelCRUDView`, and auth form rules
 
 | Style | Pattern |
 |-------|---------|
-| Flat fields | `rx.input(value=State.title, on_change=State.set_title)` |
-| Form submit | `rx.form.root` + `form_data` via `Meta.use_form_submit` |
+| Flat fields | `rx.input(value=State.title, on_change=State.set_title)` inside `rx.form(key=State.form_reset_key)` |
+| Form submit | `rx.form` + `form_data` via `Meta.use_form_submit` (also use `key=State.form_reset_key`) |
+
+---
+
+## Clearing forms after save and edit
+
+`ModelState` / `ModelCRUDView` clear editable state vars after a successful save when `Meta.reset_after_save` is `True` (default). The browser may still show old text until the form remounts.
+
+| Handler | Clears vars | Bumps `form_reset_key` |
+|---------|-------------|------------------------|
+| `reset_state_fields()` | Yes | Yes |
+| `cancel_edit` | Yes (via reset) | Yes |
+| Successful `save` / `save_*` | Yes (when `reset_after_save`) | Yes |
+| `start_edit` / `load(pk)` | Replaces with row data | Yes (`populate_edit_state`) |
+| `bump_form_reset_key()` | No | Yes only |
+
+**UI (recommended for create and update forms):**
+
+```python
+rx.form(
+    rx.vstack(
+        rx.input(value=NotesState.title, on_change=NotesState.set_title),
+        rx.text_area(value=NotesState.content, on_change=NotesState.set_content),
+        spacing="3",
+        width="100%",
+    ),
+    key=NotesState.form_reset_key,
+    width="100%",
+)
+rx.button("Save changes", on_click=NotesState.save)  # outside form when using on_click
+```
+
+- Set `Meta.reset_after_save = False` to keep values after save; call `reset_state_fields()` manually when needed.
+- Set `Meta.form_reset_var = None` to disable automatic key bumps.
+- Override `on_save_success(ctx, instance)` for custom logic before reset.
+
+Full details: [Reactive ModelState — Clearing forms](reactive_model_state.md#clearing-forms-save-edit-cancel).
 
 ---
 
@@ -36,6 +72,8 @@ rx.form(
     rx.form.field(rx.input(name="title")),
     rx.button("Save", type="submit"),
     on_submit=NotesState.save_note_form,
+    reset_on_submit=False,
+    key=NotesState.form_reset_key,
 )
 ```
 
@@ -111,6 +149,7 @@ See [CRUD without mixins](crud_without_mixins.md) `_validate()` pattern.
 
 - Trusting client validation only.  
 - Mismatched `name=` in `rx.form` vs serializer fields when using `use_form_submit`.
+- Forgetting `key=State.form_reset_key` — form stays filled after update/save even when state vars are cleared.
 
 ---
 

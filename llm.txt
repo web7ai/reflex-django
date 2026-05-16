@@ -337,7 +337,8 @@ Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass alrea
 | `delete_note(item_id)` | delete + refresh list |
 | `cancel_edit` | `reset_state_fields()` |
 | `reset_state_fields` | clear editable vars, `editing_id=-1`, bump `form_reset_key` |
-| `form_reset_key` | int; bind to `rx.form(..., key=...)` so DOM clears after save |
+| `bump_form_reset_key` | increment `form_reset_key` only (custom remount without full reset) |
+| `form_reset_key` | int; bind to `rx.form(..., key=...)` — bumps on save reset, cancel, and `start_edit` |
 | `save_{model}_form` | optional when `Meta.use_form_submit = True`; reads `form_data` then `dispatch(save)` |
 
 Canonical handlers on `ModelState`: `load`, `save`, `create`, `delete`, `refresh`, `filter`, `paginate`, …
@@ -361,7 +362,7 @@ Default `paginate_by = None` → full list (no page vars). Hooks: `apply_search`
 ```text
 on_load_data  → dispatch("load_list")  → get_queryset → filter_queryset → serialize → data
 save_note      → dispatch("save")       → validate_state → create|update → on_save_success → reset_state_fields? → refresh list
-start_edit(id) → dispatch("start_edit") → get_object → populate state vars
+start_edit(id) → dispatch("start_edit") → get_object → populate state vars → bump form_reset_key
 ```
 
 ### Per-event `self.request` / `self.django_request`
@@ -406,7 +407,16 @@ def get_create_kwargs(self, state_data: dict) -> dict:
 def notes_page() -> rx.Component:
     return rx.vstack(
         rx.cond(NotesState.error != "", rx.callout(NotesState.error)),
-        rx.input(value=NotesState.title, on_change=NotesState.set_title),
+        rx.form(
+            rx.vstack(
+                rx.input(value=NotesState.title, on_change=NotesState.set_title),
+                rx.text_area(value=NotesState.content, on_change=NotesState.set_content),
+                spacing="3",
+                width="100%",
+            ),
+            key=NotesState.form_reset_key,
+            width="100%",
+        ),
         rx.button("Save", on_click=NotesState.save_note),
         rx.foreach(
             NotesState.data,
@@ -453,7 +463,8 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 - **`owner_field`** on serializer — removed; use `get_queryset` / `UserScopedMixin`.
 - **`Meta.form_fields`** — use **`Meta.state_fields`**.
 - **`_clear_form`** — use **`reset_state_fields`** (alias **`_reset_state_fields`**).
-- After save, bind **`rx.form(..., key=State.form_reset_key)`** if inputs use **`name=`** only; or use **`value=` + `on_change=`** on each field.
+- After save/update/cancel and when entering edit mode, wrap fields in **`rx.form(..., key=State.form_reset_key)`** so the DOM remounts (needed for controlled **`value=`** / **`on_change=`** too, not only **`name=`** inputs).
+- **`bump_form_reset_key()`** — remount only; **`reset_state_fields()`** — clear vars + remount.
 
 ### Submodule map
 

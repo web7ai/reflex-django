@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Edit/save form reset: `populate_edit_state` bumps `form_reset_key` so bound
+  forms reload row values; `bump_form_reset_key()` is public for custom UIs.
 - Pagination: `page_size` is seeded from `Meta.paginate_by` (fixes showing one
   row when `paginate_by > 1`).
 - Assembly no longer injects plain Python defaults that shadow `ModelState`

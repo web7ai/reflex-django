@@ -135,31 +135,40 @@ def products_page() -> rx.Component:
             rx.text("No products yet.", color="gray"),
         ),
         rx.divider(),
-        # Form
+        # Form — wrap fields in rx.form(key=form_reset_key) so the DOM remounts after
+        # save, cancel, and start_edit (see "Clearing forms" below).
         rx.cond(
             ProductState.editing_id >= 0,
             rx.text(f"Editing #{ProductState.editing_id}"),
             rx.text("New product"),
         ),
-        rx.input(
-            placeholder="Name",
-            value=ProductState.name,
-            on_change=ProductState.set_name,
-        ),
-        rx.input(
-            placeholder="SKU",
-            value=ProductState.sku,
-            on_change=ProductState.set_sku,
-        ),
-        rx.input(
-            placeholder="Price",
-            value=ProductState.price,
-            on_change=ProductState.set_price,
-        ),
-        rx.checkbox(
-            "Active",
-            checked=ProductState.is_active,
-            on_change=ProductState.set_is_active,
+        rx.form(
+            rx.vstack(
+                rx.input(
+                    placeholder="Name",
+                    value=ProductState.name,
+                    on_change=ProductState.set_name,
+                ),
+                rx.input(
+                    placeholder="SKU",
+                    value=ProductState.sku,
+                    on_change=ProductState.set_sku,
+                ),
+                rx.input(
+                    placeholder="Price",
+                    value=ProductState.price,
+                    on_change=ProductState.set_price,
+                ),
+                rx.checkbox(
+                    "Active",
+                    checked=ProductState.is_active,
+                    on_change=ProductState.set_is_active,
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            key=ProductState.form_reset_key,
+            width="100%",
         ),
         rx.hstack(
             rx.button("Save", on_click=ProductState.save),
@@ -199,6 +208,8 @@ These names are **stable across every model**. Use them in `on_click`, `on_mount
 | `clear_filter` | `clear_filter()` | Clear stored filters, then `refresh()` |
 | `paginate` | `paginate(page=…, page_size=…)` | Update page vars (if `paginate_by` set), then `refresh()` |
 | `cancel_edit` | `cancel_edit()` | Clear form fields; `editing_id = -1` |
+| `reset_state_fields` | `reset_state_fields()` | Clear editable vars, `editing_id = -1`, bump `form_reset_key` |
+| `bump_form_reset_key` | `bump_form_reset_key()` | Increment `form_reset_key` only (custom UIs) |
 | `get_row` | `get_row(pk) -> dict \| None` | Read one row from the **current** list var (no DB hit) |
 
 **Legacy names** (still generated for backward compatibility):
@@ -224,6 +235,7 @@ editing_id >= 0   →  save() runs UPDATE  (perform_update → asave on instance
 load(42)          →  dispatch("start_edit", pk=42)
                      →  get_object(42) → copy fields into state vars
                      →  editing_id = 42
+                     →  bump form_reset_key (remount bound form)
 
 create()          →  editing_id = -1, then save()  (new row)
 
@@ -231,6 +243,46 @@ cancel_edit()     →  reset_state_fields(), editing_id = -1
 ```
 
 After a successful save, the default pipeline calls `reset_state_fields()` when `Meta.reset_after_save` is `True` (default), bumps `form_reset_key` (for `rx.form` remounting), and reloads the list.
+
+---
+
+## Clearing forms (save, edit, cancel)
+
+Reflex state vars are cleared in Python, but **inputs can keep stale DOM text** (especially `rx.text_area`) unless the form remounts.
+
+| Event | State cleared? | `form_reset_key` bumped? |
+|-------|----------------|--------------------------|
+| Successful **save** (create or update) | Yes, when `Meta.reset_after_save=True` | Yes (`reset_state_fields`) |
+| **cancel_edit** | Yes | Yes |
+| **start_edit** / **load(pk)** | Fields replaced with row data | Yes (`populate_edit_state`) |
+
+**Recommended UI pattern** — wrap all editable fields in one `rx.form` and bind the key:
+
+```python
+rx.form(
+    rx.vstack(
+        rx.input(value=NotesState.title, on_change=NotesState.set_title),
+        rx.text_area(value=NotesState.content, on_change=NotesState.set_content),
+        spacing="3",
+        width="100%",
+    ),
+    key=NotesState.form_reset_key,
+    width="100%",
+)
+```
+
+Put **Save / Cancel** buttons outside the form when using `on_click=NotesState.save` (not `type="submit"`).
+
+**Developer hooks:**
+
+| API | When to use |
+|-----|-------------|
+| `reset_state_fields()` | Clear vars + exit edit mode + bump key (same as cancel / post-save reset) |
+| `bump_form_reset_key()` | Remount UI only; e.g. custom wizard step without clearing `editing_id` |
+| `on_save_success(ctx, instance)` | Run logic before reset; call `reset_state_fields()` yourself if `Meta.reset_after_save = False` |
+| `Meta.form_reset_var = None` | Disable key bumping entirely |
+
+See also [Forms and validation](forms_and_validation.md#clearing-forms-after-save-and-edit).
 
 ---
 
@@ -402,6 +454,8 @@ class ProductState(ModelState[Product]):
 ---
 
 ## Forms (`rx.form` + `use_form_submit`)
+
+Whether you use flat `value=` / `on_change=` fields or native `name=` inputs, **bind `key=State.form_reset_key`** on a parent `rx.form` so fields clear after update/create and reload correctly when entering edit mode ([Clearing forms](#clearing-forms-save-edit-cancel)).
 
 For HTML form posts with a single `form_data` dict:
 
@@ -591,7 +645,7 @@ Auto serializer always includes `id` in `Meta.fields`.
 | `field_errors` | `field_errors_var` | `dict[str, str]` when `structured_errors=True` |
 | `editing_id` | — | `-1` create, `>=0` edit |
 | `name`, `price`, … | from `fields` | Form bindings |
-| `form_reset_key` | — | Bind to `rx.form(..., key=...)` |
+| `form_reset_key` | — | Bind to `rx.form(..., key=...)`; bumps on save reset, cancel, and `start_edit` |
 | `page`, `page_size` | when `paginate_by` set | `page_size` seeded from `paginate_by` |
 
 **`ModelCRUDView`** (without `ModelState`) still defaults to **pluralized** names (`products`, `products_error`, `products_search`, …) unless you override `Meta.list_var`.
@@ -687,6 +741,7 @@ flowchart TD
 | `run_model_validation` | `False` | When `True`, runs Django `full_clean()` via internal `validate_model_full_clean()` (set on **`Meta` only**, not as a class-body var — see below) |
 | `structured_errors` | `False` | Per-field `field_errors` |
 | `reset_after_save` | `True` | Clear form after save |
+| `form_reset_var` | `"form_reset_key"` | Var incremented on reset / edit load; set `None` to disable |
 | `use_form_submit` | `False` | `save_*_form(form_data)` handler |
 | `load_context_processors` | `True` | Fill `self.request` from context processors |
 
@@ -727,6 +782,8 @@ Do **not** declare `run_model_validation = True` on the class body of `ModelCRUD
 | Handler never runs | Same name in subclass replaced assembly | Inspect class `__dict__` |
 | `self.request.user` anonymous | Bridge off or not logged in | [Authentication](authentication.md), event bridge |
 | Stale rows after external change | List not reloaded | Call `refresh()` or rely on post-save reload |
+| Form still filled after save/update | State cleared but DOM not remounted | Wrap fields in `rx.form(..., key=State.form_reset_key)` |
+| Edit form shows wrong/old text | Stale DOM when switching rows | Same `key=` binding; `start_edit` bumps the key automatically |
 | Duplicate handlers / wrong one | Overrode canonical but UI still calls legacy | Point UI at `ProductState.save` not `save_product` |
 
 ---

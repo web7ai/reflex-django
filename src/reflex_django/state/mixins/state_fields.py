@@ -125,6 +125,14 @@ class StateFieldsMixin(BaseModelState):
             else:
                 setattr(self, sf.name, str(raw) if raw is not None else "")
 
+    def bump_form_reset_key(self) -> None:
+        """Increment :attr:`~reflex_django.state.ModelState.form_reset_key` for ``rx.form(..., key=...)``."""
+        opts = self.get_options()
+        if not opts.form_reset_var:
+            return
+        current = int(getattr(self, opts.form_reset_var, 0))
+        setattr(self, opts.form_reset_var, current + 1)
+
     def reset_state_fields(self) -> None:
         """Clear editable vars, exit edit mode, and bump the form remount key when configured."""
         opts = self.get_options()
@@ -134,9 +142,7 @@ class StateFieldsMixin(BaseModelState):
         setattr(self, opts.error_var, "")
         if opts.field_errors_var:
             setattr(self, opts.field_errors_var, {})
-        if opts.form_reset_var:
-            current = int(getattr(self, opts.form_reset_var, 0))
-            setattr(self, opts.form_reset_var, current + 1)
+        self.bump_form_reset_key()
 
     def _reset_state_fields(self) -> None:
         self.reset_state_fields()
