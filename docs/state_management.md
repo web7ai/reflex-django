@@ -391,15 +391,40 @@ if user.is_authenticated:
 
 ## Part C — Mixins and declarative CRUD (optional layer)
 
-On top of helper states, **model mixins** generate list/save/delete handlers:
+On top of helper states, reflex-django can **generate** list/save/delete handlers, serializers, and form vars at class definition time (`AppStateMeta`).
+
+### Recommended: `ModelState[M]`
+
+One base class per Django model—includes **`AppState`** (auth) and the full CRUD stack:
+
+```python
+from reflex_django.state import ModelState
+from shop.models import Product
+
+class ProductState(ModelState[Product]):
+    model = Product
+    fields = ["name", "price", "is_active"]
+```
+
+Call stable handlers from the UI: `ProductState.refresh`, `ProductState.load(id)`, `ProductState.save`, `ProductState.delete(id)`. See **[Reactive ModelState](reactive_model_state.md)** for full examples (pagination, filters, user scoping, forms, overrides).
+
+### Legacy: `AppState` + `ModelCRUDView`
+
+Explicit serializer, same hooks and dispatch pipeline:
+
+```python
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
+```
 
 | Layer | Types | Doc |
 |-------|-------|-----|
-| Full CRUD stack | `ModelCRUDView` / `ModelState` | [CRUD with mixins](crud_with_mixins_and_states.md) |
-| Mixin catalog | `ListMixin`, `DispatchMixin`, `session_auth_mixin`, … | [reflex-django mixins](reflex_django_mixins.md) |
+| Reactive ORM (preferred) | `ModelState[M]` | [Reactive ModelState](reactive_model_state.md) |
+| Explicit serializer CRUD | `AppState` + `ModelCRUDView` | [CRUD with mixins](crud_with_mixins_and_states.md) |
+| Mixin catalog | `ListMixin`, `DispatchMixin`, `UserScopedMixin`, … | [reflex-django mixins](reflex_django_mixins.md) |
 | Manual CRUD | Plain `rx.State` | [CRUD without mixins](crud_without_mixins.md) |
 
-`ModelCRUDView` requires **`AppState`** in the bases and the **event bridge** for default `login_required` behavior.
+Both `ModelState` and `ModelCRUDView` require the **event bridge** for default `@login_required` and `self.request.user` in hooks.
 
 ---
 
@@ -412,7 +437,7 @@ On top of helper states, **model mixins** generate list/save/delete handlers:
 | Show logged-in user in header | `AppState` / `DjangoUserState` (auto-sync) **or** `current_user()` in `on_load` |
 | Expose `LANGUAGE_CODE` in UI | `DjangoI18nState` **or** manual `current_language()` |
 | Template-like context dict in state | `DjangoContextState` **or** `collect_reflex_context` |
-| Standard list + form + edit + delete | `AppState` + `ModelCRUDView` |
+| Standard list + form + edit + delete | `ModelState[M]` (preferred) or `AppState` + `ModelCRUDView` |
 | Generated login form state | `session_auth_mixin` ([Authentication](authentication.md)) |
 
 ---

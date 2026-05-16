@@ -17,7 +17,7 @@ Production-oriented patterns for reflex-django applications.
 1. Authorize in **event handlers** with `self.user` / `current_user()`, `require_login_user()`, `await self.has_perm(...)`, or `auser_has_perm`.  
 2. Use `@login_required` and `@permission_required` on events that return or change private data.  
 3. Never trust snapshot fields (`is_authenticated`, `username`, …) alone for permissions—they are for UI.  
-4. Scope querysets with `self.user` / `UserScopedMixin` on `AppState` + `ModelCRUDView`.  
+4. Scope querysets with `self.user` / `UserScopedMixin` on `ModelState[M]` or `AppState` + `ModelCRUDView` ([Reactive ModelState](reactive_model_state.md)).  
 5. After `login()` / `logout()`, sync the browser session cookie when users full-page navigate ([Authentication](authentication.md)).  
 6. Keep `SECRET_KEY` stable; disable `SIGNUP_ENABLED` if registrations are admin-only.
 
@@ -28,7 +28,8 @@ Detail: [Authentication](authentication.md).
 ## Imports and startup
 
 - Prefer `from reflex_django import …` **after** `rxconfig` loads in normal Reflex startup.  
-- `ModelCRUDView`: `from reflex_django.state import ModelCRUDView`.  
+- `ModelState` (preferred): `from reflex_django.state import ModelState`.  
+- `ModelCRUDView` (explicit serializer): `from reflex_django.state import ModelCRUDView`.  
 - `session_auth_mixin`: `from reflex_django.mixins import session_auth_mixin`.  
 - Avoid circular imports: do not import models at module level from paths that load before `configure_django()`.
 
@@ -50,9 +51,9 @@ Only JSON-serializable values on `rx.State` fields synced to the client. Process
 
 ## Performance
 
-- `queryset_select_related` / `queryset_prefetch` on `ModelCRUDView.Meta`.  
-- Narrow serializer `fields`.  
-- Implement pagination in application state (not provided by framework).  
+- `queryset_select_related` / `queryset_prefetch` on `Meta` (ModelState or ModelCRUDView).  
+- Narrow `fields` on `ModelState` or serializer `Meta.fields`.  
+- Use `Meta.paginate_by` on ModelState for built-in pagination vars and handlers.  
 - `load_context_processors=False` when unused.
 
 ---

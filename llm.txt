@@ -226,10 +226,55 @@ Human docs: `docs/authentication.md`.
 
 ---
 
-## ModelCRUDView — declarative model CRUD (agent reference)
+## ModelState — reactive ORM state (preferred)
 
-**Import:** `from reflex_django.state import AppState, ModelCRUDView, ModelState, ModelListView`  
-**Alias:** `ModelState` = `ModelCRUDView`  
+**Import:** `from reflex_django.state import ModelState`  
+**Full doc:** `docs/reactive_model_state.md` (examples: Product CRUD page, BlogPost + UserScopedMixin, pagination, forms, hooks)  
+**Requires:** event bridge on; includes **`AppState`** (auth).
+
+### Pattern (any Django model)
+
+```python
+class ProductState(ModelState[Product]):
+    model = Product
+    fields = ["name", "price", "is_active"]
+    ordering = ("-created_at",)
+# Generated: products, products_error, editing_id, field vars, load, save, refresh, filter, …
+```
+
+Auto-builds serializer from `model` + `fields` unless `serializer_class` / `Meta.serializer` is set. Invalid field names → `ImproperlyConfigured` at import.
+
+### UI wiring
+
+```python
+rx.button("Save", on_click=ProductState.save)
+rx.button("Edit", on_click=ProductState.load(row["id"]))
+on_mount=ProductState.refresh
+```
+
+### Canonical API (stable names)
+
+`load(pk)`, `save()`, `create()`, `delete(pk=None)`, `refresh()`, `filter(**kwargs)`, `clear_filter()`, `paginate(page=…, page_size=…)`, `cancel_edit()`, `get_row(pk)`.
+
+`editing_id == -1` → create on save; `>= 0` → update. `filter(**kwargs)` sets `_queryset_filter` then refresh.
+
+Legacy names (`save_{model}`, `start_edit`, `on_load_{list}`) still generated. `Meta.use_canonical_api = False` skips canonical handlers.
+
+### User scope
+
+```python
+class NoteState(ModelState[Note], UserScopedMixin):
+    model = Note
+    fields = ["title", "body"]
+    scope_field = "user_id"
+```
+
+---
+
+## ModelCRUDView — explicit serializer CRUD (legacy / advanced)
+
+**Import:** `from reflex_django.state import AppState, ModelCRUDView, ModelListView`  
+**Note:** `ModelState` is **not** an alias; it extends `AppState` + `ModelCRUDView` with `model` + `fields` shorthand.  
 **Requires:** event bridge on; `@login_required` on most generated handlers by default.
 
 ### Pattern

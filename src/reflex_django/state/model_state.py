@@ -1,9 +1,8 @@
-"""Public alias for the batteries-included CRUD stack."""
+"""Public exports for reactive model state and CRUD mixins."""
 
 from __future__ import annotations
 
+from reflex_django.state.generic import M, ModelState
 from reflex_django.state.views.crud import ModelCRUDView
 
-ModelState = ModelCRUDView
-
-__all__ = ["ModelCRUDView", "ModelState"]
+__all__ = ["M", "ModelCRUDView", "ModelState"]

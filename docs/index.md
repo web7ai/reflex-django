@@ -35,15 +35,16 @@ This documentation is written for **Python and Django developers** who want full
 12. [Database integration](database_integration.md) — migrations, `Model`, ORM backend  
 13. [CRUD without mixins](crud_without_mixins.md) — manual Product example  
 14. [reflex-django mixins](reflex_django_mixins.md) — mixin catalog and `session_auth_mixin`  
-15. [CRUD with mixins and states](crud_with_mixins_and_states.md) — `ModelCRUDView` / BlogPost  
-16. [Forms and validation](forms_and_validation.md)  
-17. [Authentication](authentication.md)  
-18. [API integration](api_integration.md) — Django HTTP under `backend_prefix`  
-19. [CLI](cli.md) — `reflex django` and `reflex-django`  
-20. [Deployment](deployment.md)  
-21. [Testing](testing.md)  
-22. [Best practices](best_practices.md)  
-23. [FAQ](faq.md)
+15. [Reactive ModelState](reactive_model_state.md) — `ModelState[M]` + canonical ORM API  
+16. [CRUD with mixins and states](crud_with_mixins_and_states.md) — `ModelCRUDView` / BlogPost  
+17. [Forms and validation](forms_and_validation.md)  
+18. [Authentication](authentication.md)  
+19. [API integration](api_integration.md) — Django HTTP under `backend_prefix`  
+20. [CLI](cli.md) — `reflex django` and `reflex-django`  
+21. [Deployment](deployment.md)  
+22. [Testing](testing.md)  
+23. [Best practices](best_practices.md)  
+24. [FAQ](faq.md)
 
 ---
 
@@ -55,7 +56,7 @@ This documentation is written for **Python and Django developers** who want full
 | Run migrations | [CLI](cli.md) |
 | Use Django session auth in Reflex events (`AppState`, `login`, `has_perm`) | [Authentication](authentication.md) |
 | Understand state: plain Reflex vs helpers | [State management](state_management.md) |
-| Build a list/create/edit UI for a model | [CRUD with mixins](crud_with_mixins_and_states.md) or [CRUD without mixins](crud_without_mixins.md) |
+| Build a list/create/edit UI for a model | [Reactive ModelState](reactive_model_state.md), [CRUD with mixins](crud_with_mixins_and_states.md), or [CRUD without mixins](crud_without_mixins.md) |
 | Serialize models for Reflex state | [Serializers](serializers.md) |
 | Expose DRF or Django views on `/api` | [API integration](api_integration.md) |
 | Deploy to production | [Deployment](deployment.md) |

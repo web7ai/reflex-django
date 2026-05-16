@@ -49,8 +49,12 @@ class AppState(DjangoUserState, ABC, metaclass=AppStateMeta):
     refreshed automatically when ``REFLEX_DJANGO_AUTH_AUTO_SYNC`` is enabled, or
     call :meth:`~reflex_django.auth_state.DjangoUserState.sync_from_django`.
 
-    Combine with :class:`~reflex_django.state.ModelCRUDView` for declarative CRUD::
+    Combine with :class:`~reflex_django.state.ModelState` for declarative CRUD::
 
-        class NotesState(AppState, ModelCRUDView):
-            serializer_class = NoteSerializer
+        class NotesState(ModelState[Note]):
+            model = Note
+            fields = ["title", "body"]
+
+    Legacy explicit style: ``AppState`` + :class:`~reflex_django.state.ModelCRUDView`
+    + ``serializer_class``.
     """

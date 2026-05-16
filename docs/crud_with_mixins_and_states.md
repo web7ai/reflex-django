@@ -1,8 +1,31 @@
 # CRUD with mixins and states
 
-Use **`ModelCRUDView`** (alias **`ModelState`**) for declarative list + create/update/delete with generated state vars and events.
+For new projects, prefer **[Reactive ModelState](reactive_model_state.md)** — one class per model with `model` + `fields` and canonical **`load` / `save` / `refresh`** handlers.
 
-> Tutorial **`BlogPost`** code is **example application code**. Canonical tested patterns also appear in README (`Note`) and `reflex_django_tests/test_model_state.py`.
+**Same BlogPost example with `ModelState`:**
+
+```python
+from reflex_django.state import ModelState
+from reflex_django.state.mixins.scoping import UserScopedMixin
+from blog.models import BlogPost
+
+class PostState(ModelState[BlogPost], UserScopedMixin):
+    model = BlogPost
+    fields = ["title", "slug", "body", "published"]
+    scope_field = "author_id"
+    ordering = ("-created_at",)
+
+    class Meta:
+        list_var = "posts"
+```
+
+UI: `PostState.refresh`, `PostState.load(id)`, `PostState.save`, `PostState.delete(id)` — see the [reactive guide](reactive_model_state.md) for full pages, pagination, and validation.
+
+---
+
+This page documents **`ModelCRUDView`** (explicit `serializer_class`) for the same pipeline with legacy event names (`save_post`, `start_edit`, …). Everything below applies to both styles; hooks and `Meta` options are shared.
+
+> Tutorial **`BlogPost`** code is **example application code**. Canonical tested patterns also appear in README (`Note`), `reflex_django_tests/test_reactive_model_state.py`, and `test_model_state.py`.
 
 ---
 
@@ -277,7 +300,7 @@ No `save_*` / `delete_*` assembly.
 
 ## Developer notes
 
-- `ModelState is ModelCRUDView` (`state/model_state.py`).  
+- `ModelState` extends `AppState` + `ModelCRUDView` (`state/generic.py`); see [Reactive ModelState](reactive_model_state.md).  
 - Removed APIs: `crud_mixin()`, `ModelCRUDConfig` — see [FAQ](faq.md).
 
 ---

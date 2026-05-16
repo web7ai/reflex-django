@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from typing import Any
 
 import reflex as rx
+from django.core.exceptions import ImproperlyConfigured
+from django.db import models
 
 from reflex_django.state.constants import (
     ACTION_CANCEL_EDIT,
@@ -17,10 +20,17 @@ from reflex_django.state.constants import (
 from reflex_django.state.options import ModelStateOptions, resolve_options
 from reflex_django.state.mixins.queryset import QuerySetMixin
 from reflex_django.state.mixins.scoping import UserScopedMixin
+from reflex_django.state.serializer_factory import build_serializer_from_fields
 from reflex_django.state.views.crud import ModelCRUDView
 from reflex_django.state.views.list import ModelListView
 
 _MODEL_STATE_BASES = (ModelCRUDView, ModelListView)
+
+
+def _model_state_type() -> type:
+    from reflex_django.state.generic import ModelState
+
+    return ModelState
 
 
 def _needs_assembly(bases: tuple[type, ...]) -> bool:
@@ -28,6 +38,45 @@ def _needs_assembly(bases: tuple[type, ...]) -> bool:
         if isinstance(b, type) and issubclass(b, _MODEL_STATE_BASES):
             return True
     return False
+
+
+def _uses_model_state_base(bases: tuple[type, ...]) -> bool:
+    model_state = _model_state_type()
+    return any(b is model_state for b in bases if isinstance(b, type))
+
+
+def _extract_model_and_fields(
+    namespace: dict[str, Any],
+    bases: tuple[type, ...],
+) -> tuple[type[models.Model] | None, Sequence[str] | None, tuple[str, ...]]:
+    model = namespace.get("model")
+    fields = namespace.get("fields")
+    read_only: tuple[str, ...] = tuple(namespace.get("read_only_fields", ()) or ())
+    meta = namespace.get("Meta")
+    if meta is not None:
+        if model is None:
+            model = getattr(meta, "model", None)
+        if not fields:
+            fields = getattr(meta, "fields", None)
+        meta_ro = getattr(meta, "read_only_fields", None)
+        if meta_ro:
+            read_only = tuple(meta_ro) + read_only
+    for base in bases:
+        if not isinstance(base, type):
+            continue
+        if model is None:
+            candidate = getattr(base, "model", None)
+            if isinstance(candidate, type) and issubclass(candidate, models.Model):
+                model = candidate
+        if not fields:
+            candidate_fields = getattr(base, "fields", None)
+            if candidate_fields:
+                fields = candidate_fields
+        if not read_only:
+            base_ro = getattr(base, "read_only_fields", None)
+            if base_ro:
+                read_only = tuple(base_ro)
+    return model, fields, read_only
 
 
 def _resolve_serializer(
@@ -45,6 +94,13 @@ def _resolve_serializer(
         ser = getattr(base, "serializer_class", None)
         if ser is not None:
             return ser
+    model, fields, read_only = _extract_model_and_fields(namespace, bases)
+    if model is not None and fields:
+        return build_serializer_from_fields(
+            model,
+            fields,
+            read_only_fields=read_only,
+        )
     return None
 
 
@@ -73,6 +129,15 @@ def assemble_model_state_namespace(
 
     serializer_cls = _resolve_serializer(namespace, bases)
     if serializer_cls is None:
+        if _uses_model_state_base(bases):
+            model, fields, _ = _extract_model_and_fields(namespace, bases)
+            msg = (
+                f"{state_cls_name} must define `model` and `fields`, or "
+                "`serializer_class` / `Meta.serializer`."
+            )
+            if model is not None and not fields:
+                msg = f"{state_cls_name}: `fields` is required when using `model = {model.__name__}`."
+            raise ImproperlyConfigured(msg)
         return None
 
     meta = namespace.get("Meta")
@@ -157,6 +222,8 @@ def assemble_model_state_namespace(
 
     if is_crud:
         _assemble_crud_handlers(namespace, options, qualname=qualname)
+        if options.use_canonical_api:
+            _assemble_orm_api_handlers(namespace, options, qualname=qualname)
 
     if UserScopedMixin in bases:
         _inject_user_scoped(namespace, qualname=qualname)
@@ -447,6 +514,114 @@ def _assemble_crud_handlers(
         cancel_impl.__name__ = options.cancel_event
         cancel_impl.__qualname__ = f"{qualname}.{options.cancel_event}"
         namespace[options.cancel_event] = cancel_impl
+
+
+def _assemble_orm_api_handlers(
+    namespace: dict[str, Any],
+    options: ModelStateOptions,
+    *,
+    qualname: str,
+) -> None:
+    """Register canonical ORM API handlers (``load``, ``save``, ``refresh``, …)."""
+    lr_save = ACTION_SAVE in options.login_required_actions
+    lr_delete = ACTION_DELETE in options.login_required_actions
+    lr_start = ACTION_START_EDIT in options.login_required_actions
+    lr_load = ACTION_LOAD_LIST in options.login_required_actions
+
+    if "load" not in namespace:
+
+        async def load_impl(self: Any, pk: int) -> None:
+            await self.dispatch(ACTION_START_EDIT, pk=int(pk))
+
+        load_impl.__name__ = "load"
+        load_impl.__qualname__ = f"{qualname}.load"
+        namespace["load"] = bind_event(load_impl, login_required=lr_start)
+
+    if "save" not in namespace:
+
+        async def save_impl(self: Any) -> None:
+            await self.dispatch(ACTION_SAVE)
+
+        save_impl.__name__ = "save"
+        save_impl.__qualname__ = f"{qualname}.save"
+        namespace["save"] = bind_event(save_impl, login_required=lr_save)
+
+    if "create" not in namespace:
+
+        async def create_impl(self: Any) -> None:
+            setattr(self, options.editing_var, -1)
+            await self.dispatch(ACTION_SAVE)
+
+        create_impl.__name__ = "create"
+        create_impl.__qualname__ = f"{qualname}.create"
+        namespace["create"] = bind_event(create_impl, login_required=lr_save)
+
+    if "delete" not in namespace:
+
+        async def delete_impl(self: Any, pk: int | None = None) -> None:
+            resolved = pk
+            if resolved is None:
+                resolved = getattr(self, options.editing_var, -1)
+            if resolved is None or int(resolved) < 0:
+                return
+            await self.dispatch(ACTION_DELETE, pk=int(resolved))
+
+        delete_impl.__name__ = "delete"
+        delete_impl.__qualname__ = f"{qualname}.delete"
+        namespace["delete"] = bind_event(delete_impl, login_required=lr_delete)
+
+    if "refresh" not in namespace:
+
+        async def refresh_impl(self: Any) -> None:
+            await self.dispatch(ACTION_LOAD_LIST)
+
+        refresh_impl.__name__ = "refresh"
+        refresh_impl.__qualname__ = f"{qualname}.refresh"
+        namespace["refresh"] = bind_event(refresh_impl, login_required=lr_load)
+
+    if "filter" not in namespace:
+
+        async def filter_impl(self: Any, **kwargs: Any) -> None:
+            self._queryset_filter = dict(kwargs)
+            await self.dispatch(ACTION_LOAD_LIST)
+
+        filter_impl.__name__ = "filter"
+        filter_impl.__qualname__ = f"{qualname}.filter"
+        namespace["filter"] = bind_event(filter_impl, login_required=lr_load)
+
+    if "clear_filter" not in namespace:
+
+        async def clear_filter_impl(self: Any) -> None:
+            self._queryset_filter = None
+            await self.dispatch(ACTION_LOAD_LIST)
+
+        clear_filter_impl.__name__ = "clear_filter"
+        clear_filter_impl.__qualname__ = f"{qualname}.clear_filter"
+        namespace["clear_filter"] = bind_event(clear_filter_impl, login_required=lr_load)
+
+    if "paginate" not in namespace:
+
+        async def paginate_impl(
+            self: Any,
+            *,
+            page: int | None = None,
+            page_size: int | None = None,
+        ) -> None:
+            opts = self.get_options()
+            if opts.paginate_by is None:
+                await self.dispatch(ACTION_LOAD_LIST)
+                return
+            if page_size is not None:
+                clamped = min(max(1, int(page_size)), opts.max_page_size)
+                setattr(self, opts.page_size_var, clamped)
+            if page is not None:
+                setattr(self, opts.page_var, max(1, int(page)))
+                self.on_page_change(int(page))
+            await self.dispatch(ACTION_LOAD_LIST)
+
+        paginate_impl.__name__ = "paginate"
+        paginate_impl.__qualname__ = f"{qualname}.paginate"
+        namespace["paginate"] = bind_event(paginate_impl, login_required=lr_load)
 
 
 def register_state_class(cls: type) -> None:

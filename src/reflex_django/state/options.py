@@ -71,6 +71,7 @@ class ModelStateOptions:
     ordering_var: str
     queryset_select_related: tuple[str, ...]
     queryset_prefetch: tuple[str, ...]
+    use_canonical_api: bool
 
 
 def resolve_options(
@@ -158,6 +159,7 @@ def resolve_options(
     ordering_var = str(
         _get_attr(meta, state_cls, "ordering_var", None) or f"{list_var}_ordering"
     )
+    use_canonical_api = bool(_get_attr(meta, state_cls, "use_canonical_api", True))
 
     state_fields = build_state_fields(
         field_names,
@@ -202,6 +204,7 @@ def resolve_options(
         ordering_var=ordering_var,
         queryset_select_related=queryset_select_related,
         queryset_prefetch=queryset_prefetch,
+        use_canonical_api=use_canonical_api,
     )
 
 

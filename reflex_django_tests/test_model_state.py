@@ -102,13 +102,18 @@ def test_model_state_generates_annotations_and_handlers() -> None:
     assert hasattr(_NotesState, "delete_note")
     assert hasattr(_NotesState, "start_edit")
     assert hasattr(_NotesState, "cancel_edit")
+    assert hasattr(_NotesState, "load")
+    assert hasattr(_NotesState, "save")
+    assert hasattr(_NotesState, "refresh")
     assert hasattr(_NotesState, "reset_state_fields")
     assert hasattr(_NotesState, "_reset_state_fields")
     assert getattr(sys.modules[__name__], "_NotesState") is _NotesState
 
 
-def test_model_state_alias() -> None:
-    assert ModelState is ModelCRUDView
+def test_model_state_is_generic_crud_base() -> None:
+    assert ModelState is not ModelCRUDView
+    assert issubclass(ModelState, AppState)
+    assert issubclass(ModelState, ModelCRUDView)
 
 
 def test_subclass_save_override_replaces_generated() -> None:

@@ -6,9 +6,10 @@ from abc import ABC
 
 from reflex_django.state.mixins.auth import LoginRequiredMixin
 from reflex_django.state.mixins.dispatch import DispatchMixin
+from reflex_django.state.mixins.orm_api import ModelORMMixin
 
 
-class ModelCRUDView(DispatchMixin, LoginRequiredMixin, ABC):
+class ModelCRUDView(ModelORMMixin, DispatchMixin, LoginRequiredMixin, ABC):
     """Declarative CRUD mixin stack (combine with :class:`~reflex_django.states.AppState`).
 
     Example::
@@ -58,6 +59,7 @@ class ModelCRUDView(DispatchMixin, LoginRequiredMixin, ABC):
         ordering_var: str | None = None
         queryset_select_related: tuple[str, ...] | list[str] = ()
         queryset_prefetch: tuple[str, ...] | list[str] = ()
+        use_canonical_api: bool = True
 
 
 __all__ = ["ModelCRUDView"]

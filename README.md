@@ -627,9 +627,79 @@ async def _load_notes(self) -> None:
 
 ---
 
+## Reactive model CRUD (`ModelState`)
+
+**`ModelState[M]`** is the recommended API for any Django model. Declare **`model`** and **`fields`** once; reflex-django builds the serializer, list/form Reflex vars, and stable event handlers at class definition time. **`ModelState` already includes `AppState`** (auth, session, permissions).
+
+**Full guide with examples:** [docs/reactive_model_state.md](docs/reactive_model_state.md)
+
+### Minimal state
+
+```python
+from reflex_django.state import ModelState
+from shop.models import Product
+
+class ProductState(ModelState[Product]):
+    model = Product
+    fields = ["name", "price", "sku", "is_active"]
+    ordering = ("-created_at",)
+```
+
+**Generated (example):** `products`, `products_error`, `editing_id`, `name`, `price`, `sku`, `is_active`, `set_*`, **`load`**, **`save`**, **`create`**, **`delete`**, **`refresh`**, **`filter`**, **`clear_filter`**, plus legacy `save_product`, `start_edit`, `on_load_products`.
+
+### Wire the UI
+
+```python
+import reflex as rx
+
+def products_page() -> rx.Component:
+    return rx.vstack(
+        rx.foreach(ProductState.products, lambda row: rx.hstack(
+            rx.text(row["name"]),
+            rx.button("Edit", on_click=ProductState.load(row["id"])),
+            rx.button("Delete", on_click=ProductState.delete(row["id"])),
+        )),
+        rx.input(value=ProductState.name, on_change=ProductState.set_name),
+        rx.button("Save", on_click=ProductState.save),
+        rx.button("New", on_click=ProductState.create),
+        on_mount=ProductState.refresh,
+    )
+```
+
+### User-scoped rows
+
+```python
+from reflex_django.state.mixins.scoping import UserScopedMixin
+
+class NoteState(ModelState[Note], UserScopedMixin):
+    model = Note
+    fields = ["title", "content"]
+    scope_field = "user_id"
+```
+
+### Custom serializer (optional)
+
+```python
+class ProductState(ModelState[Product]):
+    model = Product
+    serializer_class = ProductSerializer  # wins over auto-built from fields
+    fields = ["name", "price"]
+```
+
+### How it works
+
+```text
+on_mount / refresh  →  dispatch("load_list")  →  get_queryset → serialize → self.products
+load(42)            →  dispatch("start_edit") →  fill name, price, … ; editing_id = 42
+save()              →  dispatch("save")       →  create or update → reset form → refresh list
+filter(is_active=True) →  store _queryset_filter → refresh
+```
+
+Each **`dispatch`** binds **`self.request`** / **`self.django_request`** when the event bridge is enabled (same as `ModelCRUDView`).
+
 ## Declarative model CRUD (`ModelCRUDView`)
 
-**`reflex_django.state.ModelCRUDView`** (alias **`ModelState`**) is a Django class-based-view–style stack for Reflex: declare a serializer, subclass **`AppState` + `ModelCRUDView`**, and get list + create/update/delete events with flat state vars and overridable hooks (**`get_queryset`**, **`validate_state`**, **`perform_create`**, …).
+**`reflex_django.state.ModelCRUDView`** is the explicit-serializer stack: subclass **`AppState` + `ModelCRUDView`** with **`serializer_class`**, and get list + create/update/delete events with flat state vars and overridable hooks (**`get_queryset`**, **`validate_state`**, **`perform_create`**, …).
 
 **Requirements:** Django configured; **event bridge** enabled so **`login_required`** and **`get_user()`** work in handlers.
 

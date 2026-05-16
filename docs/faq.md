@@ -50,7 +50,7 @@ Prefix mismatch between `ReflexDjangoPlugin` (`admin_prefix`, `backend_prefix`) 
 
 ### Difference between `ModelState` and `ModelCRUDView`?
 
-Same class; `ModelState` is an alias. Import `ModelCRUDView` from `reflex_django.state`; lazy root export is `ModelState`. [CRUD with mixins](crud_with_mixins_and_states.md).
+**`ModelState[M]`** extends `AppState` + `ModelCRUDView` and accepts `model` + `fields` (auto serializer + canonical `load`/`save`/…). **`ModelCRUDView`** alone is the mixin for explicit `serializer_class` style. See [Reactive ModelState](reactive_model_state.md) and [CRUD with mixins](crud_with_mixins_and_states.md).
 
 ---
 

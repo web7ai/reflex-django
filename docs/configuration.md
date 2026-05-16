@@ -104,7 +104,7 @@ Package root (`from reflex_django import …`) — see `__init__.__all__`:
 | Symbol | Import |
 |--------|--------|
 | `ModelCRUDView` | `from reflex_django.state import ModelCRUDView` |
-| `ModelState` | Alias of `ModelCRUDView`; lazy on package root |
+| `ModelState` | Generic reactive ORM state (`ModelState[M]`); lazy on package root |
 | `session_auth_mixin` | `from reflex_django.mixins import session_auth_mixin` |
 
 ---

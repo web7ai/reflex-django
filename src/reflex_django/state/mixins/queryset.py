@@ -17,6 +17,9 @@ class QuerySetMixin(BaseModelState):
         return opts.model.objects.all()
 
     def filter_queryset(self, queryset: QuerySet[Any]) -> QuerySet[Any]:
+        extra = getattr(self, "_queryset_filter", None)
+        if extra:
+            queryset = queryset.filter(**extra)
         return queryset
 
     def get_ordering(self) -> tuple[str, ...]:
