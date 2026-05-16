@@ -5,20 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
-    "ModelCRUDConfig",
     "SessionAuthConfig",
-    "_default_row_serializer",
-    "crud_mixin",
     "ReflexDjangoModelSerializer",
     "serialize_model_row",
     "session_auth_mixin",
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
-    "ModelCRUDConfig": ("reflex_django.mixins.crud", "ModelCRUDConfig"),
     "SessionAuthConfig": ("reflex_django.mixins.session_auth", "SessionAuthConfig"),
-    "_default_row_serializer": ("reflex_django.mixins.crud", "_default_row_serializer"),
-    "crud_mixin": ("reflex_django.mixins.crud", "crud_mixin"),
     "ReflexDjangoModelSerializer": (
         "reflex_django.serializers",
         "ReflexDjangoModelSerializer",

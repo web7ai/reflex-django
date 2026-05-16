@@ -91,12 +91,12 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
 | ORM helper | `Model` (abstract Django model base + Reflex serializer) |
 | Model serializers | `ReflexDjangoModelSerializer` (`Meta.fields` / `exclude` / `read_only_fields`, `.data`, `.adata`, queryset `many=True`) |
-| Declarative model CRUD state | `ModelState` (`reflex_django.state`; `Meta.serializer`, flat fields, `save_*`; subclass overrides via `cls.__dict__`) |
+| Declarative model CRUD state | `ModelCRUDView` / `ModelState`, `ModelListView` (`reflex_django.state`; see **ModelCRUDView** section below) |
 | Admin | `register_admin` |
 | Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
 | CLI (programmatic) | `django_cli` |
 
-**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes declarative **`ModelCRUDConfig` / `crud_mixin`** and **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
+**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
 
 ---
 
@@ -164,6 +164,150 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 
 ---
 
+## ModelCRUDView — declarative model CRUD (agent reference)
+
+**Import:** `from reflex_django.state import AppState, ModelCRUDView, ModelState, ModelListView`  
+**Alias:** `ModelState` = `ModelCRUDView`  
+**Requires:** event bridge on; `@login_required` on most generated handlers by default.
+
+### Pattern
+
+```python
+class MyState(AppState, ModelCRUDView):
+    serializer_class = MySerializer   # or Meta.serializer = MySerializer
+
+    class Meta:
+        list_var = "items"            # optional; default pluralizes model name
+        state_fields = ("title",)   # optional; default = writable serializer fields
+        read_only_fields = ("user",)  # extra read-only (not on state vars)
+```
+
+Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass already defines the same name in its class body.
+
+### Generated members (example: model `Note`, `list_var="notes"`)
+
+| Member | Role |
+|--------|------|
+| `notes` | `list[dict]` serialized rows |
+| `notes_error` | `str` validation / error message |
+| `editing_id` | `int`, `-1` = create mode, `>=0` = editing pk |
+| `title`, `content`, … | flat editable state vars (not `form_*` prefixes) |
+| `set_title`, … | `@rx.event` setters |
+| `_load_notes` | internal reload |
+| `on_load_notes` | page `on_load` target |
+| `save_note` | create or update from flat vars + `editing_id` |
+| `start_edit(item_id)` | populate vars, set `editing_id` |
+| `delete_note(item_id)` | delete + refresh list |
+| `cancel_edit` | `reset_state_fields()` |
+| `reset_state_fields` | clear editable vars, `editing_id=-1`, bump `form_reset_key` |
+| `form_reset_key` | int; bind to `rx.form(..., key=...)` so DOM clears after save |
+| `save_{model}_form` | optional when `Meta.use_form_submit = True`; reads `form_data` then `dispatch(save)` |
+
+### Event flow
+
+```text
+on_load_notes  → dispatch("load_list")  → get_queryset → filter_queryset → serialize → notes
+save_note      → dispatch("save")       → validate_state → create|update → on_save_success → reset_state_fields? → refresh list
+start_edit(id) → dispatch("start_edit") → get_object → populate state vars
+```
+
+### Per-event `self.request` / `self.django_request`
+
+Bound at the start of each **`dispatch`** (and list-only **`_load_*`**):
+
+| Attr | Value |
+|------|--------|
+| `self.django_request` | `current_request()` — synthetic `HttpRequest` |
+| `self.request` | `DjangoStateRequest` wrapper |
+| `self.request.user` | Live `request.user` (use for ORM filters) |
+| `self.request.SOME_KEY` | Merged context-processor output |
+| `self.request.context` | Full processor dict |
+
+```python
+def get_queryset(self):
+    return Note.objects.filter(user=self.request.user)
+```
+
+`Meta.load_context_processors = False` skips `collect_reflex_context` but still binds the HTTP request.
+
+### Scoping (no default owner field)
+
+Framework does **not** auto-filter by user. Prefer **`self.request.user`** in hooks (available after bind):
+
+```python
+def get_queryset(self):
+    return Note.objects.filter(user=self.request.user)
+
+def get_object_lookup(self, pk: int) -> dict:
+    return {"pk": pk, "user": self.request.user}
+
+def get_create_kwargs(self, state_data: dict) -> dict:
+    return {**state_data, "user": self.request.user}
+```
+
+**Shortcut:** `class NotesState(AppState, ModelCRUDView, UserScopedMixin):` with `scope_field = "user_id"`. Assembly injects the three hooks (Reflex MRO cannot prioritize plain mixins).
+
+### Page wiring example
+
+```python
+def notes_page() -> rx.Component:
+    return rx.vstack(
+        rx.cond(NotesState.notes_error != "", rx.callout(NotesState.notes_error)),
+        rx.input(value=NotesState.title, on_change=NotesState.set_title),
+        rx.button("Save", on_click=NotesState.save_note),
+        rx.foreach(
+            NotesState.notes,
+            lambda n: rx.button("Edit", on_click=NotesState.start_edit(n["id"])),
+        ),
+    )
+
+# app.add_page(notes_page, route="/notes", on_load=NotesState.on_load_notes)
+```
+
+### Validation hooks (state-centric names — not `form_*`)
+
+| Hook | When |
+|------|------|
+| `get_state_data()` | Read vars → dict |
+| `validate_state(ctx, data)` | Cross-field errors → `dict[str, str]` |
+| `clean_<field>(value)` | Per-field; return error string |
+| `clean_state(data)` | Normalize before save |
+| `on_state_invalid(ctx, errors)` | Set `error_var` / `field_errors` |
+| `on_state_valid(ctx, state_data)` | Before create/update |
+| `perform_create(ctx, state_data)` | ORM create |
+| `perform_update(ctx, instance, state_data)` | ORM update |
+
+Set `run_model_validation = True` to call Django `full_clean()`. Set `structured_errors = True` for `{list_var}_field_errors`.
+
+### Read-only lists
+
+```python
+class LogState(AppState, ModelListView):
+    serializer_class = LogSerializer
+```
+
+### Permissions
+
+```python
+from reflex_django.state.mixins import IsAuthenticated, PermissionMixin
+
+permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or class attr
+```
+
+### Do not use
+
+- **`crud_mixin` / `ModelCRUDConfig`** — removed; use `ModelCRUDView`.
+- **`owner_field`** on serializer — removed; use `get_queryset` / `UserScopedMixin`.
+- **`Meta.form_fields`** — use **`Meta.state_fields`**.
+- **`_clear_form`** — use **`reset_state_fields`** (alias **`_reset_state_fields`**).
+- After save, bind **`rx.form(..., key=State.form_reset_key)`** if inputs use **`name=`** only; or use **`value=` + `on_change=`** on each field.
+
+### Submodule map
+
+`reflex_django/state/` — `views/crud.py` (`ModelCRUDView`), `assembly.py`, `options.py`, `mixins/` (`dispatch`, `state_fields`, `queryset`, `scoping`, …), `backends/django.py`.
+
+---
+
 ## CLI
 
 - **Via Reflex:** `uv run reflex django <subcommand>` — e.g. `migrate`, `makemigrations`, `createsuperuser`, `shell`, `collectstatic`, `help`. Loads `rxconfig` first so `ReflexDjangoPlugin` sets `DJANGO_SETTINGS_MODULE` and prefixes, then `configure_django()`.
@@ -189,6 +333,8 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 | `install_event_bridge=False` but still expecting `current_user()` from sessions | No synthetic request / session binding from the bridge. |
 | Heavy imports before Django setup / `rxconfig` | Breaks lazy-loading assumptions; circular import issues. |
 | Relying on Django HTTP middleware for Reflex-only actions | Events are not full HTTP requests; use the event bridge and explicit checks. |
+| Expecting `crud_mixin` or `owner_field` on ModelState | Removed; use `ModelCRUDView` + `get_queryset` / `UserScopedMixin`. |
+| Using `form_title` / `Meta.form_fields` | Use flat `title` vars and `Meta.state_fields`. |
 
 ---
 
@@ -197,4 +343,4 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 - `README.md` — full architecture, examples for states, bridges, context processors.
 - `CHANGELOG.md` — version-to-version changes.
 - `RELEASING.md` — maintainer release process.
-- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `auth/`, `auth_state.py`, `i18n_state.py`, `reflex_context.py`, `model.py`, `cli.py`.
+- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `auth/`, `auth_state.py`, `i18n_state.py`, `reflex_context.py`, `model.py`, `state/` (ModelCRUDView), `cli.py`.

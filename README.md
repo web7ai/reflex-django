@@ -8,7 +8,7 @@
 4. [Commands](#commands)
 5. [States, context, and bridges](#states-context-and-bridges)
 6. [Declarative session login (mixins)](#declarative-session-login-mixins)
-7. [Declarative model CRUD (mixins)](#declarative-model-crud-mixins)
+7. [Declarative model CRUD (`ModelCRUDView`)](#declarative-model-crud-modelcrudview)
 
 ---
 
@@ -555,146 +555,306 @@ async def _load_notes(self) -> None:
 
 - **One assignment** — the serializer iterates the queryset internally (no manual `async for` + `append`).
 - **`NoteSerializer(note).data`** for a single instance.
-- **`row_serializer_class=NoteSerializer`** on **`ModelCRUDConfig`** wires the same serializer into **`crud_mixin`** refresh.
 - Low-level **`serialize_model_row`** remains available in **`reflex_django.serialization`**.
 
 ---
 
-## Declarative model CRUD (`ModelState`)
+## Declarative model CRUD (`ModelCRUDView`)
 
-**`reflex_django.state.ModelState`** builds flat form fields and CRUD events from a
-**`ReflexDjangoModelSerializer`** (Django-style **`Meta.serializer`**). It does **not**
-use **`crud_mixin`**’s **`form_*` / `edit_*`** naming or separate **`add_item` /
-`save_edit`** events—new apps should prefer **`ModelState`** for a single
-**`save_note`**-style create/update flow.
+**`reflex_django.state.ModelCRUDView`** (alias **`ModelState`**) is a Django class-based-view–style stack for Reflex: declare a serializer, subclass **`AppState` + `ModelCRUDView`**, and get list + create/update/delete events with flat state vars and overridable hooks (**`get_queryset`**, **`validate_state`**, **`perform_create`**, …).
 
-**Before (hand-written):** list var, error var, flat **`title`** / **`content`**,
-**`set_*`**, **`_load_notes`**, **`save_note`**, **`start_edit`**, **`delete_note`**, each
-with **`@login_required`** and ORM calls.
-
-**After:**
-
-```python
-from reflex_django.state import AppState, ModelState
-from reflex_django.serializers import ReflexDjangoModelSerializer
-
-
-class NoteSerializer(ReflexDjangoModelSerializer):
-    class Meta:
-        model = Note
-        fields = ("id", "title", "content", "description", "created_at")
-        read_only_fields = ("id", "created_at")
-
-
-class NotesState(AppState, ModelState):
-    class Meta:
-        serializer = NoteSerializer
-        read_only_fields = ("user",)  # in list rows, not form/setters
-
-    # Optional: override any generated name in the class body:
-    # async def save_note(self): ...
-```
-
-Generated when not overridden in the subclass body:
-
-- **`notes`**, **`notes_error`**, **`editing_id`**, flat **`title`**, **`content`**, …
-- **`set_title`**, … (**`@rx.event`**)
-- **`_load_notes`**, **`on_load_notes`** (login required)
-- **`save_note`** (create or update from flat fields + **`editing_id`**)
-- **`start_edit`**, **`delete_note`**, **`cancel_edit`**, **`_clear_form`**
-
-**`read_only_fields`** on **`ModelState.Meta`** and/or the serializer merge with
-defaults (**`id`**, auto timestamp fields, **`owner_field`** default **`"user"`**).
-List rows still include those fields via the serializer; they are omitted from form
-vars unless you set **`Meta.form_fields`** explicitly.
-
-Import path: **`from reflex_django.state import ModelState, AppState`** (or lazy
-**`from reflex_django import ModelState`**).
-
----
-
-## Declarative model CRUD (mixins)
-
-**`reflex_django.mixins.crud`** (also re-exported from **`reflex_django.mixins`**) builds a Reflex **`rx.State`** subclass from a small declarative config so you can list, create, edit, and delete rows of a Django model without hand-writing the same event wiring each time.
-
-**Requirements.** Django must be configured (plugin + `INSTALLED_APPS` including your app and auth/session as usual). The **event bridge** must be enabled so `login_required` and `require_login_user()` see the session user. CRUD handlers use the default **`login_required`** wrapper (anonymous users are redirected; login URL from `REFLEX_DJANGO_LOGIN_URL` unless you customize handlers yourself—see **`reflex_django.auth.decorators`**).
+**Requirements:** Django configured; **event bridge** enabled so **`login_required`** and **`get_user()`** work in handlers.
 
 ### How it works
 
-1. You define a frozen **`ModelCRUDConfig`** pointing at your **`models.Model`**, the state attribute names you want on the client (`list_var`, `error_var`), which model fields appear in create/edit forms (`form_fields`), and optional **`owner_field`** (for example `"user"`) so queries and writes are scoped to **`require_login_user()`**.
-2. You call **`crud_mixin(cfg, base=…)`**. It returns a new class named **`{Model.__name__}CRUDState`** with:
-   - A **list** of row dicts under `list_var` (default serializer includes all concrete fields—`created_at`, `updated_at`, etc.—even when Django 6+ `model_to_dict` omits non-editable auto fields; values are JSON-friendly strings for datetimes/dates).
-   - String fields **`form_<name>`** and **`edit_<name>`** for each entry in `form_fields`, plus **`editing_id`** (`-1` when not editing).
-   - **`refresh_method`**: async reload from the ORM (respects `owner_field`, `ordering`).
-   - **`on_load_event`**: async `on_load` target to call your refresh (login required).
-   - **`add_event`** / **`delete_event`**: create and delete (login required).
-   - **`start_edit`**, **`save_edit`**, **`cancel_edit`**: edit lifecycle (`cancel_edit` clears local edit state only and is not login-gated).
-   - **`set_form_<field>`** / **`set_edit_<field>`**: `@rx.event` setters for inputs.
-3. You **subclass** that generated class when you need a stable app-specific name or extra state:
+1. At class definition time, **`AppStateMeta`** resolves your serializer and **`Meta`** options, declares Reflex vars, and wires default **`@rx.event`** handlers (unless you override them in the class body).
+2. **`on_load_notes`** (name derived from **`list_var`**) calls **`_load_notes`**, which runs **`dispatch("load_list")`** → queryset hooks → **`ReflexDjangoModelSerializer`** → assigns **`self.notes`**.
+3. **`save_note`** runs **`dispatch("save")`** → **`validate_state`** → create or update (when **`editing_id >= 0`**) → **`on_save_success`** → **`reset_state_fields`** (when **`Meta.reset_after_save`**, default **`True`**) → reload list.
+4. **`start_edit(id)`** loads the row into flat field vars and sets **`editing_id`**. **`delete_note(id)`** deletes and refreshes the list.
 
-   ```python
-   from reflex_django.states import AppState
+```text
+Page on_load          →  on_load_notes  →  dispatch(load_list)  →  self.notes = [...]
+Input on_change       →  set_title      →  self.title = "..."
+Save button           →  save_note      →  dispatch(save)       →  ORM create/update
+Edit row              →  start_edit(id) →  dispatch(start_edit) →  fill fields + editing_id
+```
 
-   class MyAppState(AppState):
-       pass
+### Per-event `self.request` and `self.django_request`
 
-   class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=MyAppState)):
-       """Domain CRUD; shared routing lives on ``MyAppState``."""
-   ```
+On every **`dispatch`** (and list-only loads), the event bridge’s synthetic Django request is bound on the state instance:
 
-**`base=`** should be your app’s shared :class:`~reflex_django.states.AppState` subclass (domain/routing). Use :class:`~reflex_django.DjangoUserState` for auth snapshots, not as the CRUD base.
+| Attribute | Description |
+|-----------|-------------|
+| **`self.django_request`** | Raw **`HttpRequest`** from **`current_request()`** |
+| **`self.request`** | **`DjangoStateRequest`** wrapper: **`.user`**, processor keys as attributes, **`.context`** dict |
 
-**`state_module=`** defaults to the **calling module’s** `__name__` so the dynamic class is registered on **`sys.modules`** for Reflex pickling. Pass it explicitly if you build state from a helper function in another module.
+```python
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
 
-### Example
+    def get_queryset(self):
+        return Note.objects.filter(user=self.request.user)
+
+    def get_object_lookup(self, pk: int) -> dict:
+        return {"pk": pk, "user": self.request.user}
+
+    def get_create_kwargs(self, state_data: dict) -> dict:
+        return {**state_data, "user": self.request.user}
+
+    def filter_queryset(self, qs):
+        # Context processor keys (settings.REFLEX_DJANGO_CONTEXT_PROCESSORS):
+        if self.request.LANGUAGE_CODE == "ar":
+            ...
+        return qs
+```
+
+- **`self.request.user`** is the live auth user on the synthetic request (use this for ORM scoping).
+- Processor **`user`** snapshots live in **`self.request.context["user"]`** (JSON-safe), not **`self.request.user`**.
+- Set **`load_context_processors = False`** on **`Meta`** to skip processor collection (still binds **`self.request`** / **`self.django_request`**).
+
+### Minimal example (public model, no scoping)
+
+```python
+# models.py
+from django.db import models
+
+from reflex_django.model import Model
+
+class Tag(Model):
+    name = models.CharField(max_length=64)
+
+# state.py
+from reflex_django.state import AppState, ModelCRUDView
+from reflex_django.serializers import ReflexDjangoModelSerializer
+
+class TagSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ("id", "name")
+
+class TagsState(AppState, ModelCRUDView):
+    serializer_class = TagSerializer
+    ordering = ("name",)
+    # Generated: tags, tags_error, editing_id, name, set_name,
+    # _load_tags, on_load_tags, save_tag, start_edit, delete_tag, cancel_edit
+```
+
+### Full example (notes + page wiring)
+
+**Model and serializer**
 
 ```python
 from django.conf import settings
 from django.db import models
 
-import reflex as rx
-from reflex_django.mixins.crud import ModelCRUDConfig, crud_mixin
+from reflex_django.model import Model
+from reflex_django.serializers import ReflexDjangoModelSerializer
 
 
-class Note(models.Model):
+class Note(Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
     content = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-_NOTE_CRUD_CONFIG = ModelCRUDConfig(
-    model=Note,
-    list_var="notes",
-    form_fields=("title", "content"),
-    error_var="notes_error",
-    owner_field="user",
-    ordering=("-created_at",),
-    required_for_create=("title",),
-    refresh_method="_refresh_note_rows",
-    on_load_event="on_load_notes",
-    add_event="add_note",
-    delete_event="delete_note",
-)
+class NoteSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Note
+        fields = ("id", "title", "content", "created_at")
+        read_only_fields = ("id", "created_at")
+```
+
+**State (user-scoped via hooks)**
+
+```python
+import reflex as rx
+from reflex_django.state import AppState, ModelCRUDView
 
 
-from reflex_django.states import AppState
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
+
+    class Meta:
+        list_var = "notes"
+        save_event = "save_note"
+        delete_event = "delete_note"
+        read_only_fields = ("user",)  # omit from editable vars, still in list rows
+
+    def get_queryset(self):
+        return Note.objects.filter(user=self.request.user)
+
+    def get_object_lookup(self, pk: int) -> dict:
+        return {"pk": pk, "user": self.request.user}
+
+    def get_create_kwargs(self, state_data: dict) -> dict:
+        return {**state_data, "user": self.request.user}
+```
+
+**State (same scoping with `UserScopedMixin` recipe)**
+
+Reflex’s MRO cannot prioritize a plain mixin, so **`UserScopedMixin`** is applied at assembly time when it appears in **`bases`**:
+
+```python
+from reflex_django.state import AppState, ModelCRUDView
+from reflex_django.state.mixins import UserScopedMixin
 
 
-class MyAppState(AppState):
-    """Shared app base (routing, domain fields)."""
-    pass
+class NotesState(AppState, ModelCRUDView, UserScopedMixin):
+    scope_field = "user_id"  # or "user" for a FK field name
 
+    class Meta:
+        serializer = NoteSerializer
+        list_var = "notes"
+```
 
-class NotesState(crud_mixin(_NOTE_CRUD_CONFIG, base=MyAppState)):
-    """Notes CRUD; list lives in ``notes``, errors in ``notes_error``."""
+**Page component (bind generated members)**
 
-# Typical page wiring (names match config):
+```python
+def notes_page() -> rx.Component:
+  return rx.vstack(
+    rx.cond(
+      NotesState.notes_error != "",
+      rx.callout(NotesState.notes_error, color_scheme="red"),
+    ),
+    rx.form(
+      rx.input(
+        value=NotesState.title,
+        on_change=NotesState.set_title,
+        placeholder="Title",
+      ),
+      rx.text_area(
+        value=NotesState.content,
+        on_change=NotesState.set_content,
+      ),
+      key=NotesState.form_reset_key,
+    ),
+    rx.button("Save", on_click=NotesState.save_note),
+    rx.button("Cancel", on_click=NotesState.cancel_edit),
+    rx.foreach(
+      NotesState.notes,
+      lambda note: rx.hstack(
+        rx.text(note["title"]),
+        rx.button("Edit", on_click=NotesState.start_edit(note["id"])),
+        rx.button("Delete", on_click=NotesState.delete_note(note["id"])),
+      ),
+    ),
+    width="100%",
+  )
+
+# rxconfig / app module:
 # app.add_page(notes_page, route="/notes", on_load=NotesState.on_load_notes)
 ```
 
-In your page component, bind inputs to **`NotesState.form_title`**, **`NotesState.set_form_title`**, and so on; call **`NotesState.add_note`**, **`NotesState.start_edit`**, **`NotesState.save_edit`**, **`NotesState.cancel_edit`**, **`NotesState.delete_note`** as `on_click` / table actions; render **`NotesState.notes`** (list of dicts, each with **`id`**) with **`rx.foreach`**.
+### What gets generated
 
-Configurable **`ModelCRUDConfig`** fields include **`row_serializer_class`** (declarative **`ReflexDjangoModelSerializer`** subclass), **`row_serializer`** (callable override), **`row_datetime_format`** (default `"%Y-%m-%d %H:%M"`), **`row_date_format`** (default `"%Y-%m-%d"`), **`exclude_from_row`**, **`owner_field=None`** (no user scoping), and the default event names **`refresh_method`**, **`on_load_event`**, **`add_event`**, **`delete_event`** when you do not want the stock `on_load_items` / `add_item` names.
+For a model **`Note`**, defaults (override any name in the class body):
 
-**Timestamps in list rows.** Django 6+ [`model_to_dict`](https://docs.djangoproject.com/en/stable/ref/forms/models/#django.forms.models.model_to_dict) skips non-editable fields such as `auto_now_add` / `auto_now`. The built-in row serializer merges those from the model instance and formats them for Reflex state, so table cells like `note["created_at"]` work without a custom **`row_serializer`**.
+| Kind | Names |
+|------|--------|
+| List / errors | **`notes`**, **`notes_error`**, **`editing_id`** |
+| Editable vars | Flat fields from serializer writable columns, e.g. **`title`**, **`content`** |
+| Setters | **`set_title`**, **`set_content`**, … (**`@rx.event`**) |
+| Load | **`_load_notes`**, **`on_load_notes`** (login required by default) |
+| CRUD | **`save_note`**, **`save_note_form`** (optional), **`start_edit`**, **`delete_note`**, **`cancel_edit`**, **`reset_state_fields`** |
+| Form remount | **`form_reset_key`** (increments on reset; bind to **`rx.form(..., key=...)`**) |
+
+**`save_note`** creates when **`editing_id == -1`**, updates when **`editing_id >= 0`**. After a successful save, editable vars are cleared and **`form_reset_key`** bumps so **`rx.form`** remounts (fixes inputs that only use **`name=`** without **`value=`**).
+
+Set **`Meta.reset_after_save = False`** to keep field values after save, or override **`on_save_success`** / call **`reset_state_fields()`** yourself.
+
+### Configuration (`Meta` and class attributes)
+
+Class attributes win over inner **`Meta`**. Common options:
+
+| Option | Default | Purpose |
+|--------|---------|---------|
+| **`serializer` / `serializer_class`** | *(required)* | **`ReflexDjangoModelSerializer`** subclass |
+| **`list_var`** | plural of model name | List of row dicts on state |
+| **`error_var`** | `{list_var}_error` | Single error message string |
+| **`state_fields`** | writable serializer fields | Explicit editable var names |
+| **`read_only_fields`** | merged with serializer | Excluded from editable vars |
+| **`required_fields`** | first writable field | Required on save |
+| **`ordering`** | `("-created_at",)` | **`order_by`** for list |
+| **`save_event`** | `save_{model_name}` | Unified create/update handler |
+| **`structured_errors`** | `False` | Also set **`{list_var}_field_errors`** dict |
+| **`run_model_validation`** | `False` | Run Django **`full_clean()`** before save |
+| **`load_context_processors`** | `True` | Merge **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** onto **`self.request`** |
+| **`reset_after_save`** | `True` | Clear editable vars after successful save |
+| **`form_reset_var`** | `"form_reset_key"` | State var bumped on reset; bind to **`rx.form(..., key=...)`**; set **`None`** to disable |
+| **`use_form_submit`** | `False` | Also generate **`save_{model}_form(form_data)`** for **`rx.form`** submit |
+| **`login_required_actions`** | load, save, delete, start_edit | Which actions require login |
+
+### Validation and hooks
+
+Override any stage of the pipeline:
+
+```python
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
+    run_model_validation = True
+
+    def clean_title(self, value: str) -> str:
+        """Return an error string, or a cleaned value."""
+        if len(value) > 200:
+            return "Title is too long."
+        return value
+
+    def validate_state(self, ctx, data: dict) -> dict[str, str]:
+        errors = super().validate_state(ctx, data)
+        if data.get("title") == data.get("content"):
+            errors["content"] = "Content must differ from title."
+        return errors
+
+    async def perform_create(self, ctx, state_data: dict):
+        state_data = {**state_data, "slug": slugify(state_data["title"])}
+        return await super().perform_create(ctx, state_data)
+```
+
+Outcome hooks: **`on_state_invalid(ctx, errors)`**, **`on_state_valid(ctx, state_data)`**.
+
+### Read-only list (`ModelListView`)
+
+```python
+from reflex_django.state import AppState, ModelListView
+
+class AuditLogState(AppState, ModelListView):
+    serializer_class = AuditLogSerializer
+
+    class Meta:
+        list_var = "entries"
+        on_load_event = "on_load_entries"
+```
+
+Generates load handlers only (no **`save_*`** / **`start_edit`**).
+
+### Advanced: composed mixins
+
+Import from **`reflex_django.state`** or **`reflex_django.state.mixins`**:
+
+```python
+from reflex_django.state import AppState
+from reflex_django.state.mixins import (
+    ListMixin,
+    StateFieldsMixin,
+    CreateMixin,
+    PermissionMixin,
+    IsAuthenticated,
+)
+
+class AdminTagState(AppState, ListMixin, StateFieldsMixin, CreateMixin, PermissionMixin):
+    serializer_class = TagSerializer
+    permission_classes = (IsAuthenticated,)
+```
+
+Use **`ModelCRUDView`** when you want the full batteries-included stack.
+
+### Imports
+
+```python
+from reflex_django.state import AppState, ModelCRUDView, ModelState, ModelListView
+# or lazy:
+from reflex_django import ModelState
+```
+
+

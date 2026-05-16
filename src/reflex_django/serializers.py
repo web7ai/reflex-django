@@ -153,14 +153,11 @@ class ReflexDjangoModelSerializer:
     def get_read_only_field_names(
         cls,
         *,
-        owner_field: str | None = "user",
         extra_read_only: frozenset[str] | None = None,
     ) -> frozenset[str]:
         """Resolved read-only names (defaults, serializer Meta, and extras)."""
         names = set(cls._default_read_only_from_model())
         names |= set(cls._meta_cls("read_only_fields", ()))
-        if owner_field:
-            names.add(owner_field)
         if extra_read_only:
             names |= set(extra_read_only)
         return frozenset(names)
@@ -169,17 +166,16 @@ class ReflexDjangoModelSerializer:
     def writable_field_names(
         cls,
         *,
-        owner_field: str | None = "user",
         read_only_fields: frozenset[str] | None = None,
-        form_fields: tuple[str, ...] | None = None,
+        state_fields: tuple[str, ...] | None = None,
     ) -> tuple[str, ...]:
-        """Field names for flat ModelState form vars and setters."""
-        if form_fields is not None:
-            return tuple(form_fields)
+        """Field names for flat ModelState editable vars and setters."""
+        if state_fields is not None:
+            return tuple(state_fields)
         readonly = (
             read_only_fields
             if read_only_fields is not None
-            else cls.get_read_only_field_names(owner_field=owner_field)
+            else cls.get_read_only_field_names()
         )
         candidates = cls._candidate_field_names()
         writable = tuple(

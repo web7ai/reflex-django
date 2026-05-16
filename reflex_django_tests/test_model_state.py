@@ -1,4 +1,4 @@
-"""Tests for :mod:`reflex_django.state` (:class:`ModelState`)."""
+"""Tests for :mod:`reflex_django.state` (:class:`ModelCRUDView`)."""
 
 from __future__ import annotations
 
@@ -11,11 +11,13 @@ import reflex as rx
 from django.db import models
 
 from reflex_django.conf import configure_django
-from reflex_django.serializers import ReflexDjangoModelSerializer
-from reflex_django.state import AppState, ModelState
-from reflex_django.state._model_crud import resolve_model_state_config
 
 configure_django()
+
+from reflex_django.serializers import ReflexDjangoModelSerializer
+from reflex_django.state import AppState, ModelCRUDView, ModelState, resolve_options
+from reflex_django.state.fields import StrStateField
+from reflex_django.state.mixins.scoping import UserScopedMixin
 
 
 class MsNote(models.Model):
@@ -36,28 +38,28 @@ class MsNoteSerializer(ReflexDjangoModelSerializer):
         read_only_fields = ("id", "created_at")
 
 
-class _NotesState(AppState, ModelState):
+class _NotesState(AppState, ModelCRUDView, UserScopedMixin):
+    scope_field = "user_id"
+
     class Meta:
         serializer = MsNoteSerializer
         list_var = "notes"
-        owner_field = "user_id"
         save_event = "save_note"
         delete_event = "delete_note"
         read_only_fields = ("user",)
 
 
-class _CustomSaveState(AppState, ModelState):
-    class Meta:
-        serializer = MsNoteSerializer
+class _CustomSaveState(AppState, ModelCRUDView):
+    serializer_class = MsNoteSerializer
 
     async def save_note(self) -> str:
         return "custom"
 
 
-class _ExplicitFormState(AppState, ModelState):
+class _ExplicitStateFieldsState(AppState, ModelCRUDView):
     class Meta:
         serializer = MsNoteSerializer
-        form_fields = ("title", "created_at")
+        state_fields = ("title", "created_at")
 
 
 def test_model_state_generates_annotations_and_handlers() -> None:
@@ -65,6 +67,7 @@ def test_model_state_generates_annotations_and_handlers() -> None:
     assert ann["notes"] == list[dict[str, Any]]
     assert ann["notes_error"] is str
     assert ann["editing_id"] is int
+    assert ann["form_reset_key"] is int
     assert ann["title"] is str
     assert ann["content"] is str
     assert ann["description"] is str
@@ -76,7 +79,13 @@ def test_model_state_generates_annotations_and_handlers() -> None:
     assert hasattr(_NotesState, "delete_note")
     assert hasattr(_NotesState, "start_edit")
     assert hasattr(_NotesState, "cancel_edit")
+    assert hasattr(_NotesState, "reset_state_fields")
+    assert hasattr(_NotesState, "_reset_state_fields")
     assert getattr(sys.modules[__name__], "_NotesState") is _NotesState
+
+
+def test_model_state_alias() -> None:
+    assert ModelState is ModelCRUDView
 
 
 def test_subclass_save_override_replaces_generated() -> None:
@@ -88,26 +97,32 @@ def test_subclass_save_override_replaces_generated() -> None:
     asyncio.run(run())
 
 
-def test_resolve_config_writable_fields() -> None:
-    cfg = resolve_model_state_config(MsNoteSerializer, _NotesState.Meta)
-    assert cfg.form_fields == ("content", "description", "title")
+def test_resolve_options_writable_fields() -> None:
+    cfg = resolve_options(MsNoteSerializer, _NotesState.Meta, _NotesState)
+    names = tuple(sf.name for sf in cfg.state_fields)
+    assert names == ("content", "description", "title")
     assert "id" in cfg.read_only_fields
     assert "created_at" in cfg.read_only_fields
-    assert "user" in cfg.read_only_fields
 
 
-def test_explicit_form_fields_override_read_only() -> None:
-    cfg = resolve_model_state_config(MsNoteSerializer, _ExplicitFormState.Meta)
-    assert cfg.form_fields == ("title", "created_at")
-    assert "created_at" in _ExplicitFormState.__annotations__
+def test_explicit_state_fields_override_read_only() -> None:
+    cfg = resolve_options(MsNoteSerializer, _ExplicitStateFieldsState.Meta, _ExplicitStateFieldsState)
+    names = tuple(sf.name for sf in cfg.state_fields)
+    assert names == ("title", "created_at")
+    assert "created_at" in _ExplicitStateFieldsState.__annotations__
 
 
 def test_serializer_writable_field_names() -> None:
-    names = MsNoteSerializer.writable_field_names(owner_field="user")
+    names = MsNoteSerializer.writable_field_names()
     assert "title" in names
     assert "id" not in names
     assert "created_at" not in names
-    assert "user" not in names
+
+
+def test_str_state_field_coercion() -> None:
+    f = StrStateField(name="title")
+    assert f.to_python("  x  ") == "x"
+    assert f.to_var(None) == ""
 
 
 def test_load_notes_assigns_serialized_rows() -> None:
@@ -121,8 +136,12 @@ def test_load_notes_assigns_serialized_rows() -> None:
     async def run() -> None:
         with (
             mock.patch(
-                "reflex_django.state._model_crud.require_login_user",
+                "reflex_django.auth.shortcuts.require_login_user",
                 return_value=user,
+            ),
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
             ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(
@@ -141,7 +160,7 @@ def test_load_notes_assigns_serialized_rows() -> None:
                 cu.return_value = u
                 await state._load_notes()
             mgr.all.assert_called_once()
-            qs.filter.assert_called_once_with(user_id=user)
+            qs.filter.assert_called_once_with(user_id=7)
             qs.order_by.assert_called_once_with("-created_at")
             adata.assert_awaited_once()
             assert state.notes == rows
@@ -155,12 +174,16 @@ def test_save_note_create_calls_orm() -> None:
     async def run() -> None:
         with (
             mock.patch(
-                "reflex_django.state._model_crud.require_login_user",
+                "reflex_django.auth.shortcuts.require_login_user",
                 return_value=user,
             ),
             mock.patch(
                 "reflex_django.auth.decorators.current_user",
             ) as cu,
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(_NotesState, "_load_notes", new=mock.AsyncMock()),
         ):
@@ -177,13 +200,138 @@ def test_save_note_create_calls_orm() -> None:
                 title="t",
                 content="c",
                 description="d",
-                user_id=user,
+                user_id=3,
             )
+            assert state.title == ""
+            assert state.content == ""
+            assert state.description == ""
+            assert state.editing_id == -1
+            assert state.form_reset_key == 1
+
+    asyncio.run(run())
+
+
+def test_save_note_keeps_fields_when_reset_after_save_disabled() -> None:
+    class _NoResetState(AppState, ModelCRUDView, UserScopedMixin):
+        scope_field = "user_id"
+
+        class Meta:
+            serializer = MsNoteSerializer
+            list_var = "notes"
+            save_event = "save_note"
+            reset_after_save = False
+
+    user = mock.Mock(pk=2)
+
+    async def run() -> None:
+        with (
+            mock.patch(
+                "reflex_django.auth.shortcuts.require_login_user",
+                return_value=user,
+            ),
+            mock.patch("reflex_django.auth.decorators.current_user") as cu,
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(MsNote, "objects") as mgr,
+            mock.patch.object(_NoResetState, "_load_notes", new=mock.AsyncMock()),
+        ):
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            mgr.acreate = mock.AsyncMock()
+            state = _NoResetState()
+            state.title = "keep"
+            await state.save_note()
+            assert state.title == "keep"
+            assert state.form_reset_key == 0
+
+    asyncio.run(run())
+
+
+def test_save_note_form_applies_form_data() -> None:
+    class _FormSubmitState(AppState, ModelCRUDView, UserScopedMixin):
+        scope_field = "user_id"
+
+        class Meta:
+            serializer = MsNoteSerializer
+            list_var = "notes"
+            save_event = "save_note"
+            use_form_submit = True
+
+    user = mock.Mock(pk=4)
+
+    async def run() -> None:
+        with (
+            mock.patch(
+                "reflex_django.auth.shortcuts.require_login_user",
+                return_value=user,
+            ),
+            mock.patch("reflex_django.auth.decorators.current_user") as cu,
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(MsNote, "objects") as mgr,
+            mock.patch.object(_FormSubmitState, "_load_notes", new=mock.AsyncMock()),
+        ):
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            mgr.acreate = mock.AsyncMock()
+            state = _FormSubmitState()
+            assert hasattr(_FormSubmitState, "save_note_form")
+            await state.save_note_form(
+                {
+                    "title": "from-form",
+                    "content": "body",
+                    "description": "desc",
+                }
+            )
+            mgr.acreate.assert_awaited_once_with(
+                title="from-form",
+                content="body",
+                description="desc",
+                user_id=4,
+            )
+            assert state.title == ""
 
     asyncio.run(run())
 
 
 def test_app_state_model_state_mro() -> None:
     assert issubclass(_NotesState, AppState)
-    assert issubclass(_NotesState, ModelState)  # mixin, not a second rx.State parent
+    assert issubclass(_NotesState, ModelCRUDView)
     assert issubclass(_NotesState, rx.State)
+
+
+def test_bind_request_context_exposes_user_and_processors() -> None:
+    user = mock.Mock(pk=9)
+    user.is_authenticated = True
+    http = mock.Mock()
+    http.user = user
+    merged = {"SITE_NAME": "Acme", "LANGUAGE_CODE": "en"}
+
+    async def run() -> None:
+        with (
+            mock.patch(
+                "reflex_django.context.current_request",
+                return_value=http,
+            ),
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value=merged),
+            ),
+        ):
+            state = _NotesState()
+            await state.bind_request_context()
+            assert state.django_request is http
+            assert state.request.user is user
+            assert state.request.SITE_NAME == "Acme"
+            assert state.request.context["LANGUAGE_CODE"] == "en"
+            state.teardown("load_list")
+            assert object.__getattribute__(state, "_rd_request") is None
+            assert object.__getattribute__(state, "_rd_django_request") is None
+
+    asyncio.run(run())

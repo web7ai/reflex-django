@@ -118,20 +118,24 @@ def test_class_list_shortcut() -> None:
 
 
 def test_get_read_only_includes_auto_and_serializer_meta() -> None:
-    readonly = _NoteFieldsSerializer.get_read_only_field_names(owner_field="user")
+    readonly = _NoteFieldsSerializer.get_read_only_field_names(
+        extra_read_only=frozenset({"user"}),
+    )
     assert "id" in readonly
     assert "created_at" in readonly
     assert "user" in readonly
 
 
 def test_writable_field_names_excludes_read_only() -> None:
-    names = _NoteFieldsSerializer.writable_field_names(owner_field="user")
+    names = _NoteFieldsSerializer.writable_field_names(
+        read_only_fields=frozenset({"id", "created_at", "user"}),
+    )
     assert names == ("content", "title")
     assert "created_at" not in names
 
 
-def test_writable_field_names_explicit_form_fields() -> None:
+def test_writable_field_names_explicit_state_fields() -> None:
     names = _NoteFieldsSerializer.writable_field_names(
-        form_fields=("title", "created_at"),
+        state_fields=("title", "created_at"),
     )
     assert names == ("title", "created_at")
