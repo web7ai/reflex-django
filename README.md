@@ -1,5 +1,13 @@
 # reflex-django
 
+## Documentation
+
+Full documentation lives in **[`docs/`](docs/index.md)** (installation, architecture, CRUD, auth, deployment, FAQ, and more).
+
+For LLM/agent-oriented summaries, see [`llm.txt`](llm.txt).
+
+---
+
 ## Table of contents
 
 1. [About reflex-django](#about-reflex-django)

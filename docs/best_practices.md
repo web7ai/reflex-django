@@ -1,0 +1,91 @@
+# Best practices
+
+Production-oriented patterns for reflex-django applications.
+
+---
+
+## Architecture
+
+- **Models → serializers → states → pages** — keep domain logic in Django apps; Reflex layer orchestrates UI.  
+- **One settings module** for `reflex run`, `reflex django migrate`, and deploy env.  
+- **Align prefixes** between `ReflexDjangoPlugin` and `ROOT_URLCONF`.
+
+---
+
+## Security
+
+1. Authorize in **event handlers** with `current_user()`, `require_login_user()`, `auser_has_perm`.  
+2. Use `@login_required` on events that return private data.  
+3. Never trust `DjangoUserState` or client state for permissions.  
+4. Scope querysets with `self.request.user` or `UserScopedMixin`.  
+5. Keep `SECRET_KEY` stable; disable `SIGNUP_ENABLED` if registrations are admin-only.
+
+Detail: [Authentication](authentication.md).
+
+---
+
+## Imports and startup
+
+- Prefer `from reflex_django import …` **after** `rxconfig` loads in normal Reflex startup.  
+- `ModelCRUDView`: `from reflex_django.state import ModelCRUDView`.  
+- `session_auth_mixin`: `from reflex_django.mixins import session_auth_mixin`.  
+- Avoid circular imports: do not import models at module level from paths that load before `configure_django()`.
+
+PEP 562 lazy exports defer ORM-heavy submodules until first access.
+
+---
+
+## Async handlers
+
+Use `async def` for handlers calling Django async ORM (`acreate`, `.adata()`, `aget_user` path in bridge).
+
+---
+
+## JSON state
+
+Only JSON-serializable values on `rx.State` fields synced to the client. Processors must not return secrets, ORM objects, or `HttpRequest`.
+
+---
+
+## Performance
+
+- `queryset_select_related` / `queryset_prefetch` on `ModelCRUDView.Meta`.  
+- Narrow serializer `fields`.  
+- Implement pagination in application state (not provided by framework).  
+- `load_context_processors=False` when unused.
+
+---
+
+## Extensibility
+
+- Prefer hooks (`filter_queryset`, `validate_state`) over copying generated handlers.  
+- Override generated event names in class body when necessary.  
+- Use composed mixins for partial CRUD instead of forking the framework.
+
+---
+
+## Production readiness checklist
+
+- [ ] Custom `settings.py`, not `REFLEX_DJANGO_AUTO_SETTINGS`  
+- [ ] `DEBUG=False`, explicit `ALLOWED_HOSTS`  
+- [ ] Migrations applied  
+- [ ] `collectstatic` run  
+- [ ] Event bridge enabled if using session auth  
+- [ ] Server-side checks on all mutating events  
+
+---
+
+## Common mistakes
+
+See [FAQ](faq.md) for a consolidated list.
+
+---
+
+## See also
+
+- [Architecture](architecture.md)  
+- [Deployment](deployment.md)
+
+---
+
+**Navigation:** [← Testing](testing.md) | [Next: FAQ →](faq.md)
