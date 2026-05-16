@@ -203,6 +203,16 @@ Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass alrea
 | `form_reset_key` | int; bind to `rx.form(..., key=...)` so DOM clears after save |
 | `save_{model}_form` | optional when `Meta.use_form_submit = True`; reads `form_data` then `dispatch(save)` |
 
+**List features (opt-in via Meta):**
+
+| Meta | Injects |
+|------|---------|
+| `paginate_by = 20` | `page`, `page_size`, `{list}_total_count`, `{list}_page_count`, `next_page`, `prev_page`, `go_to_page`, `set_page_size` |
+| `search_fields = ("title",)` | `{list}_search`, `set_{list}_search`, `clear_{list}_search` |
+| `allow_dynamic_ordering = True` | `{list}_ordering`, `set_{list}_ordering` |
+
+Default `paginate_by = None` → full list (no page vars). Hooks: `apply_search`, `paginate_queryset`, `get_ordering`, `on_page_change`.
+
 ### Event flow
 
 ```text

@@ -58,7 +58,7 @@ Same class; `ModelState` is an alias. Import `ModelCRUDView` from `reflex_django
 
 ### Is pagination built in?
 
-**No.** Add `page` / `page_size` state vars and slice querysets manually, or filter only via `filter_queryset`. [CRUD without mixins](crud_without_mixins.md).
+**Yes, opt-in.** Set `Meta.paginate_by = 20` on `ModelCRUDView` / `ModelListView` to get `page`, `page_size`, `{list_var}_total_count`, `next_page`, `prev_page`, and related handlers. Default is `paginate_by = None` (load all rows). See [README](../README.md#list-pagination-search-and-sorting). Manual pagination is still documented in [CRUD without mixins](crud_without_mixins.md).
 
 ### Where did `crud_mixin()` go?
 

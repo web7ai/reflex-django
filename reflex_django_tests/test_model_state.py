@@ -62,6 +62,24 @@ class _ExplicitStateFieldsState(AppState, ModelCRUDView):
         state_fields = ("title", "created_at")
 
 
+class _PaginatedNotesState(AppState, ModelCRUDView, UserScopedMixin):
+    scope_field = "user_id"
+
+    class Meta:
+        serializer = MsNoteSerializer
+        list_var = "notes"
+        paginate_by = 20
+
+
+class _SearchNotesState(AppState, ModelCRUDView, UserScopedMixin):
+    scope_field = "user_id"
+
+    class Meta:
+        serializer = MsNoteSerializer
+        list_var = "notes"
+        search_fields = ("title", "content")
+
+
 def test_model_state_generates_annotations_and_handlers() -> None:
     ann = _NotesState.__annotations__
     assert ann["notes"] == list[dict[str, Any]]
@@ -72,6 +90,11 @@ def test_model_state_generates_annotations_and_handlers() -> None:
     assert ann["content"] is str
     assert ann["description"] is str
     assert "created_at" not in ann
+    assert "page" not in ann
+    assert "page_size" not in ann
+    assert "notes_total_count" not in ann
+    assert "notes_search" not in ann
+    assert not hasattr(_NotesState, "next_page")
     assert hasattr(_NotesState, "set_title")
     assert hasattr(_NotesState, "_load_notes")
     assert hasattr(_NotesState, "on_load_notes")
@@ -132,6 +155,8 @@ def test_load_notes_assigns_serialized_rows() -> None:
     qs = mock.MagicMock()
     qs.filter.return_value = qs
     qs.order_by.return_value = qs
+    qs.acount = mock.AsyncMock(return_value=len(rows))
+    qs.__getitem__ = mock.Mock(return_value=qs)
 
     async def run() -> None:
         with (
@@ -304,6 +329,118 @@ def test_app_state_model_state_mro() -> None:
     assert issubclass(_NotesState, AppState)
     assert issubclass(_NotesState, ModelCRUDView)
     assert issubclass(_NotesState, rx.State)
+
+
+def _mock_note_qs(*, total: int = 1) -> mock.MagicMock:
+    qs = mock.MagicMock()
+    qs.filter.return_value = qs
+    qs.order_by.return_value = qs
+    qs.acount = mock.AsyncMock(return_value=total)
+    qs.__getitem__ = mock.Mock(return_value=qs)
+    return qs
+
+
+def test_paginated_state_generates_page_vars_and_events() -> None:
+    cfg = resolve_options(MsNoteSerializer, _PaginatedNotesState.Meta, _PaginatedNotesState)
+    assert cfg.paginate_by == 20
+    assert cfg.total_count_var == "notes_total_count"
+    assert hasattr(_PaginatedNotesState, "next_page")
+    assert hasattr(_PaginatedNotesState, "prev_page")
+    assert hasattr(_PaginatedNotesState, "go_to_page")
+    assert hasattr(_PaginatedNotesState, "set_page_size")
+    assert hasattr(_PaginatedNotesState, "set_notes_search") is False
+
+
+def test_paginated_load_sets_metadata_and_slice() -> None:
+    rows = [{"id": i, "title": f"t{i}", "content": "", "description": ""} for i in range(3)]
+    user = mock.Mock(pk=1)
+    qs = _mock_note_qs(total=45)
+
+    async def run() -> None:
+        with (
+            mock.patch("reflex_django.auth.shortcuts.require_login_user", return_value=user),
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(MsNote, "objects") as mgr,
+            mock.patch.object(
+                MsNoteSerializer,
+                "adata",
+                new=mock.AsyncMock(return_value=rows),
+            ),
+        ):
+            mgr.all.return_value = qs
+            state = _PaginatedNotesState()
+            with mock.patch("reflex_django.auth.decorators.current_user") as cu:
+                u = mock.Mock()
+                u.is_authenticated = True
+                cu.return_value = u
+                await state._load_notes()
+            qs.__getitem__.assert_called_once_with(slice(0, 20))
+            assert state.notes == rows
+            assert state.notes_total_count == 45
+            assert state.notes_page_count == 3
+            assert state.page == 1
+
+    asyncio.run(run())
+
+
+def test_next_page_increments_and_reloads() -> None:
+    user = mock.Mock(pk=1)
+    qs = _mock_note_qs(total=50)
+
+    async def run() -> None:
+        with (
+            mock.patch("reflex_django.auth.shortcuts.require_login_user", return_value=user),
+            mock.patch(
+                "reflex_django.reflex_context.collect_reflex_context",
+                new=mock.AsyncMock(return_value={}),
+            ),
+            mock.patch.object(MsNote, "objects") as mgr,
+            mock.patch.object(MsNoteSerializer, "adata", new=mock.AsyncMock(return_value=[])),
+            mock.patch.object(_PaginatedNotesState, "_load_notes", new=mock.AsyncMock()) as load,
+        ):
+            mgr.all.return_value = qs
+            state = _PaginatedNotesState()
+            state.page = 1
+            state.notes_page_count = 3
+            with mock.patch("reflex_django.auth.decorators.current_user") as cu:
+                u = mock.Mock()
+                u.is_authenticated = True
+                cu.return_value = u
+                await state.next_page()
+            assert state.page == 2
+            load.assert_awaited_once()
+
+    asyncio.run(run())
+
+
+def test_search_state_generates_search_handlers() -> None:
+    cfg = resolve_options(MsNoteSerializer, _SearchNotesState.Meta, _SearchNotesState)
+    assert cfg.search_fields == ("title", "content")
+    assert hasattr(_SearchNotesState, "set_notes_search")
+    assert hasattr(_SearchNotesState, "clear_notes_search")
+
+
+def test_apply_search_filters_queryset() -> None:
+    user = mock.Mock(pk=1)
+    qs = _mock_note_qs()
+    state = _SearchNotesState()
+    state.notes_search = "hello"
+    filtered = mock.MagicMock()
+    qs.filter.return_value = filtered
+
+    with mock.patch.object(MsNote, "objects") as mgr:
+        mgr.all.return_value = qs
+        with mock.patch(
+            "reflex_django.auth.shortcuts.require_login_user",
+            return_value=user,
+        ):
+            result = state.apply_search(qs)
+
+    qs.filter.assert_called_once()
+    assert result is filtered
 
 
 def test_bind_request_context_exposes_user_and_processors() -> None:

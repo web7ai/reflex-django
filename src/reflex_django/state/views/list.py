@@ -24,6 +24,16 @@ class ModelListView(ListMixin, LoginRequiredMixin, PermissionMixin, ABC):
         permission_classes: tuple[type, ...] = ()
         backend_class: type | None = None
         load_context_processors: bool = True
+        paginate_by: int | None = None
+        max_page_size: int = 100
+        page_var: str = "page"
+        page_size_var: str = "page_size"
+        total_count_var: str | None = None
+        page_count_var: str | None = None
+        search_fields: tuple[str, ...] | list[str] = ()
+        search_var: str | None = None
+        allow_dynamic_ordering: bool = False
+        ordering_var: str | None = None
         queryset_select_related: tuple[str, ...] | list[str] = ()
         queryset_prefetch: tuple[str, ...] | list[str] = ()
 

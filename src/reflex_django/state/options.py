@@ -59,6 +59,16 @@ class ModelStateOptions:
     reset_after_save: bool
     form_reset_var: str | None
     use_form_submit: bool
+    paginate_by: int | None
+    max_page_size: int
+    page_var: str
+    page_size_var: str
+    total_count_var: str
+    page_count_var: str
+    search_fields: tuple[str, ...]
+    search_var: str
+    allow_dynamic_ordering: bool
+    ordering_var: str
     queryset_select_related: tuple[str, ...]
     queryset_prefetch: tuple[str, ...]
 
@@ -129,6 +139,25 @@ def resolve_options(
         _get_attr(meta, state_cls, "queryset_select_related", ()) or ()
     )
     queryset_prefetch = tuple(_get_attr(meta, state_cls, "queryset_prefetch", ()) or ())
+    paginate_raw = _get_attr(meta, state_cls, "paginate_by", None)
+    paginate_by = int(paginate_raw) if paginate_raw is not None else None
+    max_page_size = int(_get_attr(meta, state_cls, "max_page_size", 100))
+    page_var = str(_get_attr(meta, state_cls, "page_var", "page"))
+    page_size_var = str(_get_attr(meta, state_cls, "page_size_var", "page_size"))
+    total_count_var = str(
+        _get_attr(meta, state_cls, "total_count_var", None) or f"{list_var}_total_count"
+    )
+    page_count_var = str(
+        _get_attr(meta, state_cls, "page_count_var", None) or f"{list_var}_page_count"
+    )
+    search_fields = tuple(_get_attr(meta, state_cls, "search_fields", ()) or ())
+    search_var = str(_get_attr(meta, state_cls, "search_var", None) or f"{list_var}_search")
+    allow_dynamic_ordering = bool(
+        _get_attr(meta, state_cls, "allow_dynamic_ordering", False)
+    )
+    ordering_var = str(
+        _get_attr(meta, state_cls, "ordering_var", None) or f"{list_var}_ordering"
+    )
 
     state_fields = build_state_fields(
         field_names,
@@ -161,6 +190,16 @@ def resolve_options(
         reset_after_save=reset_after_save,
         form_reset_var=form_reset_var,
         use_form_submit=use_form_submit,
+        paginate_by=paginate_by,
+        max_page_size=max_page_size,
+        page_var=page_var,
+        page_size_var=page_size_var,
+        total_count_var=total_count_var,
+        page_count_var=page_count_var,
+        search_fields=search_fields,
+        search_var=search_var,
+        allow_dynamic_ordering=allow_dynamic_ordering,
+        ordering_var=ordering_var,
         queryset_select_related=queryset_select_related,
         queryset_prefetch=queryset_prefetch,
     )

@@ -8,10 +8,11 @@ from django.db.models import QuerySet
 
 from reflex_django.serializers import ReflexDjangoModelSerializer
 from reflex_django.state.base import ActionContext, BaseModelState
+from reflex_django.state.mixins.pagination import PaginationMixin
 from reflex_django.state.mixins.queryset import QuerySetMixin
 
 
-class SerializeMixin(QuerySetMixin):
+class SerializeMixin(PaginationMixin, QuerySetMixin):
     """Serialize querysets via :class:`~reflex_django.serializers.ReflexDjangoModelSerializer`."""
 
     def get_serializer(
@@ -29,7 +30,10 @@ class SerializeMixin(QuerySetMixin):
 
     async def serialize_queryset(self, ctx: ActionContext) -> list[dict[str, Any]]:
         qs = self.get_scoped_queryset()
-        serializer = self.get_serializer(qs, many=True)
+        total = await self.get_queryset_count(qs)
+        self.update_pagination_meta(total)
+        page_qs = self.paginate_queryset(qs)
+        serializer = self.get_serializer(page_qs, many=True)
         return await serializer.adata()  # type: ignore[return-value]
 
 

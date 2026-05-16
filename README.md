@@ -791,7 +791,49 @@ Class attributes win over inner **`Meta`**. Common options:
 | **`reset_after_save`** | `True` | Clear editable vars after successful save |
 | **`form_reset_var`** | `"form_reset_key"` | State var bumped on reset; bind to **`rx.form(..., key=...)`**; set **`None`** to disable |
 | **`use_form_submit`** | `False` | Also generate **`save_{model}_form(form_data)`** for **`rx.form`** submit |
+| **`paginate_by`** | `None` | Set to e.g. **`20`** to enable pagination (injects page vars + events) |
+| **`max_page_size`** | `100` | Upper bound for **`set_page_size`** |
+| **`search_fields`** | `()` | Tuple of ORM field names; enables **`{list_var}_search`** + search events |
+| **`allow_dynamic_ordering`** | `False` | When **`True`**, **`get_ordering()`** reads **`{list_var}_ordering`** |
 | **`login_required_actions`** | load, save, delete, start_edit | Which actions require login |
+
+### List pagination, search, and sorting
+
+**Pagination is opt-in** (default **`paginate_by = None`** loads all rows, same as before). Enable on **`Meta`**:
+
+```python
+class NotesState(AppState, ModelCRUDView):
+    class Meta:
+        serializer = NoteSerializer
+        paginate_by = 20
+        search_fields = ("title", "content")
+```
+
+When enabled, assembly adds:
+
+| Feature | State / events |
+|---------|----------------|
+| Pagination | **`page`**, **`page_size`**, **`notes_total_count`**, **`notes_page_count`**, **`next_page`**, **`prev_page`**, **`go_to_page`**, **`set_page_size`** |
+| Search | **`notes_search`**, **`set_notes_search`**, **`clear_notes_search`** (resets to page 1) |
+| Dynamic sort | **`notes_ordering`**, **`set_notes_ordering`** (requires **`allow_dynamic_ordering = True`**) |
+
+**Page UI example:**
+
+```python
+rx.hstack(
+    rx.input(
+        value=NotesState.notes_search,
+        on_change=NotesState.set_notes_search,
+        placeholder="Search…",
+    ),
+    rx.text(f"Page {NotesState.page} / {NotesState.notes_page_count}"),
+    rx.text(f"({NotesState.notes_total_count} total)"),
+    rx.button("Prev", on_click=NotesState.prev_page),
+    rx.button("Next", on_click=NotesState.next_page),
+)
+```
+
+Override hooks: **`apply_search(qs)`**, **`get_ordering()`**, **`paginate_queryset(qs)`**, **`on_page_change(page)`**.
 
 ### Validation and hooks
 

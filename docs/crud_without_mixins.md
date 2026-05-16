@@ -77,7 +77,7 @@ class ProductsState(AppState):
     is_active: bool = True
     editing_id: int = -1
 
-    # Pagination / search / filters (not built into framework)
+    # Pagination / search / filters (or use ModelCRUDView Meta.paginate_by / search_fields)
     page: int = 1
     page_size: int = 10
     search_query: str = ""
@@ -131,7 +131,7 @@ class ProductsState(AppState):
             await self.load_products()
 ```
 
-> **Note:** reflex-django mixins provide `filter_queryset()` but **no** built-in `page` / `search_query` vars—you own pagination and search in manual or extended states.
+> **Note:** `ModelCRUDView` can provide pagination and search via `Meta.paginate_by` and `Meta.search_fields`. For hand-written states, use `filter_queryset()` and add your own `page` / `search_query` vars as below.
 
 ---
 

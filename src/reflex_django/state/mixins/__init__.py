@@ -6,6 +6,7 @@ from reflex_django.state.mixins.delete import DeleteMixin
 from reflex_django.state.mixins.dispatch import DispatchMixin
 from reflex_django.state.mixins.list import ListMixin
 from reflex_django.state.mixins.object import ObjectMixin
+from reflex_django.state.mixins.pagination import PaginationMixin
 from reflex_django.state.mixins.permission import (
     AllowAny,
     IsAuthenticated,
@@ -26,6 +27,7 @@ __all__ = [
     "ListMixin",
     "LoginRequiredMixin",
     "ObjectMixin",
+    "PaginationMixin",
     "PermissionMixin",
     "QuerySetMixin",
     "SerializeMixin",
