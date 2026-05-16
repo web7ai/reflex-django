@@ -30,6 +30,7 @@ This documentation is written for **Python and Django developers** who want full
 8. [Django middleware to Reflex](django_middleware_to_reflex.md) — `DjangoEventBridge`  
 9. [Django context to Reflex](django_context_to_reflex.md) — processors and `DjangoContextState`  
 10. [State management](state_management.md) — `AppState`, `DjangoUserState`, wire format  
+    - [Authentication](authentication.md) — `self.user` / `self.session`, login, permissions, decorators  
 11. [Serializers](serializers.md) — `ReflexDjangoModelSerializer`  
 12. [Database integration](database_integration.md) — migrations, `Model`, ORM backend  
 13. [CRUD without mixins](crud_without_mixins.md) — manual Product example  
@@ -52,7 +53,7 @@ This documentation is written for **Python and Django developers** who want full
 |------|------|
 | Wire Django settings and prefixes | [Configuration](configuration.md) |
 | Run migrations | [CLI](cli.md) |
-| Use Django session auth in Reflex events | [Authentication](authentication.md) |
+| Use Django session auth in Reflex events (`AppState`, `login`, `has_perm`) | [Authentication](authentication.md) |
 | Understand state: plain Reflex vs helpers | [State management](state_management.md) |
 | Build a list/create/edit UI for a model | [CRUD with mixins](crud_with_mixins_and_states.md) or [CRUD without mixins](crud_without_mixins.md) |
 | Serialize models for Reflex state | [Serializers](serializers.md) |

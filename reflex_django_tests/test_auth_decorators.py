@@ -71,3 +71,74 @@ def test_login_required_event_allows_authenticated() -> None:
             assert await S().go() == "ok"
 
     asyncio.run(run())
+
+
+def test_permission_required_event_denies_without_perm() -> None:
+    from reflex_django.auth.decorators import permission_required
+
+    async def run() -> None:
+        with mock.patch("reflex_django.auth.decorators.current_user") as cu:
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            with mock.patch(
+                "reflex_django.auth.decorators.auser_has_perm",
+                new=mock.AsyncMock(return_value=False),
+            ):
+
+                class S:
+                    @permission_required("app.view_thing", redirect="/denied")
+                    async def go(self):
+                        return "ok"
+
+                out = await S().go()
+                from reflex_base.event import EventSpec
+
+                assert isinstance(out, EventSpec)
+
+    asyncio.run(run())
+
+
+def test_permission_required_event_allows_with_perm() -> None:
+    from reflex_django.auth.decorators import permission_required
+
+    async def run() -> None:
+        with mock.patch("reflex_django.auth.decorators.current_user") as cu:
+            u = mock.Mock()
+            u.is_authenticated = True
+            cu.return_value = u
+            with mock.patch(
+                "reflex_django.auth.decorators.auser_has_perm",
+                new=mock.AsyncMock(return_value=True),
+            ):
+
+                class S:
+                    @permission_required("app.view_thing")
+                    async def go(self):
+                        return "ok"
+
+                assert await S().go() == "ok"
+
+    asyncio.run(run())
+
+
+def test_permission_required_event_redirects_anonymous() -> None:
+    from reflex_django.auth.decorators import permission_required
+
+    async def run() -> None:
+        with mock.patch("reflex_django.auth.decorators.current_user") as cu:
+            u = mock.Mock()
+            u.is_authenticated = False
+            cu.return_value = u
+
+            class S:
+                @permission_required("app.view_thing", login_url="/login")
+                async def go(self):
+                    return "ok"
+
+            out = await S().go()
+            from reflex_base.event import EventSpec
+
+            assert isinstance(out, EventSpec)
+
+    asyncio.run(run())

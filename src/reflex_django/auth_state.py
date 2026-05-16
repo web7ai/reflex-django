@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import reflex as rx
 from reflex_django.context import current_user
+from reflex_django.state.auth_bridge import AuthBridgeMixin
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
@@ -79,7 +80,7 @@ async def _group_names_for_user(user: Any) -> list[str]:
     return [name async for name in user.groups.values_list("name", flat=True)]
 
 
-class DjangoUserState(rx.State):
+class DjangoUserState(AuthBridgeMixin, rx.State):
     """Snapshot of ``request.user`` for Reflex UI (navbar, conditional layout).
 
     Call :meth:`sync_from_django` from ``on_load`` or after login/logout.

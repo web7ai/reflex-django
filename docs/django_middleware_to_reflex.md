@@ -25,7 +25,8 @@ On each event, `DjangoEventBridge.preprocess` (`src/reflex_django/middleware.py`
 3. `_attach_session(request)` via `SESSION_ENGINE`  
 4. `_activate_i18n_for_request(request)` when `USE_I18N` and `REFLEX_DJANGO_I18N_EVENT_BRIDGE`  
 5. `await _attach_user(request)` using **`aget_user`** (async)  
-6. `begin_event_request(request)`
+6. `begin_event_request(request)`  
+7. When `REFLEX_DJANGO_AUTH_AUTO_SYNC` is true, `await state.refresh_django_user_fields()` for **`AppState`** subclasses
 
 Returns `None` (never short-circuits the event).
 
@@ -44,6 +45,8 @@ For CSRF on Django HTTP forms under a prefix, use normal Django views. For Refle
 
 ## Using the bound request
 
+**Option A — context helpers** (any `rx.State`):
+
 ```python
 from reflex_django import current_user, current_request, current_session
 
@@ -54,7 +57,19 @@ async def my_handler(self):
     session = current_session()
 ```
 
-Enable with `install_event_bridge=True` (default on `ReflexDjangoPlugin`).
+**Option B — `AppState`** (recommended for app features + UI snapshot):
+
+```python
+from reflex_django.state import AppState
+
+class MyState(AppState):
+    @rx.event
+    async def my_handler(self):
+        user = self.user           # same as current_user() for this event
+        self.session["key"] = "x"  # persisted session store
+```
+
+Enable with `install_event_bridge=True` (default on `ReflexDjangoPlugin`). See [Authentication](authentication.md).
 
 ---
 

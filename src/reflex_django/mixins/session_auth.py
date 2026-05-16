@@ -10,15 +10,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import reflex as rx
-from django.contrib.auth import alogin, alogout
 
-from reflex_django.auth.login_fields import (
-    DEFAULT_LOGIN_FIELDS,
-    aauthenticate_login_fields,
-)
+from reflex_django.auth.login_fields import DEFAULT_LOGIN_FIELDS
 from reflex_django.auth_state import DjangoUserState
 from reflex_django.context import current_request
-from reflex_django.session_js import session_cookie_clear_js, session_cookie_set_js
+from reflex_django.state.auth_bridge import session_async_save
+
+# Backward compatibility for modules that imported the private name.
+_session_async_save = session_async_save
 
 
 def _defer_nav_js(path: str) -> str:
@@ -42,6 +41,8 @@ def _sync_session_cookie_then_nav(
     Navigation is deferred briefly so the cookie write is applied before the
     next load.
     """
+    from reflex_django.session_js import session_cookie_clear_js, session_cookie_set_js
+
     go = _defer_nav_js(path)
     if clear_cookie:
         js = f"{session_cookie_clear_js()} {go}"
@@ -49,18 +50,6 @@ def _sync_session_cookie_then_nav(
         sk = getattr(request.session, "session_key", None) or ""
         js = f"{session_cookie_set_js(sk)} {go}" if sk else go
     return rx.call_script(js)
-
-
-async def _session_async_save(request: Any) -> None:
-    """Persist the session row after mutating it in an async Reflex handler."""
-    session = getattr(request, "session", None)
-    if session is None:
-        return
-    asave = getattr(session, "asave", None)
-    if callable(asave):
-        await asave()
-        return
-    session.save()
 
 
 @dataclass(frozen=True)
@@ -147,11 +136,8 @@ def populate_session_auth_state(
     ns[f"set_{u_var}"] = make_user_setter()
     ns[f"set_{p_var}"] = make_pass_setter()
 
-    async def _finish_login(self: Any, request: Any, user: Any) -> Any:
-        await alogin(request, user)
-        await _session_async_save(request)
+    async def _finish_login(self: Any, request: Any) -> Any:
         setattr(self, p_var, "")
-        await self.refresh_django_user_fields()
         return _sync_session_cookie_then_nav(request, post_in)
 
     async def submit_impl(self: Any) -> Any:
@@ -160,17 +146,16 @@ def populate_session_auth_state(
         if request is None:
             setattr(self, e_var, msg_no_session)
             return
-        user = await aauthenticate_login_fields(
-            request,
-            getattr(self, u_var).strip(),
+        ok = await self.login(
+            getattr(self, u_var),
             getattr(self, p_var),
-            login_fields,
+            login_fields=login_fields,
         )
-        if user is None:
+        if not ok:
             setattr(self, e_var, msg_bad)
             setattr(self, p_var, "")
             return
-        return await _finish_login(self, request, user)
+        return await _finish_login(self, request)
 
     ns[cfg.submit_event] = rx.event(submit_impl)
 
@@ -186,27 +171,21 @@ def populate_session_auth_state(
             if request is None:
                 setattr(self, e_var, msg_no_session)
                 return
-            user = await aauthenticate_login_fields(
-                request,
-                username,
-                password,
-                login_fields,
-            )
-            if user is None:
+            ok = await self.login(username, password, login_fields=login_fields)
+            if not ok:
                 setattr(self, e_var, msg_bad)
                 setattr(self, p_var, "")
                 return
-            return await _finish_login(self, request, user)
+            return await _finish_login(self, request)
 
         ns[cfg.submit_form_event] = rx.event(submit_form_impl)
 
     async def logout_impl(self: Any) -> Any:
         request = current_request()
-        if request is not None:
-            await alogout(request)
-        await self.refresh_django_user_fields()
+        await self.logout()
         if request is None:
             return rx.call_script(_defer_nav_js(post_out))
+        await session_async_save(request)
         return _sync_session_cookie_then_nav(request, post_out, clear_cookie=True)
 
     ns[cfg.logout_event] = rx.event(logout_impl)
@@ -220,9 +199,9 @@ def session_auth_mixin(
 ) -> type[rx.State]:
     """Build a concrete :class:`reflex.state.State` subclass with login/logout events.
 
-    Uses Django async session auth (:func:`~django.contrib.auth.aauthenticate`,
-    :func:`~django.contrib.auth.alogin`, :func:`~django.contrib.auth.alogout`)
-    and :func:`reflex_django.context.current_request` inside Reflex event handlers.
+    Uses :meth:`~reflex_django.auth_state.DjangoUserState.login` and
+    :meth:`~reflex_django.auth_state.DjangoUserState.logout` (Django async session
+    auth) and :func:`reflex_django.context.current_request` inside Reflex handlers.
 
     After successful login or logout, the mixin mirrors the session cookie into
     ``document.cookie`` (see :mod:`reflex_django.session_js`) and performs a
@@ -251,17 +230,6 @@ def session_auth_mixin(
             state_mod = str(frame.f_back.f_globals.get("__name__", __name__))
     finally:
         del frame
-
-    u_var = cfg.username_var
-    p_var = cfg.password_var
-    e_var = cfg.error_var
-    post_in = cfg.post_login_redirect
-    post_out = cfg.post_logout_redirect
-    when_auth = cfg.redirect_when_authenticated
-    msg_no_session = cfg.session_unavailable_message
-    msg_bad = cfg.invalid_credentials_message
-    form_u = cfg.form_username_key
-    form_p = cfg.form_password_key
 
     cls_name = cfg.state_class_name
 

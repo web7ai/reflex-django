@@ -19,6 +19,7 @@ __all__ = [
     "autoload",
     "get_auth_settings",
     "login_required",
+    "permission_required",
     "pages",
     "register_login_page",
     "register_password_reset_confirm_page",
@@ -46,6 +47,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     "autoload": ("reflex_django.auth.registry", "autoload"),
     "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
     "login_required": ("reflex_django.auth.decorators", "login_required"),
+    "permission_required": ("reflex_django.auth.decorators", "permission_required"),
     "pages": ("reflex_django.auth.pages", None),
     "register_login_page": ("reflex_django.auth.registry", "register_login_page"),
     "register_password_reset_confirm_page": (

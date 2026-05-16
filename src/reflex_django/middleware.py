@@ -202,6 +202,9 @@ class DjangoEventBridge(Middleware):
             return None
 
         begin_event_request(request)
+        from reflex_django.state.auth_bridge import maybe_sync_app_state_auth
+
+        await maybe_sync_app_state_auth(state)
         return None
 
     async def postprocess(

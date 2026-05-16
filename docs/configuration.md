@@ -70,6 +70,7 @@ From `reflex_django.default_settings` (override in your `settings.py`):
 | `REFLEX_DJANGO_LOGIN_URL` | Redirect for `@login_required` on events when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |
 | `REFLEX_DJANGO_AUTH` | Dict for canned auth pages (see [Authentication](authentication.md)). |
 | `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | Include group names in user snapshots when `True`. |
+| `REFLEX_DJANGO_AUTH_AUTO_SYNC` | When `True` (default), refresh `AppState` auth snapshot vars on every Reflex event. |
 | `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge runs locale negotiation on synthetic request. |
 
 **Env-backed defaults** (when using bundled settings):

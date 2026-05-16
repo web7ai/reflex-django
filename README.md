@@ -369,7 +369,7 @@ In your Reflex app module:
 
 ```python
 import reflex as rx
-from reflex_django.auth import add_auth_pages, login_required, routes
+from reflex_django.auth import add_auth_pages, login_required, permission_required, routes
 from reflex_django.auth.state import DjangoAuthState
 
 app = rx.App()
@@ -438,9 +438,69 @@ register_login_page(app, page=LoginPage, route="/login")
 
 Legacy **`REFLEX_DJANGO_LOGIN_URL`** is still read when `LOGIN_URL` is omitted from the dict.
 
+### `AppState` auth (unified bridge)
+
+Subclass **`AppState`** for dashboards, feature state, and **`ModelCRUDView`** CRUD. It extends **`DjangoUserState`** and adds:
+
+| In event handlers | In UI (`rx.cond`, components) |
+|-------------------|-------------------------------|
+| `self.user` — live Django user | `self.is_authenticated` |
+| `self.session["key"]` — read/write session | `self.username`, `self.email`, … |
+| `await self.login(user, pass)` | Auto-updated when `REFLEX_DJANGO_AUTH_AUTO_SYNC=True` |
+| `await self.logout()` | |
+| `await self.has_perm("app.action")` | |
+| `await self.has_group("admins")` | |
+
+```python
+import reflex as rx
+from reflex_django.state import AppState
+from reflex_django.auth import login_required, permission_required
+
+class DashboardState(AppState):
+    @rx.event
+    async def greet(self):
+        if not self.user.is_authenticated:
+            return rx.redirect("/login")
+        if await self.has_perm("app.view_dashboard"):
+            return f"Hello, {self.user.get_username()}"
+        return await self.on_permission_denied()
+
+    @rx.event
+    async def set_theme(self, theme: str):
+        self.session["theme"] = theme  # persisted in Django session
+
+    @rx.event
+    async def custom_login(self):
+        ok = await self.login(self.login_username, self.login_password)
+        if not ok:
+            return await self.on_auth_failed()
+        # Mirror session cookie for full-page navigation (see docs)
+        from reflex_django.context import current_request
+        from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
+        request = current_request()
+        if request:
+            return _sync_session_cookie_then_nav(request, "/")
+
+class NotesState(AppState, ModelCRUDView):
+    class Meta:
+        serializer = NoteSerializer
+
+@rx.event
+@permission_required("shop.delete_product", redirect="/login")
+async def delete_row(self, pk: int):
+    ...
+```
+
+**Decorators:** `@login_required` and `@permission_required("app.codename")` on pages and handlers.
+
+**Settings:** `REFLEX_DJANGO_AUTH_AUTO_SYNC` (default `True`), `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS`.
+
+Full walkthrough, architecture diagram, and troubleshooting: **[docs/authentication.md](docs/authentication.md)**.
+
 ### Security notes
 
 - **`@login_required`** on pages only redirects in the UI (like reflex-local-auth). Use **`@login_required`** on event handlers or **`require_login_user()`** when handlers return private data.
+- Use **`@permission_required("app.codename")`** or **`await self.has_perm(...)`** for permission-gated handlers.
 - Password-reset emails use Django’s token generator; use a stable **`SECRET_KEY`** in production.
 - Registration creates active users immediately; set **`SIGNUP_ENABLED=False`** if only admins should create accounts.
 

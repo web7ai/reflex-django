@@ -261,7 +261,7 @@ You can call Django auth APIs on `current_request()` and handle cookie sync your
 | Row dict helper | `serialize_model_row` via `reflex_django.mixins` | Optional |
 | CRUD code generation | `ModelCRUDView` | **No** |
 
-You never need `AppState` unless you adopt `ModelCRUDView` (assembly hook).
+Use **`AppState`** when you want built-in auth (`self.user`, `login`, permissions) or **`ModelCRUDView`**. Plain `rx.State` + `current_user()` remains valid for minimal apps.
 
 ---
 
@@ -272,6 +272,8 @@ Helper states are still **`rx.State` subclasses**. They add fields and `@rx.even
 ### B1. `DjangoUserState` — navbar / conditional UI
 
 Mirrors `request.user` as flat fields: `user_id`, `username`, `email`, `first_name`, `last_name`, `is_authenticated`, `is_staff`, `is_superuser`, `group_names`.
+
+For **new apps**, prefer **`AppState`** (below)—it includes the same snapshot fields plus `self.user`, `self.session`, `login`/`logout`, and optional auto-sync. Use standalone **`DjangoUserState`** when you only want a small nav state separate from CRUD/dashboard state.
 
 ```python
 import reflex as rx
@@ -292,13 +294,15 @@ def navbar() -> rx.Component:
         rx.link("Login", href="/login"),
     )
 
+# With REFLEX_DJANGO_AUTH_AUTO_SYNC=True, AppState subclasses sync on each event.
+# For DjangoUserState-only apps, keep:
 # app.add_page(home, on_load=NavbarState.sync_from_django)
 ```
 
 - **`sync_from_django`** — `@rx.event` for `on_load`  
 - **`refresh_django_user_fields()`** — call after login/logout in async handlers  
 
-Authorization still uses **`current_user()`** on the server.
+Authorization still uses **`self.user`** / **`current_user()`** on the server ([Authentication](authentication.md)).
 
 ### B2. `DjangoI18nState` — language in the UI
 
@@ -322,20 +326,51 @@ from reflex_django import DjangoContextState
 
 Equivalent manual pattern: Part A4 with `collect_reflex_context`.
 
-### B4. `AppState` — base for `ModelCRUDView` only
+### B4. `AppState` — Django auth + optional `ModelCRUDView`
 
-`AppState` (`reflex_django.states` / `reflex_django.state`) is an abstract **`rx.State`** subclass with `AppStateMeta` that **assembles** `ModelCRUDView` members at class creation time.
+`AppState` (`reflex_django.states` / `reflex_django.state`) extends **`DjangoUserState`** and is the **recommended** base when a state class needs Django auth, sessions, or declarative CRUD.
+
+| Capability | API |
+|------------|-----|
+| Live user (handlers) | `self.user` |
+| Live session read/write | `self.session["key"]` |
+| Login / logout | `await self.login(u, p)`, `await self.logout()` |
+| Permissions | `await self.has_perm("app.action")`, `await self.has_group("admins")` |
+| UI snapshot | `self.is_authenticated`, `self.username`, … |
+| CRUD assembly | Add `ModelCRUDView` to bases |
 
 ```python
+import reflex as rx
 from reflex_django.state import AppState, ModelCRUDView
 
 class NotesState(AppState, ModelCRUDView):
-    serializer_class = NoteSerializer
+    class Meta:
+        serializer = NoteSerializer
+
+class DashboardState(AppState):
+    @rx.event
+    async def show_name(self):
+        if not self.user.is_authenticated:
+            return rx.redirect("/login")
+        return self.user.get_username()
+
+    @rx.event
+    async def remember_view(self, mode: str):
+        self.session["dashboard_view"] = mode  # persisted in Django session
+
+def layout() -> rx.Component:
+    return rx.cond(
+        DashboardState.is_authenticated,
+        rx.text("Hello, ", DashboardState.username),
+        rx.link("Sign in", href="/login"),
+    )
 ```
 
-Use **`AppState`** when you want declarative CRUD. For task lists, dashboards, or wizards, **`rx.State` alone is correct**.
+**Auto-sync:** When `REFLEX_DJANGO_AUTH_AUTO_SYNC` is `True` (default), `DjangoEventBridge` calls `refresh_django_user_fields()` on each event for `AppState` instances—navbar `rx.cond` bindings stay aligned with login/logout without `on_load` on every route.
 
-Do **not** subclass `DjangoUserState` and `AppState` on the same class—keep separate state classes (Reflex supports multiple states per app).
+**Hooks:** Override `on_auth_failed` and `on_permission_denied` for branded errors or redirects.
+
+Full examples: [Authentication](authentication.md). Use plain **`rx.State`** only when that class never needs Django auth helpers.
 
 ### B5. `user_snapshot` vs `current_user`
 
@@ -374,7 +409,7 @@ On top of helper states, **model mixins** generate list/save/delete handlers:
 |------|-----|
 | Simple counter / wizard | `rx.State` only |
 | Load/save Django rows with custom UX | `rx.State` + `current_user()` + serializer (Part A3) |
-| Show logged-in user in header | `DjangoUserState` **or** `current_user()` in `on_load` |
+| Show logged-in user in header | `AppState` / `DjangoUserState` (auto-sync) **or** `current_user()` in `on_load` |
 | Expose `LANGUAGE_CODE` in UI | `DjangoI18nState` **or** manual `current_language()` |
 | Template-like context dict in state | `DjangoContextState` **or** `collect_reflex_context` |
 | Standard list + form + edit + delete | `AppState` + `ModelCRUDView` |
@@ -387,7 +422,11 @@ On top of helper states, **model mixins** generate list/save/delete handlers:
 Reflex allows several state classes. Typical layout:
 
 ```python
-# Navbar uses helper snapshot
+# Single AppState for nav + features (recommended)
+class SiteState(AppState):
+    pass
+
+# Or separate nav-only snapshot state
 class NavState(DjangoUserState):
     pass
 

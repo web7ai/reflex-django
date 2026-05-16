@@ -14,11 +14,12 @@ Production-oriented patterns for reflex-django applications.
 
 ## Security
 
-1. Authorize in **event handlers** with `current_user()`, `require_login_user()`, `auser_has_perm`.  
-2. Use `@login_required` on events that return private data.  
-3. Never trust `DjangoUserState` or client state for permissions.  
-4. Scope querysets with `self.request.user` or `UserScopedMixin`.  
-5. Keep `SECRET_KEY` stable; disable `SIGNUP_ENABLED` if registrations are admin-only.
+1. Authorize in **event handlers** with `self.user` / `current_user()`, `require_login_user()`, `await self.has_perm(...)`, or `auser_has_perm`.  
+2. Use `@login_required` and `@permission_required` on events that return or change private data.  
+3. Never trust snapshot fields (`is_authenticated`, `username`, …) alone for permissions—they are for UI.  
+4. Scope querysets with `self.user` / `UserScopedMixin` on `AppState` + `ModelCRUDView`.  
+5. After `login()` / `logout()`, sync the browser session cookie when users full-page navigate ([Authentication](authentication.md)).  
+6. Keep `SECRET_KEY` stable; disable `SIGNUP_ENABLED` if registrations are admin-only.
 
 Detail: [Authentication](authentication.md).
 

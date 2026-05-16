@@ -164,6 +164,10 @@ DEFAULT_FROM_EMAIL = "noreply@localhost"
 # When True, :meth:`reflex_django.DjangoUserState.sync_from_django` loads group names.
 REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS = False
 
+# When True, :class:`reflex_django.middleware.DjangoEventBridge` refreshes
+# :class:`~reflex_django.states.AppState` auth snapshot vars on every event.
+REFLEX_DJANGO_AUTH_AUTO_SYNC = True
+
 # When True and ``USE_I18N``, :class:`reflex_django.middleware.DjangoEventBridge`
 # runs :meth:`django.middleware.locale.LocaleMiddleware.process_request` on the
 # synthetic request so ``translation.activate`` matches Django HTTP behavior.

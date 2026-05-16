@@ -86,7 +86,8 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
 | Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
 | Auth shortcuts | `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` (`reflex_django.auth.shortcuts`) |
-| Auth decorators | `login_required` (pages and event handlers; `reflex_django.auth.decorators`) |
+| Auth decorators | `login_required`, `permission_required` (pages and event handlers; `reflex_django.auth.decorators`) |
+| AppState auth API | `self.user`, `self.session`, `login`, `logout`, `has_perm`, `has_group`, `on_auth_failed`, `on_permission_denied` on `AppState` / `DjangoUserState` |
 | Canned auth UI | `add_auth_pages`, `register_login_page`, `register_register_page`, `register_password_reset_page`, `register_password_reset_confirm_page`, `LoginPage`, `RegisterPage`, `PasswordResetPage`, `PasswordResetConfirmPage`, `autoload`, `DjangoAuthState`, `get_auth_settings`, `AuthSettings`, `auth_pages`, `auth_routes` (subpackage `reflex_django.auth`) |
 | User JSON snapshot | `user_snapshot` (dict for display, processors, tests—not authorization) |
 | ORM helper | `Model` (abstract Django model base + Reflex serializer) |
@@ -140,6 +141,7 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 | `EMAIL_BACKEND` / `DEFAULT_FROM_EMAIL` | Required for password-reset emails (console backend OK in dev). |
 | `REFLEX_DJANGO_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
 | `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
+| `REFLEX_DJANGO_AUTH_AUTO_SYNC` | When `True` (default), `DjangoEventBridge` refreshes `AppState` auth snapshot vars on every event. |
 | `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`middleware.py`). |
 | `REFLEX_DJANGO_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
 
@@ -149,11 +151,71 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 
 ## Security and best practices
 
-1. **Authorize on the server inside event handlers** using `current_user()`, `require_login_user()`, or `await auser_has_perm(user, "app.codename")`. Never trust `DjangoUserState` fields alone for permission or ownership checks—they are a **UI snapshot** synchronized to the client.
-2. Use **`@login_required`** on event handlers to redirect anonymous users (`rx.redirect` to `REFLEX_DJANGO_LOGIN_URL` or `login_url=...`).
+1. **Authorize on the server inside event handlers** using `self.user` / `current_user()`, `require_login_user()`, `await self.has_perm(...)`, or `await auser_has_perm(user, "app.codename")`. Never trust snapshot fields alone for permission checks—they are a **UI snapshot** synchronized to the client.
+2. Use **`@login_required`** and **`@permission_required`** on event handlers to redirect anonymous or unauthorized users.
 3. **`user_snapshot(user)`** (`from reflex_django import user_snapshot`) is for display, logging, or custom processors—not a substitute for live `User` checks on mutations.
 4. Anything assigned to Reflex **`rx.State`** fields that sync to the browser must be **JSON-serializable**. Custom `REFLEX_DJANGO_CONTEXT_PROCESSORS` must not leak secrets or non-JSON objects.
 5. Prefer **`async def`** event handlers when calling Django’s async APIs (`aget_user` is already used in the bridge for `request.user`).
+
+---
+
+## AppState authentication bridge (agent reference)
+
+**Import:** `from reflex_django.state import AppState`  
+**Also:** `from reflex_django.auth import login_required, permission_required`
+
+`AppState` subclasses `DjangoUserState` + `AuthBridgeMixin`. Use for dashboards, auth-aware features, and `ModelCRUDView`.
+
+### Two layers
+
+| Layer | API | Use |
+|-------|-----|-----|
+| Live (handlers) | `self.user`, `self.session` | Authorization, session writes |
+| Snapshot (UI) | `is_authenticated`, `username`, `email`, `group_names`, … | `rx.cond`, bindings |
+
+### Handler examples
+
+```python
+class S(AppState):
+    @rx.event
+    async def action(self):
+        if not self.user.is_authenticated:
+            return rx.redirect("/login")
+        self.session["theme"] = "dark"
+        if await self.has_perm("app.change_model"):
+            ...
+        if await self.has_group("admins"):
+            ...
+
+    @rx.event
+    async def sign_in(self):
+        if not await self.login(username, password):
+            return await self.on_auth_failed()
+        await self.logout()  # clears server session + refreshes snapshot
+```
+
+### Decorators
+
+```python
+@rx.event
+@login_required(login_url="/login")
+async def private(self): ...
+
+@rx.event
+@permission_required("products.view_product", redirect="/login", on_denied=...)
+async def catalog(self): ...
+```
+
+### Cookie sync after login/logout
+
+Reflex events skip `SessionMiddleware`. After `login()` / `logout()`, call `_sync_session_cookie_then_nav` from `reflex_django.mixins.session_auth` so the browser `sessionid` matches the server row.
+
+### Settings
+
+- `REFLEX_DJANGO_AUTH_AUTO_SYNC` (default True): bridge calls `refresh_django_user_fields()` on each event for `AppState` instances.
+- `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS`: load `group_names` in snapshot.
+
+Human docs: `docs/authentication.md`.
 
 ---
 

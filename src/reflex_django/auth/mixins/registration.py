@@ -16,10 +16,8 @@ from django.core.exceptions import ValidationError
 
 from reflex_django.auth.settings import AuthSettings
 from reflex_django.context import current_request
-from reflex_django.mixins.session_auth import (
-    _session_async_save,
-    _sync_session_cookie_then_nav,
-)
+from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
+from reflex_django.state.auth_bridge import session_async_save
 
 
 @dataclass(frozen=True)
@@ -174,7 +172,7 @@ def populate_registration_state(
 
         user = await sync_to_async(_create_user)()
         await alogin(request, user)
-        await _session_async_save(request)
+        await session_async_save(request)
         await self.refresh_django_user_fields()
         setattr(self, s_var, True)
         return _sync_session_cookie_then_nav(request, post_signup)

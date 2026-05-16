@@ -126,7 +126,7 @@ def test_preprocess_handles_malformed_cookie_header() -> None:
     _run_in_fresh_context(_go)
 
 
-def test_preprocess_does_not_modify_state() -> None:
+def test_preprocess_does_not_return_state_update() -> None:
     """The bridge must never return a non-None StateUpdate."""
     bridge = DjangoEventBridge()
     event = _StubEvent()
@@ -136,6 +136,30 @@ def test_preprocess_does_not_modify_state() -> None:
             app=mock.Mock(), state=mock.Mock(), event=cast(Any, event)
         )
         assert result is None
+
+    _run_in_fresh_context(_go)
+
+
+def test_ac6_preprocess_uses_aget_user() -> None:
+    """AC6: authentication reuses Django's aget_user, not a parallel stack."""
+    bridge = DjangoEventBridge()
+    event = _StubEvent(router_data={"headers": {}, "ip": "", "pathname": "/"})
+
+    async def _go() -> None:
+        with mock.patch(
+            "django.contrib.auth.aget_user",
+            new=mock.AsyncMock(),
+        ) as aget:
+            from django.contrib.auth.models import AnonymousUser
+
+            aget.return_value = AnonymousUser()
+            await bridge.preprocess(
+                app=mock.Mock(), state=mock.Mock(), event=cast(Any, event)
+            )
+            aget.assert_awaited_once()
+            req = current_request()
+            assert req is not None
+            assert isinstance(current_user(), AnonymousUser)
 
     _run_in_fresh_context(_go)
 

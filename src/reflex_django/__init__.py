@@ -43,6 +43,7 @@ if TYPE_CHECKING:
         autoload,
         get_auth_settings,
         login_required,
+        permission_required,
         pages as auth_pages,
         register_login_page,
         register_password_reset_confirm_page,
@@ -112,6 +113,7 @@ __all__ = [
     "make_dispatcher",
     "register_admin",
     "login_required",
+    "permission_required",
     "require_login_user",
     "session_cookie_clear_js",
     "session_cookie_name_and_suffix",
@@ -184,6 +186,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
     "register_admin": ("reflex_django.admin", "register"),
     "login_required": ("reflex_django.auth.decorators", "login_required"),
+    "permission_required": ("reflex_django.auth.decorators", "permission_required"),
     "require_login_user": ("reflex_django.auth.shortcuts", "require_login_user"),
     "session_cookie_clear_js": ("reflex_django.session_js", "session_cookie_clear_js"),
     "session_cookie_name_and_suffix": (
