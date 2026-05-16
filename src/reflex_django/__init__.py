@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         current_user,
         end_event_request,
     )
+    from reflex_django.request import RequestProxy, request
     from reflex_django.i18n_state import DjangoI18nState
     from reflex_django.middleware import DjangoEventBridge
     from reflex_django.model import Model
@@ -114,6 +115,8 @@ __all__ = [
     "register_admin",
     "login_required",
     "permission_required",
+    "request",
+    "RequestProxy",
     "require_login_user",
     "session_cookie_clear_js",
     "session_cookie_name_and_suffix",
@@ -155,6 +158,8 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "current_session": ("reflex_django.context", "current_session"),
     "current_user": ("reflex_django.context", "current_user"),
     "end_event_request": ("reflex_django.context", "end_event_request"),
+    "request": ("reflex_django.request", "request"),
+    "RequestProxy": ("reflex_django.request", "RequestProxy"),
     "AuthSettings": ("reflex_django.auth.settings", "AuthSettings"),
     "DjangoAuthState": ("reflex_django.auth.state", "DjangoAuthState"),
     "add_auth_pages": ("reflex_django.auth.registry", "add_auth_pages"),

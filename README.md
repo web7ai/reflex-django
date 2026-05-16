@@ -45,7 +45,7 @@ At a high level, reflex-django does three coordinated things:
 
 2. **HTTP ASGI composition** — After Reflex compiles your app, the plugin appends an `api_transformer` that wraps Reflex’s inner ASGI app. Incoming HTTP (and WebSocket upgrade traffic where applicable) is dispatched by **URL path prefix**: matching prefixes go to Django’s ASGI application (optionally wrapped for static files); non-matching traffic stays on Reflex. ASGI lifespan events are owned by Reflex.
 
-3. **Per-event Django context** — When `install_event_bridge` is true (the default), Reflex registers `DjangoEventBridge` middleware. On each Reflex event, the bridge builds a synthetic `django.http.HttpRequest` from `event.router_data` (cookies, headers, client IP, path), loads the Django session, optionally applies the same locale negotiation as `LocaleMiddleware`, resolves `request.user` via Django’s async `aget_user`, and binds that request on a **context variable** for the duration of the event. Your handlers call `current_user()`, `current_request()`, and related helpers, which read that binding.
+3. **Per-event Django context** — When `install_event_bridge` is true (the default), Reflex registers `DjangoEventBridge` middleware. On each Reflex event, the bridge builds a synthetic `django.http.HttpRequest` from `event.router_data` (cookies, headers, query params, client IP, path), loads the Django session, optionally applies the same locale negotiation as `LocaleMiddleware`, resolves `request.user` via Django’s async `aget_user`, and binds that request on a **context variable** for the duration of the event. Your handlers use **`from reflex_django import request`** (`request.user`, `request.session`, `request.GET`, `request.headers`) or the explicit helpers `current_user()`, `current_request()`, and related functions.
 
 PyPI and other indexes **do not resolve relative image paths** in the project description. Use an **absolute URL** (below) and keep `img.png` on your GitHub default branch, or change the URL to match your fork and branch name.
 
@@ -63,9 +63,24 @@ Browser
                                            │
                                            ▼
                                Reflex event → DjangoEventBridge
-                                           → contextvars (current_request, …)
+                                           → contextvars (request proxy, …)
                                            → your @rx.event handlers
 ```
+
+### Request context in handlers
+
+```python
+from reflex_django import request
+
+@rx.event
+async def my_handler(self):
+    if request.user.is_authenticated:
+        request.session["key"] = "value"
+    page = request.GET.get("page")
+    host = request.headers.get("host")
+```
+
+See [Django middleware to Reflex](docs/django_middleware_to_reflex.md). **Do not** use `from reflex_django.state import request`.
 
 ---
 

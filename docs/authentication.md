@@ -69,6 +69,22 @@ rx.cond(DashboardState.is_authenticated, rx.text(DashboardState.username), ...)
 
 When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **`AppState`** subclasses, so navbars and dashboards update after login/logout without calling `sync_from_django` on every page.
 
+### Django-style `request` in handlers
+
+Any `rx.State` handler can use the module-level proxy (same synthetic request as the bridge):
+
+```python
+from reflex_django import request
+
+@rx.event
+async def my_handler(self):
+    if request.user.is_authenticated:
+        request.session["last_view"] = "dashboard"
+    role = request.GET.get("role")
+```
+
+See [Django middleware to Reflex](django_middleware_to_reflex.md) for `request.headers`, `request.COOKIES`, and query params from `router_data`.
+
 ---
 
 ## Quick start

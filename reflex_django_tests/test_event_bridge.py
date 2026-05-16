@@ -10,6 +10,8 @@ from reflex_django.conf import configure_django
 
 configure_django()
 
+from django.http import QueryDict  # noqa: E402
+
 from reflex_django.context import (  # noqa: E402
     current_request,
     current_session,
@@ -68,6 +70,32 @@ def test_preprocess_binds_request_with_cookies_and_headers() -> None:
         assert req.META["REMOTE_ADDR"] == "1.2.3.4"
         assert req.META["HTTP_X_CUSTOM"] == "value"
         assert req.path == "/some/route"
+        assert req.GET == QueryDict()
+        assert req.GET.get("missing") is None
+
+    _run_in_fresh_context(_go)
+
+
+def test_preprocess_populates_get_from_query_and_pathname() -> None:
+    bridge = DjangoEventBridge()
+    event = _StubEvent(
+        router_data={
+            "headers": {},
+            "ip": "127.0.0.1",
+            "pathname": "/list?page=2",
+            "query": {"sort": "asc"},
+        }
+    )
+
+    async def _go() -> None:
+        await bridge.preprocess(
+            app=mock.Mock(), state=mock.Mock(), event=cast(Any, event)
+        )
+        req = current_request()
+        assert req is not None
+        assert req.path == "/list"
+        assert req.GET.get("page") == "2"
+        assert req.GET.get("sort") == "asc"
 
     _run_in_fresh_context(_go)
 

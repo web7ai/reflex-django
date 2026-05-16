@@ -81,7 +81,7 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Plugin | `ReflexDjangoPlugin` |
 | Django init | `configure_django` |
 | ASGI | `build_django_asgi`, `make_dispatcher` |
-| Per-event context | `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
+| Per-event context | **`request`** (`request.user`, `request.session`, `request.GET`, `request.headers`), `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
 | Event middleware | `DjangoEventBridge` |
 | Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
 | Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
@@ -96,6 +96,31 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Admin | `register_admin` |
 | Session / cookies (JS helpers) | `session_cookie_set_js`, `session_cookie_clear_js`, `session_cookie_name_and_suffix` |
 | CLI (programmatic) | `django_cli` |
+
+## Request proxy in event handlers
+
+**Import:** `from reflex_django import request` (lazy on package root; **not** `reflex_django.state.request`)
+
+Requires `DjangoEventBridge` / `install_event_bridge=True`.
+
+```python
+@rx.event
+async def handler(self):
+    request.user
+    request.session
+    request.GET.get("page")
+    request.headers.get("cookie")
+    request.path
+    request.COOKIES
+```
+
+Populated from `event.router_data`: `pathname` (+ `?query`), `query` dict, `headers`, cookies. Outside an event: `request.user` → anonymous, `request.GET` → empty `QueryDict`.
+
+**Never** put `request.user` in `rx.text()` / components (Django model is not a Reflex child). UI: `DjangoAuthState.username` / `AppState.username`. Handlers: `request.user.is_authenticated` or `request.username` (str).
+
+**ModelState:** `self.request` during `dispatch` is `DjangoStateRequest` (adds context-processor keys). Module `request` is the raw `HttpRequest`.
+
+---
 
 **Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
 

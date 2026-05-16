@@ -56,15 +56,33 @@ def _build_request_from_event(event: Event) -> HttpRequest:
     from django.http import HttpRequest
 
     router_data = getattr(event, "router_data", None) or {}
-    headers: dict[str, str] = router_data.get("headers") or {}
+    headers: dict[str, str] = dict(router_data.get("headers") or {})
     cookie_header = headers.get("cookie", "")
     client_ip = router_data.get("ip", "")
-    path = router_data.get("pathname", "/") or "/"
+    path_raw = router_data.get("pathname", "/") or "/"
+    if "?" in path_raw:
+        path, _, qs_from_path = path_raw.partition("?")
+    else:
+        path = path_raw
+        qs_from_path = ""
+
+    from django.http import QueryDict
+
+    get = QueryDict(mutable=True)
+    if qs_from_path:
+        get.update(QueryDict(qs_from_path))
+    query = router_data.get("query")
+    if isinstance(query, dict):
+        for key, value in query.items():
+            if value is not None:
+                get[str(key)] = str(value)
 
     request = HttpRequest()
     request.method = "GET"  # pyright: ignore[reportAttributeAccessIssue]
     request.path = path
     request.path_info = path
+    request.GET = get  # pyright: ignore[reportAttributeAccessIssue]
+    request._reflex_django_headers = headers  # noqa: SLF001 — for request.headers proxy
 
     # Translate the cookie header into request.COOKIES the way Django does
     # for HTTP requests.
@@ -82,6 +100,7 @@ def _build_request_from_event(event: Event) -> HttpRequest:
     request.META = {
         "REMOTE_ADDR": client_ip or "127.0.0.1",
         "PATH_INFO": path,
+        "QUERY_STRING": get.urlencode(),
         "REQUEST_METHOD": "GET",
         "HTTP_COOKIE": cookie_header,
     }

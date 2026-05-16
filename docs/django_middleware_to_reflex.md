@@ -21,7 +21,7 @@ Django **`MIDDLEWARE`** runs on HTTP requests. Reflex button clicks and `on_load
 On each event, `DjangoEventBridge.preprocess` (`src/reflex_django/middleware.py`):
 
 1. `end_event_request()` — clear stale contextvar  
-2. Build `HttpRequest` from `event.router_data` (path, cookies, headers, client IP)  
+2. Build `HttpRequest` from `event.router_data` (path, query string, cookies, headers, client IP)  
 3. `_attach_session(request)` via `SESSION_ENGINE`  
 4. `_activate_i18n_for_request(request)` when `USE_I18N` and `REFLEX_DJANGO_I18N_EVENT_BRIDGE`  
 5. `await _attach_user(request)` using **`aget_user`** (async)  
@@ -45,7 +45,27 @@ For CSRF on Django HTTP forms under a prefix, use normal Django views. For Refle
 
 ## Using the bound request
 
-**Option A — context helpers** (any `rx.State`):
+**Option A — `request` proxy (recommended, Django-familiar)** — any `rx.State`:
+
+```python
+from reflex_django import request
+
+@rx.event
+async def my_handler(self):
+    user = request.user
+    session = request.session
+    page = request.GET.get("page")
+    token = request.headers.get("authorization")
+    path = request.path
+```
+
+Works in every `@rx.event` handler while `DjangoEventBridge` is enabled (default). Outside an event, `request.user` is anonymous and `request.GET` is empty.
+
+**Do not use `request.user` in component trees** (`rx.text(request.user)` fails — Reflex only accepts primitives, vars, or components). For navbar labels use **`DjangoAuthState.username`** / **`AppState.username`**, or primitive `request.username` only inside handlers (not as a reactive var on the client).
+
+**Invalid:** `from reflex_django.state import request` — use `from reflex_django import request`.
+
+**Option B — context helpers** (explicit):
 
 ```python
 from reflex_django import current_user, current_request, current_session
@@ -53,11 +73,11 @@ from reflex_django import current_user, current_request, current_session
 @rx.event
 async def my_handler(self):
     user = current_user()
-    request = current_request()
+    http = current_request()
     session = current_session()
 ```
 
-**Option B — `AppState`** (recommended for app features + UI snapshot):
+**Option C — `AppState`** (auth + reactive UI snapshot):
 
 ```python
 from reflex_django.state import AppState

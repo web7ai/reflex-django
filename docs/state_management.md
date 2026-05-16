@@ -20,6 +20,7 @@ Installing `ReflexDjangoPlugin` does **not** force you to use reflex-django stat
 |-----------|------------------|
 | **HTTP bridge** | `/admin`, `/api`, static URLs → Django ASGI |
 | **Event bridge** (`DjangoEventBridge`) | Synthetic `HttpRequest`, session, `request.user` per event |
+| **`request` proxy** | `from reflex_django import request` → `request.user`, `request.session`, `request.GET`, `request.headers` |
 | **Context helpers** | `current_request()`, `current_user()`, `current_session()`, `current_language()` |
 
 From there you can write **plain `rx.State`** subclasses—exactly like Reflex documentation—and call Django ORM, auth, and serializers inside `@rx.event` handlers.
@@ -78,11 +79,11 @@ class CounterState(rx.State):
 
 ### A2. Django auth via the event bridge only
 
-Use **`current_user()`** inside any `rx.State`—no `DjangoUserState` required:
+Use **`from reflex_django import request`** (or **`current_user()`**) inside any `rx.State`—no `DjangoUserState` required:
 
 ```python
 import reflex as rx
-from reflex_django import current_user
+from reflex_django import request
 
 
 class WhoamiState(rx.State):
@@ -90,7 +91,7 @@ class WhoamiState(rx.State):
 
     @rx.event
     async def refresh(self):
-        user = current_user()
+        user = request.user
         self.label = (
             f"Signed in as {user.get_username()}"
             if user.is_authenticated
@@ -425,6 +426,8 @@ class NotesState(AppState, ModelCRUDView):
 | Manual CRUD | Plain `rx.State` | [CRUD without mixins](crud_without_mixins.md) |
 
 Both `ModelState` and `ModelCRUDView` require the **event bridge** for default `@login_required` and `self.request.user` in hooks.
+
+**`from reflex_django import request` vs `self.request` on ModelState:** the module **`request`** is the raw bridged `HttpRequest` (Django-familiar: `user`, `GET`, `headers`). During `dispatch`, **`self.request`** is a `DjangoStateRequest` wrapper that also exposes context-processor keys (`LANGUAGE_CODE`, …). Use either in hooks; prefer **`request`** for plain auth/query and **`self.request`** when you need processor output.
 
 ---
 
