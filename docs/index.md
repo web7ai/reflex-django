@@ -53,6 +53,7 @@ This documentation is written for **Python and Django developers** who want full
 | Wire Django settings and prefixes | [Configuration](configuration.md) |
 | Run migrations | [CLI](cli.md) |
 | Use Django session auth in Reflex events | [Authentication](authentication.md) |
+| Understand state: plain Reflex vs helpers | [State management](state_management.md) |
 | Build a list/create/edit UI for a model | [CRUD with mixins](crud_with_mixins_and_states.md) or [CRUD without mixins](crud_without_mixins.md) |
 | Serialize models for Reflex state | [Serializers](serializers.md) |
 | Expose DRF or Django views on `/api` | [API integration](api_integration.md) |

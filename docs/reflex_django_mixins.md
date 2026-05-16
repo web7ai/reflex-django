@@ -2,13 +2,15 @@
 
 Reference for the **composable mixin stack** behind `ModelCRUDView` and **`session_auth_mixin`**.
 
+These are **optional** on top of the bridges. You can build the same behavior with plain `rx.State`—see [State management](state_management.md).
+
 For a hands-on tutorial, see [CRUD with mixins](crud_with_mixins_and_states.md).
 
 ---
 
 ## Prerequisites
 
-- [State management](state_management.md)  
+- [State management](state_management.md) — especially Part B (helpers) and Part C (this page)  
 - [Architecture](architecture.md)
 
 ---

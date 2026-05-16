@@ -1,15 +1,17 @@
 # CRUD without mixins
 
-Build **create, read, update, delete** flows with plain **`rx.State`**, Django async ORM, and **`ReflexDjangoModelSerializer`**—no `ModelCRUDView`.
+Build **create, read, update, delete** flows with plain **`rx.State`**, Django async ORM, and **`ReflexDjangoModelSerializer`**—no `ModelCRUDView`, no `AppState`.
 
 > Tutorial code below is **example application code** (not shipped with reflex-django). For the declarative stack, see [CRUD with mixins](crud_with_mixins_and_states.md).
+
+> **Start here for mindset:** [State management — Part A (plain `rx.State` + bridges)](state_management.md#part-a--plain-rxstate-no-reflex-django-mixins-or-helper-states) explains why Django is already available in handlers without reflex-django mixins.
 
 ---
 
 ## Prerequisites
 
+- [State management](state_management.md) — plain state vs helper states  
 - [Serializers](serializers.md)  
-- [State management](state_management.md)  
 - [Forms and validation](forms_and_validation.md)
 
 ---

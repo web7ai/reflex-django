@@ -1,21 +1,74 @@
 # State management
 
-**Reflex state** plus reflex-django helpers for mirroring Django user and i18n data in the UI.
+How to build **Reflex state** when Django and Reflex are already connected by reflex-django—and when to add optional **helper states** and **mixins** on top.
 
 ---
 
 ## Prerequisites
 
-- [Django middleware to Reflex](django_middleware_to_reflex.md)
+- [Architecture](architecture.md) — two bridges (HTTP + events)  
+- [Django middleware to Reflex](django_middleware_to_reflex.md) — `DjangoEventBridge`  
+- [Django context to Reflex](django_context_to_reflex.md) — processors
 
 ---
 
-## Reflex baseline
+## The connection you already have
+
+Installing `ReflexDjangoPlugin` does **not** force you to use reflex-django state classes or CRUD mixins. It gives every Reflex event handler access to Django through:
+
+| Mechanism | What it provides |
+|-----------|------------------|
+| **HTTP bridge** | `/admin`, `/api`, static URLs → Django ASGI |
+| **Event bridge** (`DjangoEventBridge`) | Synthetic `HttpRequest`, session, `request.user` per event |
+| **Context helpers** | `current_request()`, `current_user()`, `current_session()`, `current_language()` |
+
+From there you can write **plain `rx.State`** subclasses—exactly like Reflex documentation—and call Django ORM, auth, and serializers inside `@rx.event` handlers.
+
+```mermaid
+flowchart TB
+  subgraph required [Always available with plugin]
+    Bridge[DjangoEventBridge]
+    Helpers[current_user / current_request]
+    ORM[Django ORM in handlers]
+  end
+  subgraph optional [Optional reflex-django layers]
+    UserState[DjangoUserState]
+    CtxState[DjangoContextState]
+    AppState[AppState + ModelCRUDView]
+    SessionMixin[session_auth_mixin]
+  end
+  Bridge --> Helpers
+  Helpers --> ORM
+  Helpers -.->|mirror to UI| UserState
+  ORM -.->|code generation| AppState
+```
+
+**Takeaway:** reflex-django **mixins** and **helper states** save boilerplate; they are not required to use Django from Reflex.
+
+---
+
+## Two ways to build state
+
+| Approach | Base class | Best for |
+|----------|------------|----------|
+| **A. Plain Reflex + bridges** | `rx.State` | Full control, learning Reflex, custom flows, minimal magic |
+| **B. reflex-django helpers** | `DjangoUserState`, `DjangoContextState`, `AppState` + `ModelCRUDView`, … | Less boilerplate for nav user snapshot, context dicts, declarative CRUD |
+
+You can mix both in one app: e.g. `NavbarState(DjangoUserState)` and `TasksState(rx.State)` side by side.
+
+---
+
+## Part A — Plain `rx.State` (no reflex-django mixins or helper states)
+
+### A1. Pure Reflex (no Django in the handler)
+
+Django is still loaded for other pages, but this state does not touch the ORM:
 
 ```python
 import reflex as rx
 
-class Counter(rx.State):
+
+class CounterState(rx.State):
     count: int = 0
 
     @rx.event
@@ -23,62 +76,331 @@ class Counter(rx.State):
         self.count += 1
 ```
 
-reflex-django adds Django-aware bases and snapshots on top of this model.
+### A2. Django auth via the event bridge only
+
+Use **`current_user()`** inside any `rx.State`—no `DjangoUserState` required:
+
+```python
+import reflex as rx
+from reflex_django import current_user
+
+
+class WhoamiState(rx.State):
+    label: str = "Loading…"
+
+    @rx.event
+    async def refresh(self):
+        user = current_user()
+        self.label = (
+            f"Signed in as {user.get_username()}"
+            if user.is_authenticated
+            else "Guest"
+        )
+```
+
+Wire on a page:
+
+```python
+# app.add_page(whoami_page, route="/whoami", on_load=WhoamiState.refresh)
+```
+
+> **Warning:** `self.label` is visible in the browser. Use `current_user()` again inside handlers that **mutate** data or perform deletes.
+
+### A3. Full example: task list without mixins
+
+*Example application code—a `tasks` app with a `Task` model.*
+
+**Model and serializer** (see [Serializers](serializers.md)):
+
+```python
+# tasks/models.py
+from django.conf import settings
+from django.db import models
+
+class Task(models.Model):
+    title = models.CharField(max_length=200)
+    done = models.BooleanField(default=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+```
+
+```python
+# tasks/serializers.py
+from reflex_django.serializers import ReflexDjangoModelSerializer
+from tasks.models import Task
+
+class TaskSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Task
+        fields = ("id", "title", "done")
+```
+
+**State — subclass `rx.State` only** (not `AppState`, not `ModelCRUDView`):
+
+```python
+# myapp/states/tasks.py
+import reflex as rx
+from reflex_django import current_user, require_login_user
+from tasks.models import Task
+from tasks.serializers import TaskSerializer
+
+
+class TasksState(rx.State):
+    """Plain Reflex state + Django bridge + serializer. No reflex-django CRUD mixins."""
+
+    tasks: list[dict] = []
+    error: str = ""
+    new_title: str = ""
+
+    @rx.event
+    async def load_tasks(self):
+        self.error = ""
+        user = require_login_user()
+        qs = Task.objects.filter(owner=user).order_by("-id")
+        self.tasks = await TaskSerializer(qs, many=True).adata()
+
+    @rx.event
+    def set_new_title(self, value: str):
+        self.new_title = value
+
+    @rx.event
+    async def add_task(self):
+        self.error = ""
+        title = self.new_title.strip()
+        if not title:
+            self.error = "Title is required."
+            return
+        user = require_login_user()
+        try:
+            await Task.objects.acreate(owner=user, title=title, done=False)
+            self.new_title = ""
+            await self.load_tasks()
+        except Exception as exc:
+            self.error = str(exc)
+
+    @rx.event
+    async def toggle_done(self, task_id: int):
+        user = require_login_user()
+        task = await Task.objects.aget(pk=task_id, owner=user)
+        task.done = not task.done
+        await task.asave()
+        await self.load_tasks()
+
+    @rx.event
+    async def delete_task(self, task_id: int):
+        user = require_login_user()
+        task = await Task.objects.aget(pk=task_id, owner=user)
+        await task.adelete()
+        await self.load_tasks()
+```
+
+**Page:**
+
+```python
+def tasks_page() -> rx.Component:
+    return rx.vstack(
+        rx.cond(TasksState.error != "", rx.callout(TasksState.error, color_scheme="red")),
+        rx.input(
+            placeholder="New task",
+            value=TasksState.new_title,
+            on_change=TasksState.set_new_title,
+        ),
+        rx.button("Add", on_click=TasksState.add_task),
+        rx.foreach(
+            TasksState.tasks,
+            lambda t: rx.hstack(
+                rx.checkbox(
+                    checked=t["done"],
+                    on_change=TasksState.toggle_done(t["id"]),
+                ),
+                rx.text(t["title"]),
+                rx.button("Delete", on_click=TasksState.delete_task(t["id"])),
+            ),
+        ),
+        width="100%",
+    )
+
+# app.add_page(tasks_page, route="/tasks", on_load=TasksState.load_tasks)
+```
+
+This is the same pattern as [CRUD without mixins](crud_without_mixins.md) but focused on **state design**: you own every field name, event name, and validation rule.
+
+### A4. Context processors in plain state
+
+You do not need `DjangoContextState` to use processors—call `collect_reflex_context` in any handler:
+
+```python
+import reflex as rx
+from reflex_django import current_request
+from reflex_django.reflex_context import collect_reflex_context
+
+
+class SiteState(rx.State):
+    site_name: str = ""
+
+    @rx.event
+    async def load_site(self):
+        merged = await collect_reflex_context(current_request())
+        self.site_name = str(merged.get("site_name", "My site"))
+```
+
+Configure processors in settings (`REFLEX_DJANGO_CONTEXT_PROCESSORS`). Details: [Django context to Reflex](django_context_to_reflex.md).
+
+### A5. Login/logout without `session_auth_mixin`
+
+You can call Django auth APIs on `current_request()` and handle cookie sync yourself, or use canned [Authentication](authentication.md) pages. The mixin only **generates** a `rx.State` subclass with standard fields and `submit_login`—it is optional sugar.
 
 ---
 
-## `AppState`
+## What plain `rx.State` uses from reflex-django
 
-Abstract base from `reflex_django.states` (or `reflex_django.state`):
+| Use | Import | Required? |
+|-----|--------|-----------|
+| User / session in handlers | `current_user`, `require_login_user` | Event bridge on |
+| Request / session object | `current_request`, `current_session` | Event bridge on |
+| Serialize models for UI | `ReflexDjangoModelSerializer` | No (your serializer classes) |
+| Row dict helper | `serialize_model_row` via `reflex_django.mixins` | Optional |
+| CRUD code generation | `ModelCRUDView` | **No** |
 
-- Subclass for app-specific and CRUD state.  
-- `AppStateMeta` assembles `ModelCRUDView` members before Reflex builds vars.
+You never need `AppState` unless you adopt `ModelCRUDView` (assembly hook).
+
+---
+
+## Part B — reflex-django built-in helper states
+
+Helper states are still **`rx.State` subclasses**. They add fields and `@rx.event` methods that **copy** bridge data into client-visible vars so your components can bind `State.username` instead of calling helpers in every render path.
+
+### B1. `DjangoUserState` — navbar / conditional UI
+
+Mirrors `request.user` as flat fields: `user_id`, `username`, `email`, `first_name`, `last_name`, `is_authenticated`, `is_staff`, `is_superuser`, `group_names`.
+
+```python
+import reflex as rx
+from reflex_django import DjangoUserState
+
+
+class NavbarState(DjangoUserState):
+    pass
+
+
+def navbar() -> rx.Component:
+    return rx.cond(
+        NavbarState.is_authenticated,
+        rx.hstack(
+            rx.text(NavbarState.username),
+            rx.link("Logout", href="/logout"),
+        ),
+        rx.link("Login", href="/login"),
+    )
+
+# app.add_page(home, on_load=NavbarState.sync_from_django)
+```
+
+- **`sync_from_django`** — `@rx.event` for `on_load`  
+- **`refresh_django_user_fields()`** — call after login/logout in async handlers  
+
+Authorization still uses **`current_user()`** on the server.
+
+### B2. `DjangoI18nState` — language in the UI
+
+Fields: `django_language_code`, `django_language_bidi`. Requires `USE_I18N` and typically `REFLEX_DJANGO_I18N_EVENT_BRIDGE`.
+
+```python
+from reflex_django import DjangoI18nState
+
+# app.add_page(home, on_load=DjangoI18nState.sync_from_django)
+```
+
+### B3. `DjangoContextState` — merged processor dict
+
+Fields: `django_context`, `django_context_json`. Event: `load_django_context`.
+
+```python
+from reflex_django import DjangoContextState
+
+# app.add_page(about, on_load=DjangoContextState.load_django_context)
+```
+
+Equivalent manual pattern: Part A4 with `collect_reflex_context`.
+
+### B4. `AppState` — base for `ModelCRUDView` only
+
+`AppState` (`reflex_django.states` / `reflex_django.state`) is an abstract **`rx.State`** subclass with `AppStateMeta` that **assembles** `ModelCRUDView` members at class creation time.
 
 ```python
 from reflex_django.state import AppState, ModelCRUDView
+
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
 ```
 
----
+Use **`AppState`** when you want declarative CRUD. For task lists, dashboards, or wizards, **`rx.State` alone is correct**.
 
-## `DjangoUserState`
+Do **not** subclass `DjangoUserState` and `AppState` on the same class—keep separate state classes (Reflex supports multiple states per app).
 
-UI-oriented snapshot of the logged-in user (synced to the client):
-
-```python
-from reflex_django import DjangoUserState
-
-class MyState(DjangoUserState):
-    @rx.event
-    async def on_load(self):
-        await self.sync_from_django()
-```
-
-Field names (no `django_` prefix): `user_id`, `username`, `email`, `is_authenticated`, `is_staff`, etc.
-
-> **Warning:** Use **`current_user()`** / **`require_login_user()`** for authorization. `DjangoUserState` is a **display snapshot** only.
-
----
-
-## `user_snapshot` vs `current_user`
+### B5. `user_snapshot` vs `current_user`
 
 | API | Purpose |
 |-----|---------|
-| `current_user()` | Live `User` on the server during an event |
-| `user_snapshot(user)` | JSON-safe dict for display, processors, logging |
+| `current_user()` | Live `User` during an event — **authorize here** |
+| `user_snapshot(user)` | JSON dict — display, logging, custom processors |
 
 ```python
 from reflex_django import current_user, user_snapshot
 
 user = current_user()
 if user.is_authenticated:
-    self.label = user_snapshot(user)["username"]
+    self.banner = f"Hello, {user_snapshot(user)['username']}"
 ```
 
 ---
 
-## `DjangoI18nState`
+## Part C — Mixins and declarative CRUD (optional layer)
 
-Exposes language fields for UI when `USE_I18N` is enabled. Works with `REFLEX_DJANGO_I18N_EVENT_BRIDGE` on the synthetic request. See [Django middleware to Reflex](django_middleware_to_reflex.md).
+On top of helper states, **model mixins** generate list/save/delete handlers:
+
+| Layer | Types | Doc |
+|-------|-------|-----|
+| Full CRUD stack | `ModelCRUDView` / `ModelState` | [CRUD with mixins](crud_with_mixins_and_states.md) |
+| Mixin catalog | `ListMixin`, `DispatchMixin`, `session_auth_mixin`, … | [reflex-django mixins](reflex_django_mixins.md) |
+| Manual CRUD | Plain `rx.State` | [CRUD without mixins](crud_without_mixins.md) |
+
+`ModelCRUDView` requires **`AppState`** in the bases and the **event bridge** for default `login_required` behavior.
+
+---
+
+## Choosing an approach
+
+| Need | Use |
+|------|-----|
+| Simple counter / wizard | `rx.State` only |
+| Load/save Django rows with custom UX | `rx.State` + `current_user()` + serializer (Part A3) |
+| Show logged-in user in header | `DjangoUserState` **or** `current_user()` in `on_load` |
+| Expose `LANGUAGE_CODE` in UI | `DjangoI18nState` **or** manual `current_language()` |
+| Template-like context dict in state | `DjangoContextState` **or** `collect_reflex_context` |
+| Standard list + form + edit + delete | `AppState` + `ModelCRUDView` |
+| Generated login form state | `session_auth_mixin` ([Authentication](authentication.md)) |
+
+---
+
+## Multiple state classes in one app
+
+Reflex allows several state classes. Typical layout:
+
+```python
+# Navbar uses helper snapshot
+class NavState(DjangoUserState):
+    pass
+
+# Feature page uses plain state + ORM
+class TasksState(rx.State):
+    ...
+
+# Admin CRUD uses ModelCRUDView
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
+```
+
+Register `on_load` on each page for the states that page needs.
 
 ---
 
@@ -89,18 +411,18 @@ flowchart LR
   subgraph server [Server event handler]
     ORM[Django ORM]
     CU[current_user]
-    Snap[user_snapshot]
+    Snap[user_snapshot / DjangoUserState]
   end
-  subgraph client [Client rx.State]
-    UI[UI fields]
+  subgraph client [Client rx.State vars]
+    UI[UI bindings]
   end
-  ORM -->|serialize dict| UI
-  CU -->|authorize| ORM
+  ORM -->|list of dicts| UI
+  CU -->|authorize mutations| ORM
   Snap -->|display only| UI
 ```
 
-- **Source of truth:** database + `current_user()` on the server.  
-- **Wire format:** JSON-serializable dicts and scalars only.
+- **Source of truth:** database + `current_user()` in handlers.  
+- **Wire format:** JSON-serializable scalars, lists, and dicts only.
 
 ---
 
@@ -114,28 +436,34 @@ async def load_items(self):
     self.items = await ItemSerializer(qs, many=True).adata()
 ```
 
-Prefer **`async def`** when using Django async ORM APIs.
+Prefer **`async def`** when using Django async ORM (`acreate`, `aget`, `.adata()`).
 
 ---
 
 ## Advanced usage
 
-- Combine `DjangoUserState` with `session_auth_mixin` for custom login pages — [Authentication](authentication.md).  
-- Refresh user snapshot after login: `await self.sync_from_django()`.
+- Disable bridge for stateless demos: `install_event_bridge=False` — then `current_user()` is not populated.  
+- Test handlers with `begin_event_request` / `end_event_request` — [Testing](testing.md).  
+- Combine plain state with `DjangoUserState` on different pages.
 
 ---
 
 ## Performance tips
 
-- Do not store full querysets or model instances in state vars.  
-- Reload lists after mutations, not individual ORM instances on the client.
+- Do not store model instances or querysets in state vars.  
+- Reload lists after mutations; pass only `id` into events.  
+- Use `DjangoUserState` only on layouts that need it—not on every CRUD state.
 
 ---
 
 ## Common mistakes
 
-- Trusting `is_authenticated` on client state for delete/update guards.  
-- Assigning `datetime`, `Decimal`, or model instances to state fields.
+| Mistake | Fix |
+|---------|-----|
+| Thinking `AppState` is required for Django | Use `rx.State` + `current_user()` |
+| Using `DjangoUserState.is_authenticated` to allow deletes | Call `require_login_user()` in the handler |
+| Putting `Decimal`, `datetime`, or models in state fields | Serialize first |
+| Subclassing `DjangoUserState` and `ModelCRUDView` together | Split into two state classes |
 
 ---
 
@@ -143,15 +471,19 @@ Prefer **`async def`** when using Django async ORM APIs.
 
 | Symptom | Fix |
 |---------|-----|
-| Stale user in UI | Call `sync_from_django` after auth-changing events |
-| `AppRegistryNotReady` | Import order; use plugin bootstrap |
+| `current_user()` always anonymous | Event bridge off or missing session cookie — [Authentication](authentication.md) |
+| Stale navbar after login | `await NavbarState.refresh_django_user_fields()` or `sync_from_django` |
+| `AppRegistryNotReady` | Ensure plugin in `rxconfig`; avoid importing models before Django setup |
 
 ---
 
 ## See also
 
+- [Django middleware to Reflex](django_middleware_to_reflex.md) — what the bridge runs  
 - [Django context to Reflex](django_context_to_reflex.md)  
-- [Serializers](serializers.md)
+- [Serializers](serializers.md)  
+- [CRUD without mixins](crud_without_mixins.md)  
+- [reflex-django mixins](reflex_django_mixins.md)
 
 ---
 

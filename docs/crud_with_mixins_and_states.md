@@ -8,6 +8,7 @@ Use **`ModelCRUDView`** (alias **`ModelState`**) for declarative list + create/u
 
 ## Prerequisites
 
+- [State management](state_management.md) — when to use `AppState` + `ModelCRUDView` vs plain `rx.State`  
 - [reflex-django mixins](reflex_django_mixins.md)  
 - [Serializers](serializers.md)  
 - [Authentication](authentication.md)
