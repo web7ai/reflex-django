@@ -1,4 +1,4 @@
-"""Canonical ORM API methods for :class:`~reflex_django.state.generic.ModelState`."""
+"""Canonical ORM API methods for :class:`~reflex_django.state.model_state.ModelState`."""
 
 from __future__ import annotations
 

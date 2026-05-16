@@ -51,7 +51,7 @@ class AppState(DjangoUserState, ABC, metaclass=AppStateMeta):
 
     Combine with :class:`~reflex_django.state.ModelState` for declarative CRUD::
 
-        class NotesState(ModelState[Note]):
+        class NotesState(ModelState):
             model = Note
             fields = ["title", "body"]
 

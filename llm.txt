@@ -235,7 +235,7 @@ Human docs: `docs/authentication.md`.
 ### Pattern (any Django model)
 
 ```python
-class ProductState(ModelState[Product]):
+class ProductState(ModelState):
     model = Product
     fields = ["name", "price", "is_active"]
     ordering = ("-created_at",)
@@ -263,7 +263,7 @@ Legacy names (`save_{model}`, `start_edit`, `on_load_{list}`) still generated. `
 ### User scope
 
 ```python
-class NoteState(ModelState[Note], UserScopedMixin):
+class NoteState(ModelState, UserScopedMixin):
     model = Note
     fields = ["title", "body"]
     scope_field = "user_id"

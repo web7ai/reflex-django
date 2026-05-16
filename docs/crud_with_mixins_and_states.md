@@ -9,7 +9,7 @@ from reflex_django.state import ModelState
 from reflex_django.state.mixins.scoping import UserScopedMixin
 from blog.models import BlogPost
 
-class PostState(ModelState[BlogPost], UserScopedMixin):
+class PostState(ModelState, UserScopedMixin):
     model = BlogPost
     fields = ["title", "slug", "body", "published"]
     scope_field = "author_id"

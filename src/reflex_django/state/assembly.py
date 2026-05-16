@@ -27,31 +27,67 @@ from reflex_django.state.views.list import ModelListView
 _MODEL_STATE_BASES = (ModelCRUDView, ModelListView)
 
 
-def _model_state_type() -> type:
-    from reflex_django.state.generic import ModelState
+def _is_model_state_origin(origin: Any) -> bool:
+    if not isinstance(origin, type):
+        return False
+    if origin.__name__ != "ModelState":
+        return False
+    mod = getattr(origin, "__module__", "") or ""
+    return mod.endswith(".model_state") or mod.endswith(".generic")
 
-    return ModelState
+
+def _model_from_model_state_base(base: Any) -> type[models.Model] | None:
+    """Resolve concrete model from ``ModelState[Note]`` (a ``GenericAlias`` base)."""
+    origin = getattr(base, "__origin__", None)
+    if origin is None or not _is_model_state_origin(origin):
+        return None
+    args = getattr(base, "__args__", ())
+    if not args:
+        return None
+    candidate = args[0]
+    if isinstance(candidate, type) and issubclass(candidate, models.Model):
+        return candidate
+    return None
 
 
-def _needs_assembly(bases: tuple[type, ...]) -> bool:
+def _resolve_model_from_bases(bases: tuple[Any, ...]) -> type[models.Model] | None:
+    for base in bases:
+        found = _model_from_model_state_base(base)
+        if found is not None:
+            return found
+    return None
+
+
+def _needs_assembly(bases: tuple[Any, ...]) -> bool:
     for b in bases:
         if isinstance(b, type) and issubclass(b, _MODEL_STATE_BASES):
+            return True
+        origin = getattr(b, "__origin__", None)
+        if isinstance(origin, type) and issubclass(origin, _MODEL_STATE_BASES):
             return True
     return False
 
 
-def _uses_model_state_base(bases: tuple[type, ...]) -> bool:
-    model_state = _model_state_type()
-    return any(b is model_state for b in bases if isinstance(b, type))
+def _uses_model_state_base(bases: tuple[Any, ...]) -> bool:
+    """True when a base is ``ModelState`` or ``ModelState[SomeModel]``."""
+    for b in bases:
+        origin = getattr(b, "__origin__", None)
+        if origin is not None and _is_model_state_origin(origin):
+            return True
+        if isinstance(b, type) and _is_model_state_origin(b):
+            return True
+    return False
 
 
 def _extract_model_and_fields(
     namespace: dict[str, Any],
-    bases: tuple[type, ...],
+    bases: tuple[Any, ...],
 ) -> tuple[type[models.Model] | None, Sequence[str] | None, tuple[str, ...]]:
     model = namespace.get("model")
     fields = namespace.get("fields")
     read_only: tuple[str, ...] = tuple(namespace.get("read_only_fields", ()) or ())
+    if model is None:
+        model = _resolve_model_from_bases(bases)
     meta = namespace.get("Meta")
     if meta is not None:
         if model is None:
@@ -62,20 +98,19 @@ def _extract_model_and_fields(
         if meta_ro:
             read_only = tuple(meta_ro) + read_only
     for base in bases:
-        if not isinstance(base, type):
-            continue
-        if model is None:
-            candidate = getattr(base, "model", None)
-            if isinstance(candidate, type) and issubclass(candidate, models.Model):
-                model = candidate
-        if not fields:
-            candidate_fields = getattr(base, "fields", None)
-            if candidate_fields:
-                fields = candidate_fields
-        if not read_only:
-            base_ro = getattr(base, "read_only_fields", None)
-            if base_ro:
-                read_only = tuple(base_ro)
+        if isinstance(base, type):
+            if model is None:
+                candidate = getattr(base, "model", None)
+                if isinstance(candidate, type) and issubclass(candidate, models.Model):
+                    model = candidate
+            if not fields:
+                candidate_fields = getattr(base, "fields", None)
+                if candidate_fields:
+                    fields = candidate_fields
+            if not read_only:
+                base_ro = getattr(base, "read_only_fields", None)
+                if base_ro:
+                    read_only = tuple(base_ro)
     return model, fields, read_only
 
 
@@ -118,7 +153,7 @@ def bind_event(
 
 def assemble_model_state_namespace(
     namespace: dict[str, Any],
-    bases: tuple[type, ...],
+    bases: tuple[Any, ...],
     *,
     qualname: str,
     state_cls_name: str,
@@ -127,16 +162,25 @@ def assemble_model_state_namespace(
     if not _needs_assembly(bases):
         return None
 
+    model, _, _ = _extract_model_and_fields(namespace, bases)
+    if model is not None and "model" not in namespace:
+        namespace["model"] = model
+
     serializer_cls = _resolve_serializer(namespace, bases)
     if serializer_cls is None:
         if _uses_model_state_base(bases):
             model, fields, _ = _extract_model_and_fields(namespace, bases)
             msg = (
-                f"{state_cls_name} must define `model` and `fields`, or "
-                "`serializer_class` / `Meta.serializer`."
+                f"{state_cls_name} must set `model` and `fields` on a "
+                "`ModelState` subclass, or provide `serializer_class` / `Meta.serializer`."
             )
-            if model is not None and not fields:
-                msg = f"{state_cls_name}: `fields` is required when using `model = {model.__name__}`."
+            if model is None:
+                msg = (
+                    f"{state_cls_name}: set `model = YourModel` on the class body "
+                    "(e.g. `model = Note`), or use optional `ModelState[Note]`."
+                )
+            elif not fields:
+                msg = f"{state_cls_name}: `fields` is required when `model = {model.__name__}`."
             raise ImproperlyConfigured(msg)
         return None
 

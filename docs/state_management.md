@@ -401,7 +401,7 @@ One base class per Django model—includes **`AppState`** (auth) and the full CR
 from reflex_django.state import ModelState
 from shop.models import Product
 
-class ProductState(ModelState[Product]):
+class ProductState(ModelState):
     model = Product
     fields = ["name", "price", "is_active"]
 ```

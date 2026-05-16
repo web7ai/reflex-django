@@ -1,8 +1,8 @@
 # Reactive ModelState
 
-**`ModelState[M]`** is the recommended way to build reactive CRUD for **any** Django model `M`. You declare `model` and `fields` once; reflex-django assembles a serializer, Reflex state vars, and event handlers at **class definition time**. Your UI binds to stable method names (`load`, `save`, `refresh`, …) instead of memorizing per-model event names like `save_note` or `save_product`.
+**`ModelState`** is the recommended way to build reactive CRUD for **any** Django model. Subclass it, set **`model`** and **`fields`** on the class, and reflex-django assembles a serializer, Reflex state vars, and event handlers at **class definition time**. Your UI binds to stable method names (`load`, `save`, `refresh`, …) instead of memorizing per-model event names like `save_note` or `save_product`.
 
-`ModelState[User]` appears in docs only as an example—the same API applies to `Product`, `Order`, `BlogPost`, proxy models, and models from third-party apps.
+The optional subscript **`ModelState[Product]`** only helps type checkers (or infers `model` if you omit it in the class body)—the normal style is **`class ProductState(ModelState): model = Product`**.
 
 ---
 
@@ -76,7 +76,7 @@ import reflex as rx
 from reflex_django.state import ModelState
 from shop.models import Product
 
-class ProductState(ModelState[Product]):
+class ProductState(ModelState):
     model = Product
     fields = ["name", "price", "sku", "is_active"]
     ordering = ("-created_at",)
@@ -255,7 +255,6 @@ from reflex_django.state.mixins.scoping import UserScopedMixin
 from blog.models import BlogPost
 
 class PostState(ModelState[BlogPost], UserScopedMixin):
-    model = BlogPost
     fields = ["title", "slug", "body", "published"]
     scope_field = "author_id"  # FK column on BlogPost
     ordering = ("-created_at",)
@@ -275,7 +274,6 @@ class PostState(ModelState[BlogPost], UserScopedMixin):
 
 ```python
 class PostState(ModelState[BlogPost]):
-    model = BlogPost
     fields = ["title", "slug", "body", "published"]
 
     def get_queryset(self):
@@ -299,7 +297,6 @@ from reflex_django.state import ModelState
 from catalog.models import Category
 
 class CategoryState(ModelState[Category]):
-    model = Category
     fields = ["label"]
     ordering = ("label",)
 
@@ -318,7 +315,6 @@ Only add this when you intentionally want anonymous access; defaults require log
 
 ```python
 class ProductState(ModelState[Product]):
-    model = Product
     fields = ["name", "price", "is_active"]
 
     @rx.event
@@ -344,7 +340,6 @@ def filter_queryset(self, queryset):
 
 ```python
 class ProductState(ModelState[Product]):
-    model = Product
     fields = ["name", "price", "sku"]
 
     class Meta:
@@ -358,7 +353,6 @@ Wire UI to `set_products_search` or call `refresh()` after updating search.
 
 ```python
 class ProductState(ModelState[Product]):
-    model = Product
     fields = ["name", "price"]
 
     class Meta:
@@ -378,7 +372,6 @@ rx.button("Page 2", on_click=ProductState.paginate(page=2))
 
 ```python
 class ProductState(ModelState[Product]):
-    model = Product
     fields = ["name", "price"]
     search_query: str = ""
 
@@ -407,7 +400,6 @@ For HTML form posts with a single `form_data` dict:
 
 ```python
 class ProductState(ModelState[Product]):
-    model = Product
     fields = ["name", "price"]
 
     class Meta:
@@ -438,7 +430,6 @@ from reflex_django.state import ModelState
 
 class ProductSerializer(ReflexDjangoModelSerializer):
     class Meta:
-        model = Product
         fields = ("id", "name", "price", "category_id", "display_name")
         read_only_fields = ("id", "display_name")
 
@@ -458,7 +449,6 @@ class ProductState(ModelState[Product]):
 
 ```python
 class OrderState(ModelState[Order]):
-    model = Order
     fields = ["status", "total"]
 
     def get_queryset(self):
@@ -500,7 +490,6 @@ from reflex_django.state.constants import ACTION_SAVE
 from reflex_django.auth.decorators import login_required
 
 class ProductState(ModelState[Product]):
-    model = Product
     fields = ["name", "price"]
 
     @rx.event
@@ -536,7 +525,6 @@ class ProductState(ModelState[Product]):
 
 ```python
 class PostState(ModelState[BlogPost]):
-    model = BlogPost
     fields = ["title", "slug", "body"]
 
     class Meta:
@@ -560,21 +548,21 @@ class PostState(ModelState[BlogPost]):
 
 | Attribute | Required | Role |
 |-----------|----------|------|
-| `model` | Yes* | Django `Model` subclass |
+| `model` | Yes* | Django model class (`model = Product`) |
 | `fields` | Yes* | Writable field names (`"author_id"` for FK attnames) |
+| `ModelState[YourModel]` | No | Optional typing / infers `model` if omitted in class body |
 | `serializer_class` / `Meta.serializer` | Optional | Overrides auto serializer |
 | `read_only_fields` | Optional | Extra read-only (beyond serializer) |
 | `ordering` | Optional | Default `("-created_at",)` — set `()` if model has no `created_at` |
 | `paginate_by`, `search_fields` | Optional | On class or `Meta` |
 
-\*Not required when you supply an explicit serializer.
+\*When using an explicit serializer only, `ModelState[M]` and `fields` are not required.
 
 **Field validation at import:**
 
 ```python
 # Raises ImproperlyConfigured: Invalid fields for shop.product: not_a_field
 class BadState(ModelState[Product]):
-    model = Product
     fields = ["name", "not_a_field"]
 ```
 
@@ -720,7 +708,7 @@ class NotesState(AppState, ModelCRUDView):
 from reflex_django.state import ModelState
 from notes.models import Note
 
-class NotesState(ModelState[Note]):
+class NotesState(ModelState):
     model = Note
     fields = ["title", "content"]
 

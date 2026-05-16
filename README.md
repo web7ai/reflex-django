@@ -629,7 +629,7 @@ async def _load_notes(self) -> None:
 
 ## Reactive model CRUD (`ModelState`)
 
-**`ModelState[M]`** is the recommended API for any Django model. Declare **`model`** and **`fields`** once; reflex-django builds the serializer, list/form Reflex vars, and stable event handlers at class definition time. **`ModelState` already includes `AppState`** (auth, session, permissions).
+**`ModelState`** is the recommended API for any Django model. Subclass it and declare **`model`** and **`fields`** on the class; reflex-django builds the serializer, list/form Reflex vars, and stable event handlers at class definition time. **`ModelState` already includes `AppState`** (auth, session, permissions).
 
 **Full guide with examples:** [docs/reactive_model_state.md](docs/reactive_model_state.md)
 
@@ -639,7 +639,7 @@ async def _load_notes(self) -> None:
 from reflex_django.state import ModelState
 from shop.models import Product
 
-class ProductState(ModelState[Product]):
+class ProductState(ModelState):
     model = Product
     fields = ["name", "price", "sku", "is_active"]
     ordering = ("-created_at",)
@@ -671,7 +671,7 @@ def products_page() -> rx.Component:
 ```python
 from reflex_django.state.mixins.scoping import UserScopedMixin
 
-class NoteState(ModelState[Note], UserScopedMixin):
+class NoteState(ModelState, UserScopedMixin):
     model = Note
     fields = ["title", "content"]
     scope_field = "user_id"
@@ -680,7 +680,7 @@ class NoteState(ModelState[Note], UserScopedMixin):
 ### Custom serializer (optional)
 
 ```python
-class ProductState(ModelState[Product]):
+class ProductState(ModelState):
     model = Product
     serializer_class = ProductSerializer  # wins over auto-built from fields
     fields = ["name", "price"]

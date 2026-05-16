@@ -72,11 +72,16 @@ def build_serializer_from_fields(
     if "id" not in include:
         include.insert(0, "id")
 
+    # Bind outer names — ``class Meta: model = model`` makes ``model`` local to Meta.
+    _model_cls = model
+    _meta_fields = tuple(include)
+    _meta_read_only = read_only
+
     class _AutoSerializer(ReflexDjangoModelSerializer):
         class Meta:
-            model = model
-            fields = tuple(include)
-            read_only_fields = read_only
+            model = _model_cls
+            fields = _meta_fields
+            read_only_fields = _meta_read_only
 
     _AutoSerializer.__name__ = f"{model.__name__}Serializer"
     _AutoSerializer.__qualname__ = _AutoSerializer.__name__

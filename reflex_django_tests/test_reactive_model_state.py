@@ -41,14 +41,19 @@ class RmCategory(models.Model):
         app_label = "reflex_django_tests"
 
 
-class ProductState(ModelState[RmProduct]):
+class ProductState(ModelState):
     model = RmProduct
     fields = ["name", "price", "is_active"]
 
 
-class CategoryState(ModelState[RmCategory]):
+class CategoryState(ModelState):
     model = RmCategory
     fields = ["label"]
+
+
+class _ProductStateFromGeneric(ModelState[RmProduct]):
+    """Optional: model inferred from ``ModelState[RmProduct]`` without class-body ``model``."""
+    fields = ["name", "price"]
 
 
 class _LegacyExplicitState(AppState, ModelCRUDView):
@@ -69,7 +74,7 @@ class _LegacyExplicitState(AppState, ModelCRUDView):
         )
 
 
-class _CustomSaveModelState(ModelState[RmProduct]):
+class _CustomSaveModelState(ModelState):
     model = RmProduct
     fields = ["name", "price"]
 
@@ -78,7 +83,7 @@ class _CustomSaveModelState(ModelState[RmProduct]):
         return "custom"
 
 
-class _NoCanonicalState(ModelState[RmProduct]):
+class _NoCanonicalState(ModelState):
     model = RmProduct
     fields = ["name"]
 
@@ -101,6 +106,15 @@ def test_validate_model_fields_rejects_unknown() -> None:
         assert "not_a_field" in str(exc)
     else:
         raise AssertionError("expected ImproperlyConfigured")
+
+
+def test_model_from_class_body() -> None:
+    assert ProductState.model is RmProduct
+    assert CategoryState.model is RmCategory
+
+
+def test_model_inferred_from_optional_generic_subscript() -> None:
+    assert _ProductStateFromGeneric.model is RmProduct
 
 
 def test_product_state_auto_serializer_and_vars() -> None:
@@ -184,7 +198,7 @@ def test_get_row_reads_from_list_var() -> None:
 def test_missing_fields_raises_at_class_creation() -> None:
     try:
 
-        class _BadState(ModelState[RmProduct]):
+        class _BadState(ModelState):
             model = RmProduct
 
     except ImproperlyConfigured as exc:
