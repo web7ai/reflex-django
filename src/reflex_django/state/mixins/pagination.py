@@ -26,8 +26,12 @@ class PaginationMixin(BaseModelState):
         opts = self.get_options()
         if not self.pagination_enabled():
             return 0
-        raw = getattr(self, opts.page_size_var, opts.paginate_by)
-        size = int(raw) if raw is not None else int(opts.paginate_by or 1)
+        raw = getattr(self, opts.page_size_var, None)
+        # ``ModelState`` types ``page_size`` as 0 before assembly; treat 0 as unset.
+        if raw in (None, 0):
+            size = int(opts.paginate_by or 1)
+        else:
+            size = int(raw)
         return min(max(1, size), opts.max_page_size)
 
     def paginate_queryset(self, queryset: QuerySet[Any]) -> QuerySet[Any]:

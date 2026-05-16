@@ -46,6 +46,7 @@ class ModelState(AppState, ModelCRUDView, Generic[M]):
     total_count: int = 0
     page_count: int = 0
     page: int = 1
+    # Set by assembly from ``Meta.paginate_by`` when pagination is enabled.
     page_size: int = 0
     field_errors: dict[str, str] = {}
 

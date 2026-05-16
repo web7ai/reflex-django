@@ -255,7 +255,7 @@ No `save_*` / `delete_*` assembly.
 
 | Option | Default | Role |
 |--------|---------|------|
-| `list_var` | pluralized model name | List state var |
+| `list_var` | `"data"` (`ModelState`); pluralized model name (`ModelCRUDView`) | List state var |
 | `save_event` / `delete_event` | `save_{model}`, `delete_{model}` | Handler names |
 | `ordering` | `("-created_at",)` | Queryset order |
 | `read_only_fields` | `()` | Extra non-editable fields |

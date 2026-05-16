@@ -100,6 +100,14 @@ class _SearchProductState(ModelState):
         paginate_by = 10
 
 
+class _PaginatedProductState(ModelState):
+    model = RmProduct
+    fields = ["name", "price"]
+
+    class Meta:
+        paginate_by = 20
+
+
 def test_build_serializer_from_fields_includes_id() -> None:
     _SERIALIZER_CACHE.clear()
     ser_cls = build_serializer_from_fields(RmProduct, ["name", "price"])
@@ -124,6 +132,16 @@ def test_model_from_class_body() -> None:
 
 def test_model_inferred_from_optional_generic_subscript() -> None:
     assert _ProductStateFromGeneric.model is RmProduct
+
+
+def test_model_state_pagination_uses_paginate_by_page_size() -> None:
+    assert _PaginatedProductState.get_options().paginate_by == 20
+    assert _PaginatedProductState.__dict__["page_size"] == 20
+    state = _PaginatedProductState()
+    assert state.get_page_size() == 20
+    qs = mock.MagicMock()
+    state.paginate_queryset(qs)
+    qs.__getitem__.assert_called_once_with(slice(0, 20))
 
 
 def test_default_search_and_pagination_var_names() -> None:

@@ -320,14 +320,11 @@ def _assemble_list_features(
 
     if options.paginate_by is not None:
         _inject_var_default(namespace, annotations, bases, options.page_var, int, 1)
-        _inject_var_default(
-            namespace,
-            annotations,
-            bases,
-            options.page_size_var,
-            int,
-            options.paginate_by,
-        )
+        # Always seed page_size from ``paginate_by`` on the concrete class (``ModelState``
+        # declares ``page_size = 0`` for typing; skipping here left page size at 1).
+        if options.page_size_var not in namespace:
+            annotations[options.page_size_var] = int
+        namespace[options.page_size_var] = options.paginate_by
         _inject_var_default(namespace, annotations, bases, options.total_count_var, int, 0)
         _inject_var_default(namespace, annotations, bases, options.page_count_var, int, 0)
 

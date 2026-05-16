@@ -64,7 +64,10 @@ class StateFieldsMixin(BaseModelState):
     def clean_state(self, data: dict[str, Any]) -> dict[str, Any]:
         return dict(data)
 
-    async def run_model_validation(self, state_data: dict[str, Any]) -> dict[str, str]:
+    async def validate_model_full_clean(
+        self, state_data: dict[str, Any]
+    ) -> dict[str, str]:
+        """Run Django ``full_clean()`` when ``Meta.run_model_validation`` is enabled."""
         opts = self.get_options()
         if not opts.run_model_validation:
             return {}
@@ -89,7 +92,7 @@ class StateFieldsMixin(BaseModelState):
         if errors:
             return None, errors
         data = self.clean_state(data)
-        model_errors = await self.run_model_validation(data)
+        model_errors = await self.validate_model_full_clean(data)
         if model_errors:
             return None, model_errors
         return data, {}

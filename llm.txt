@@ -283,7 +283,9 @@ on_mount=ProductState.refresh
 
 `editing_id == -1` → create on save; `>= 0` → update. `filter(**kwargs)` sets `_queryset_filter` then refresh.
 
-Legacy names (`save_{model}`, `start_edit`, `on_load_{list}`) still generated. `Meta.use_canonical_api = False` skips canonical handlers.
+Legacy names (`save_{model}`, `start_edit`, `on_load_data`) still generated. `Meta.use_canonical_api = False` skips canonical handlers.
+
+**UI:** `rx.cond(State.data.length() > 0, …)` — not `len(State.data)`. **`Meta.run_model_validation`** only (not a class-body var). **`paginate_by`** seeds `page_size`.
 
 ### User scope
 
@@ -318,12 +320,13 @@ Import: `from reflex_django.state import ModelCRUDMeta`
 
 Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass already defines the same name in its class body.
 
-### Generated members (defaults; override via `Meta`)
+### Default reactive vars (`ModelState`)
 
 | Member | Role |
 |--------|------|
-| `data` | `list[dict]` serialized rows (`Meta.list_var`) |
-| `error` | `str` validation / error message (`Meta.error_var`) |
+| `data` | `list[dict]` rows (`Meta.list_var`, default `"data"`) |
+| `error` | validation message (`Meta.error_var`, default `"error"`) |
+| `search`, `total_count`, `page_count` | when search / pagination enabled |
 | `editing_id` | `int`, `-1` = create mode, `>=0` = editing pk |
 | `title`, `content`, … | flat editable state vars (not `form_*` prefixes) |
 | `set_title`, … | `@rx.event` setters |
@@ -336,6 +339,12 @@ Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass alrea
 | `reset_state_fields` | clear editable vars, `editing_id=-1`, bump `form_reset_key` |
 | `form_reset_key` | int; bind to `rx.form(..., key=...)` so DOM clears after save |
 | `save_{model}_form` | optional when `Meta.use_form_submit = True`; reads `form_data` then `dispatch(save)` |
+
+Canonical handlers on `ModelState`: `load`, `save`, `create`, `delete`, `refresh`, `filter`, `paginate`, …
+
+### `ModelCRUDView` list/search names (legacy explicit serializer)
+
+Default `list_var` = plural of model (`notes`, `products`, …) → `notes_error`, `notes_search`, `on_load_notes`, etc. Override with `Meta.list_var` or use `ModelState` for generic `data` / `error` / `search`.
 
 **List features (opt-in via Meta):**
 

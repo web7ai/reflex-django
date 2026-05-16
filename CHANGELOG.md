@@ -22,9 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   serializers (`Meta.fields` / `exclude`, `.data`, `.adata`) with queryset
   `many=True` (no `djangorestframework`). `ModelCRUDConfig.row_serializer_class`
   integrates with `crud_mixin`.
+- `ModelCRUDMeta` / class-level config on `ModelCRUDView` for IDE autocomplete;
+  `ModelState.options` alias for resolved `ModelStateOptions`.
+- `from reflex_django import request` module proxy for handler-side
+  `request.user`, `request.session`, `request.GET`, `request.headers`.
 
 ### Changed (breaking)
 
+- **`ModelState` default reactive var names** are generic: `data`, `error`,
+  `search`, `total_count`, `page_count`, `on_load_data`, etc. (not pluralized
+  model names). **`ModelCRUDView`** without `ModelState` still pluralizes
+  (`notes`, `notes_error`, …) unless `Meta.list_var` is set.
+- Internal validation method renamed to `validate_model_full_clean()`;
+  enable via **`Meta.run_model_validation` only** (not as a class-body attribute).
 - Removed `reflex_django.authz`. Auth helpers live under `reflex_django.auth`:
   `require_login_user`, `auser_has_perm`, and `ReflexDjangoAuthError` in
   `reflex_django.auth.shortcuts`; `login_required` in `reflex_django.auth.decorators`.
@@ -37,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `django_last_name` → `last_name`, `django_is_authenticated` → `is_authenticated`,
   `django_is_staff` → `is_staff`, `django_is_superuser` → `is_superuser`,
   `django_group_names` → `group_names`.
+
+### Fixed
+
+- Pagination: `page_size` is seeded from `Meta.paginate_by` (fixes showing one
+  row when `paginate_by > 1`).
+- Assembly no longer injects plain Python defaults that shadow `ModelState`
+  reactive vars (fixes `list.length()` / `AttributeError` in UI).
+- `run_model_validation` class-body config no longer shadows the validation
+  method (`'bool' object is not callable` on save).
 
 ## [0.1.2] — 2026-05-14
 

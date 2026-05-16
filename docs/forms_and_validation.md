@@ -80,9 +80,9 @@ class Meta:
     structured_errors = True
 ```
 
-Enables `{list_var}_field_errors` (e.g. `notes_field_errors`) when `structured_errors` is true in resolved options.
+Enables per-field errors: `field_errors` on **`ModelState`**, or `{list_var}_field_errors` on **`ModelCRUDView`** (e.g. `notes_field_errors`).
 
-Global message still uses `{list_var}_error`.
+Global message uses `error` (`ModelState`) or `{list_var}_error` (`ModelCRUDView`).
 
 ---
 

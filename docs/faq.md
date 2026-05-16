@@ -58,7 +58,7 @@ Prefix mismatch between `ReflexDjangoPlugin` (`admin_prefix`, `backend_prefix`) 
 
 ### Is pagination built in?
 
-**Yes, opt-in.** Set `Meta.paginate_by = 20` on `ModelCRUDView` / `ModelListView` to get `page`, `page_size`, `{list_var}_total_count`, `next_page`, `prev_page`, and related handlers. Default is `paginate_by = None` (load all rows). See [README](../README.md#list-pagination-search-and-sorting). Manual pagination is still documented in [CRUD without mixins](crud_without_mixins.md).
+**Yes, opt-in.** Set `Meta.paginate_by = 20` (or `paginate_by = 20` on the state class body) on `ModelState` / `ModelCRUDView` / `ModelListView` to get `page`, `page_size`, pagination totals, `next_page`, `prev_page`, and related handlers. On **`ModelState`**, defaults are `total_count`, `page_count`, and `search` (not `{list_var}_search`). `page_size` is initialized from `paginate_by`. Default is `paginate_by = None` (load all rows). See [README](../README.md#list-pagination-search-and-sorting) and [Reactive ModelState](reactive_model_state.md#pagination-metapaginate_by). Manual pagination is still documented in [CRUD without mixins](crud_without_mixins.md).
 
 ### Where did `crud_mixin()` go?
 

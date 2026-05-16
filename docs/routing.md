@@ -23,7 +23,7 @@ app = rx.App()
 app.add_page(
     my_page,
     route="/notes",
-    on_load=NotesState.on_load_notes,
+    on_load=NotesState.on_load_data,  # ModelState default; or on_load_notes if Meta.list_var = "notes"
     title="Notes",
 )
 ```

@@ -12,7 +12,7 @@ The optional subscript **`ModelState[Product]`** only helps type checkers (or in
 |-------|---------------------------|
 | **Auth** | `ModelState` extends `AppState` → `self.user`, `self.session`, `login`, `logout`, `has_perm`, reactive `is_authenticated`, … |
 | **Serializer** | Auto-built from `model` + `fields` (or your custom `serializer_class`) |
-| **List var** | `products`, `orders`, … — `list[dict[str, Any]]` of serialized rows |
+| **List var** | `data` by default (`list[dict[str, Any]]` of serialized rows); override with `Meta.list_var` |
 | **Form vars** | One Reflex var per writable field (`name`, `price`, …) plus `set_name`, … |
 | **Handlers** | Canonical `load` / `save` / `refresh` / … plus legacy names (`save_product`, `start_edit`) |
 | **Hooks** | Django CBV-style overrides: `get_queryset`, `validate_state`, `perform_create`, … |
@@ -31,7 +31,7 @@ flowchart TB
   Bridge[bind_request_context\nself.request.user]
   Hooks[get_queryset → filter_queryset → serialize]
   ORM[Django async ORM]
-  Vars[Reactive vars: products, name, editing_id]
+  Vars[Reactive vars: data, error, name, editing_id]
 
   UI --> Events
   Events --> Dispatch
@@ -45,7 +45,7 @@ flowchart TB
 **At import time** (`AppStateMeta`), reflex-django:
 
 1. Resolves or builds a `ReflexDjangoModelSerializer` for your model.
-2. Declares missing Reflex vars (`products`, `products_error`, `editing_id`, field vars, pagination vars).
+2. Declares missing Reflex vars (`data`, `error`, `editing_id`, field vars, pagination vars when enabled).
 3. Injects default `@rx.event` handlers **only for names not already in your class body**.
 
 **At runtime**, each handler calls `dispatch("save")` (etc.), which binds `self.request`, runs permission checks, calls your hooks, hits the ORM, and updates reactive vars so the UI re-renders.
@@ -84,11 +84,11 @@ class ProductState(ModelState):
 
 That is enough for assembly to generate:
 
-- **List:** `products`, `products_error`
+- **List:** `data`, `error`
 - **Form:** `name`, `price`, `sku`, `is_active`, `set_name`, …
 - **Edit mode:** `editing_id` (`-1` = create, `>= 0` = editing pk)
 - **Events:** `load`, `save`, `create`, `delete`, `refresh`, `filter`, `clear_filter`, `paginate`, `cancel_edit`
-- **Legacy aliases:** `save_product`, `start_edit`, `on_load_products`, …
+- **Legacy aliases:** `save_product`, `start_edit`, `on_load_data`, …
 
 ### 3. Page
 
@@ -101,12 +101,14 @@ def products_page() -> rx.Component:
     return rx.vstack(
         rx.heading("Products"),
         rx.cond(
-            ProductState.products_error != "",
-            rx.callout(ProductState.products_error, color_scheme="red"),
+            ProductState.error != "",
+            rx.callout(ProductState.error, color_scheme="red"),
         ),
-        # List
-        rx.foreach(
-            ProductState.products,
+        # List (use .length() in rx.cond — not Python len())
+        rx.cond(
+            ProductState.data.length() > 0,
+            rx.foreach(
+            ProductState.data,
             lambda row: rx.card(
                 rx.hstack(
                     rx.vstack(
@@ -129,6 +131,8 @@ def products_page() -> rx.Component:
                     width="100%",
                 ),
             ),
+            ),
+            rx.text("No products yet.", color="gray"),
         ),
         rx.divider(),
         # Form
@@ -204,7 +208,7 @@ These names are **stable across every model**. Use them in `on_click`, `on_mount
 | `load(pk)` | `start_edit(pk)` |
 | `save()` | `save_{model_name}` e.g. `save_product` |
 | `delete(pk)` | `delete_{model_name}` |
-| `refresh()` | `on_load_{list_var}` → `_load_{list_var}` |
+| `refresh()` | `on_load_data` → `_load_data` (default list var `data`) |
 | `cancel_edit()` | `cancel_edit` (same name by default) |
 
 Set `Meta.use_canonical_api = False` if you only want legacy names and no `load`/`save`/… injection.
@@ -344,10 +348,10 @@ class ProductState(ModelState[Product]):
 
     class Meta:
         search_fields = ("name", "sku")
-        # Generates: products_search, set_products_search, clear_products_search
+        # Generates: search, set_search, clear_search
 ```
 
-Wire UI to `set_products_search` or call `refresh()` after updating search.
+Wire UI to `ProductState.search`, `ProductState.set_search`, or call `refresh()` after updating search.
 
 ### Pagination (`Meta.paginate_by`)
 
@@ -360,13 +364,16 @@ class ProductState(ModelState[Product]):
         max_page_size = 100
 ```
 
-Generated: `page`, `page_size`, `products_total_count`, `products_page_count`, `next_page`, `prev_page`, `go_to_page`, `set_page_size`.
+Generated: `page`, `page_size` (initialized to `paginate_by`), `total_count`, `page_count`, `next_page`, `prev_page`, `go_to_page`, `set_page_size`.
 
 ```python
 # UI
+rx.text(f"Page {ProductState.page} / {ProductState.page_count} ({ProductState.total_count} total)")
 rx.button("Next", on_click=ProductState.next_page)
 rx.button("Page 2", on_click=ProductState.paginate(page=2))
 ```
+
+`page_size` on the state is set from `Meta.paginate_by` at class creation time (do not rely on the typed default `0` on `ModelState`).
 
 ### Custom search on the same class
 
@@ -496,7 +503,7 @@ class ProductState(ModelState[Product]):
     @login_required  # you must re-apply when overriding
     async def save(self):
         if not self.name.strip():
-            self.products_error = "Name is required."
+            self.error = "Name is required."
             return
         await self.dispatch(ACTION_SAVE)
 ```
@@ -507,7 +514,7 @@ class ProductState(ModelState[Product]):
 |------|----------------|---------|
 | `get_queryset()` | Before every list/load/edit query | `return Product.objects.filter(shop=self.shop_id)` |
 | `filter_queryset(qs)` | After `get_queryset` | Search, tags, merge `_queryset_filter` |
-| `get_ordering()` | List ordering | Dynamic sort from `products_ordering` var |
+| `get_ordering()` | List ordering | Dynamic sort from `ordering` var when `allow_dynamic_ordering=True` |
 | `get_object_lookup(pk)` | `load` / `delete` | `{"pk": pk, "owner": self.user}` |
 | `get_create_kwargs(data)` | Create | `{"author_id": self.user.pk, **data}` |
 | `perform_create(ctx, instance)` | After instance built, before save | Side effects |
@@ -572,19 +579,30 @@ Auto serializer always includes `id` in `Meta.fields`.
 
 ## Reactive vars (naming)
 
-| Var | Default for `Product` | Type / role |
-|-----|----------------------|-------------|
-| `products` | pluralized model name | `list[dict[str, Any]]` rows |
-| `products_error` | `{list_var}_error` | Last error string |
-| `products_field_errors` | when `structured_errors=True` | `dict[str, str]` |
-| `editing_id` | `-1` create, `>=0` edit | `int` |
+**`ModelState` defaults** (generic names — same on every model state class):
+
+| Var | Default | Type / role |
+|-----|---------|-------------|
+| `data` | `list_var` | `list[dict[str, Any]]` serialized rows |
+| `error` | `error_var` | Last validation / error message |
+| `search` | `search_var` | Search string when `Meta.search_fields` set |
+| `total_count`, `page_count` | pagination | Totals when `Meta.paginate_by` set |
+| `ordering` | `ordering_var` | Dynamic sort field when `allow_dynamic_ordering=True` |
+| `field_errors` | `field_errors_var` | `dict[str, str]` when `structured_errors=True` |
+| `editing_id` | — | `-1` create, `>=0` edit |
 | `name`, `price`, … | from `fields` | Form bindings |
-| `form_reset_key` | increments on reset | Bind to `rx.form(..., key=...)` |
-| `page`, `page_size`, … | when `paginate_by` set | Pagination |
+| `form_reset_key` | — | Bind to `rx.form(..., key=...)` |
+| `page`, `page_size` | when `paginate_by` set | `page_size` seeded from `paginate_by` |
 
-Override with `Meta.list_var = "items"`, etc.
+**`ModelCRUDView`** (without `ModelState`) still defaults to **pluralized** names (`products`, `products_error`, `products_search`, …) unless you override `Meta.list_var`.
 
-**Typing:** `ModelState[Product]` is for static checkers; runtime uses the declared `model` class. Row dicts match serializer output (`id` always present when included in serializer fields).
+Override any name, e.g. `Meta.list_var = "notes"` → `notes`, `notes_error`, `on_load_notes`.
+
+**UI tip:** In components, test list length with **`State.data.length() > 0`**, not `len(State.data)` (lists are Reflex vars in the UI).
+
+**Typing:** `ModelState[Product]` helps static checkers; row dicts match serializer output (`id` included when in serializer fields).
+
+**Resolved options:** `ProductState.options` or `ProductState.get_options()` returns frozen `ModelStateOptions` (`.list_var`, `.paginate_by`, …).
 
 ---
 
@@ -598,8 +616,8 @@ def dashboard() -> rx.Component:
         rx.box(posts_panel(), width="50%"),
         rx.box(products_panel(), width="50%"),
     )
-# posts_panel uses PostState.refresh / PostState.posts
-# products_panel uses ProductState.refresh / ProductState.products
+# posts_panel uses PostState.refresh / PostState.data
+# products_panel uses ProductState.refresh / ProductState.data
 ```
 
 Unrelated UI stays on plain `rx.State`:
@@ -666,13 +684,33 @@ flowchart TD
 | `ordering` | `("-created_at",)` | Default queryset ordering |
 | `read_only_fields` | `()` | Extra non-editable fields |
 | `required_fields` | first writable field | Validation |
-| `run_model_validation` | `False` | Call model `full_clean()` |
-| `structured_errors` | `False` | Per-field `field_errors` (`field_errors_var`) |
+| `run_model_validation` | `False` | When `True`, runs Django `full_clean()` via internal `validate_model_full_clean()` (set on **`Meta` only**, not as a class-body var — see below) |
+| `structured_errors` | `False` | Per-field `field_errors` |
 | `reset_after_save` | `True` | Clear form after save |
 | `use_form_submit` | `False` | `save_*_form(form_data)` handler |
 | `load_context_processors` | `True` | Fill `self.request` from context processors |
 
 Full catalog: [CRUD with mixins and states](crud_with_mixins_and_states.md).
+
+### Configuration and IDE autocomplete
+
+Set options on the **subclass body** (best editor hints) or in **`class Meta(ModelCRUDMeta):`**:
+
+```python
+from reflex_django.state import ModelState, ModelCRUDMeta
+
+class NotesState(ModelState):
+    model = Note
+    fields = ["title", "content"]
+    paginate_by = 20
+    search_fields = ("title", "content")
+
+    class Meta(ModelCRUDMeta):
+        reset_after_save = True
+        # run_model_validation = True  # Meta only
+```
+
+Do **not** declare `run_model_validation = True` on the class body of `ModelCRUDView` / `ModelState` — that name is reserved for the internal validation method. Use **`Meta.run_model_validation`** only.
 
 ---
 
@@ -682,7 +720,10 @@ Full catalog: [CRUD with mixins and states](crud_with_mixins_and_states.md).
 |---------|--------------|-----|
 | `ImproperlyConfigured` on import | Missing `fields` or invalid field name | Fix `fields`; or add `serializer_class` |
 | Empty list after login | Queryset scoped wrong | `get_queryset()` / `UserScopedMixin` |
-| `save()` does nothing visible | Validation failed | Check `{list}_error` / `structured_errors` |
+| `save()` does nothing visible | Validation failed | Check `error` / `field_errors` |
+| `'bool' object is not callable` on save | `run_model_validation` on class body shadows method | Use `Meta.run_model_validation` only |
+| Only 1 row when `paginate_by = 20` | Stale `page_size` / old defaults | Restart app; ensure `page_size` matches `paginate_by` (fixed in recent versions) |
+| `AttributeError: 'list' has no attribute 'length'` | Used `len()` in UI | Use `State.data.length() > 0` in `rx.cond` |
 | Handler never runs | Same name in subclass replaced assembly | Inspect class `__dict__` |
 | `self.request.user` anonymous | Bridge off or not logged in | [Authentication](authentication.md), event bridge |
 | Stale rows after external change | List not reloaded | Call `refresh()` or rely on post-save reload |
@@ -715,11 +756,12 @@ from notes.models import Note
 class NotesState(ModelState):
     model = Note
     fields = ["title", "content"]
-
-    class Meta:
-        list_var = "notes"
-        # save_note still generated; prefer NotesState.save in new UI
+    # Default vars: data, error, search, on_load_data, save, save_note, …
 ```
+
+Update UI: `NotesState.data`, `NotesState.error`, `NotesState.search`, `on_load=NotesState.on_load_data`, `on_click=NotesState.save`.
+
+To keep plural names during migration, set `Meta.list_var = "notes"` (and optionally `search_var = "notes_search"`).
 
 Both styles can coexist in one codebase during migration.
 

@@ -934,8 +934,8 @@ Class attributes win over inner **`Meta`**. Common options:
 | **`required_fields`** | first writable field | Required on save |
 | **`ordering`** | `("-created_at",)` | **`order_by`** for list |
 | **`save_event`** | `save_{model_name}` | Unified create/update handler |
-| **`structured_errors`** | `False` | Also set **`{list_var}_field_errors`** dict |
-| **`run_model_validation`** | `False` | Run Django **`full_clean()`** before save |
+| **`structured_errors`** | `False` | Also set field-errors dict (`field_errors` on **`ModelState`**; `{list_var}_field_errors` on **`ModelCRUDView`**) |
+| **`run_model_validation`** | `False` | Run Django **`full_clean()`** before save (**`Meta` only** — do not set on the class body; use `validate_model_full_clean()` internally) |
 | **`load_context_processors`** | `True` | Merge **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** onto **`self.request`** |
 | **`reset_after_save`** | `True` | Clear editable vars after successful save |
 | **`form_reset_var`** | `"form_reset_key"` | State var bumped on reset; bind to **`rx.form(..., key=...)`**; set **`None`** to disable |
@@ -958,27 +958,34 @@ class NotesState(AppState, ModelCRUDView):
         search_fields = ("title", "content")
 ```
 
-When enabled, assembly adds:
+When enabled, assembly adds (names depend on `list_var`; **`ModelState`** defaults shown):
 
-| Feature | State / events |
-|---------|----------------|
-| Pagination | **`page`**, **`page_size`**, **`notes_total_count`**, **`notes_page_count`**, **`next_page`**, **`prev_page`**, **`go_to_page`**, **`set_page_size`** |
-| Search | **`notes_search`**, **`set_notes_search`**, **`clear_notes_search`** (resets to page 1) |
-| Dynamic sort | **`notes_ordering`**, **`set_notes_ordering`** (requires **`allow_dynamic_ordering = True`**) |
+| Feature | State / events (`ModelState` defaults) |
+|---------|----------------------------------------|
+| Pagination | **`page`**, **`page_size`** (= `paginate_by`), **`total_count`**, **`page_count`**, **`next_page`**, **`prev_page`**, **`go_to_page`**, **`set_page_size`** |
+| Search | **`search`**, **`set_search`**, **`clear_search`** (resets to page 1) |
+| Dynamic sort | **`ordering`**, **`set_ordering`** (requires **`allow_dynamic_ordering = True`**) |
 
-**Page UI example:**
+With **`ModelCRUDView`** and `list_var = "notes"`: `notes_search`, `notes_total_count`, etc.
+
+**Page UI example (`ModelState`):**
 
 ```python
 rx.hstack(
     rx.input(
-        value=NotesState.notes_search,
-        on_change=NotesState.set_notes_search,
+        value=NotesState.search,
+        on_change=NotesState.set_search,
         placeholder="Search…",
     ),
-    rx.text(f"Page {NotesState.page} / {NotesState.notes_page_count}"),
-    rx.text(f"({NotesState.notes_total_count} total)"),
+    rx.text(f"Page {NotesState.page} / {NotesState.page_count}"),
+    rx.text(f"({NotesState.total_count} total)"),
     rx.button("Prev", on_click=NotesState.prev_page),
     rx.button("Next", on_click=NotesState.next_page),
+)
+rx.cond(
+    NotesState.data.length() > 0,
+    rx.table.body(rx.foreach(NotesState.data, note_row)),
+    rx.text("No rows."),
 )
 ```
 
