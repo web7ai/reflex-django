@@ -813,6 +813,51 @@ class NotesState(AppState, ModelCRUDView):
 
 Outcome hooks: **`on_state_invalid(ctx, errors)`**, **`on_state_valid(ctx, state_data)`**.
 
+### Overriding generated events
+
+At class definition time, **`AppStateMeta`** only injects a handler when that name is **not** already in your class body. Define the same method on your state class to replace the default (for example **`save_note`**, **`start_edit`**, **`delete_note`**, **`on_load_notes`**, **`cancel_edit`**, **`set_title`**, …).
+
+Use **`@rx.event`** on your override (the generated handlers are Reflex events). Keep the same signature the UI expects—for edit, the list row passes the row id: **`NotesState.start_edit(note["id"])`**.
+
+```python
+import reflex as rx
+
+from reflex_django.state import AppState, ModelCRUDView
+
+
+class NotesState(AppState, ModelCRUDView):
+    serializer_class = NoteSerializer
+
+    @rx.event
+    async def start_edit(self, item_id: int) -> None:
+        self.title = "custom"
+        self.editing_id = item_id
+```
+
+To run the built-in load-object → fill-fields pipeline after your own logic, call **`dispatch`**:
+
+```python
+from reflex_django.state.constants import ACTION_START_EDIT
+
+@rx.event
+async def start_edit(self, item_id: int) -> None:
+    await self.dispatch(ACTION_START_EDIT, pk=item_id)
+```
+
+**Login required:** generated handlers are wrapped with **`login_required`** when the action is listed in **`Meta.login_required_actions`** (defaults include **`start_edit`**). Your override does **not** get that wrapper automatically—add it if you still want auth on the event:
+
+```python
+from reflex_django.auth.decorators import login_required
+
+@rx.event(login_required)
+async def start_edit(self, item_id: int) -> None:
+    await self.dispatch(ACTION_START_EDIT, pk=item_id)
+```
+
+Rename events via **`Meta`** (**`save_event`**, **`delete_event`**, **`on_load_event`**, **`cancel_event`**) and override those names instead.
+
+For small behavior changes without replacing the whole event, prefer pipeline hooks (**`populate_edit_state`**, **`perform_create`**, **`on_save_success`**, …) in the section above.
+
 ### Read-only list (`ModelListView`)
 
 ```python
