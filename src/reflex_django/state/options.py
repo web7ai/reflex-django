@@ -31,13 +31,17 @@ def pluralize_model_name(name: str) -> str:
 
 
 def _get_attr(meta: type | None, state_cls: type, name: str, default: Any) -> Any:
-    if hasattr(state_cls, name) and name not in ("Meta",):
-        val = getattr(state_cls, name, None)
-        if val is not None and name in state_cls.__dict__:
-            return val
+    """Resolve config: subclass body → inner ``Meta`` → inherited default."""
+    if name in state_cls.__dict__ and name not in ("Meta",):
+        return state_cls.__dict__[name]
     if meta is not None and hasattr(meta, name):
-        return getattr(meta, name)
-    return getattr(state_cls, name, default)
+        val = getattr(meta, name)
+        if val is not None:
+            return val
+    inherited = getattr(state_cls, name, default)
+    if inherited is not None:
+        return inherited
+    return default
 
 
 @dataclass(frozen=True)

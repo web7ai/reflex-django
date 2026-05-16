@@ -306,13 +306,15 @@ class NoteState(ModelState, UserScopedMixin):
 
 ```python
 class MyState(AppState, ModelCRUDView):
-    serializer_class = MySerializer   # or Meta.serializer = MySerializer
+    serializer_class = MySerializer
+    paginate_by = 20                  # class attrs: best IDE autocomplete
+    search_fields = ("title",)
 
-    class Meta:
-        list_var = "notes"            # optional; default is "data"
-        state_fields = ("title",)   # optional; default = writable serializer fields
-        read_only_fields = ("user",)  # extra read-only (not on state vars)
+    class Meta(ModelCRUDMeta):          # or inner Meta; inherit ModelCRUDMeta for hints
+        list_var = "notes"
 ```
+
+Import: `from reflex_django.state import ModelCRUDMeta`
 
 Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass already defines the same name in its class body.
 

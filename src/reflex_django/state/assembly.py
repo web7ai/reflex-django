@@ -79,6 +79,30 @@ def _uses_model_state_base(bases: tuple[Any, ...]) -> bool:
     return False
 
 
+def _reactive_var_on_base(bases: tuple[Any, ...], name: str) -> bool:
+    """True when a ``ModelState`` ancestor already declares a reactive var name."""
+    for base in bases:
+        if isinstance(base, type) and name in getattr(base, "__annotations__", {}):
+            return True
+    return False
+
+
+def _inject_var_default(
+    namespace: dict[str, Any],
+    annotations: dict[str, Any],
+    bases: tuple[Any, ...],
+    name: str,
+    annotation: Any,
+    default: Any,
+) -> None:
+    """Add a state var annotation; skip plain defaults that shadow ``ModelState`` vars."""
+    if name in namespace:
+        return
+    annotations[name] = annotation
+    if not _reactive_var_on_base(bases, name):
+        namespace[name] = default
+
+
 def _extract_model_and_fields(
     namespace: dict[str, Any],
     bases: tuple[Any, ...],
@@ -206,28 +230,31 @@ def assemble_model_state_namespace(
 
     annotations = dict(namespace.get("__annotations__", {}))
 
-    if options.list_var not in namespace:
-        annotations[options.list_var] = list[dict[str, Any]]
-        namespace[options.list_var] = []
-    if options.error_var not in namespace:
-        annotations[options.error_var] = str
-        namespace[options.error_var] = ""
-    if options.field_errors_var and options.field_errors_var not in namespace:
-        annotations[options.field_errors_var] = dict[str, str]
-        namespace[options.field_errors_var] = {}
-    if options.editing_var not in namespace:
-        annotations[options.editing_var] = int
-        namespace[options.editing_var] = -1
+    _inject_var_default(
+        namespace, annotations, bases, options.list_var, list[dict[str, Any]], []
+    )
+    _inject_var_default(namespace, annotations, bases, options.error_var, str, "")
+    if options.field_errors_var:
+        _inject_var_default(
+            namespace,
+            annotations,
+            bases,
+            options.field_errors_var,
+            dict[str, str],
+            {},
+        )
+    _inject_var_default(namespace, annotations, bases, options.editing_var, int, -1)
 
     is_crud = any(
         b is ModelCRUDView or (isinstance(b, type) and issubclass(b, ModelCRUDView))
         for b in bases
     )
-    if is_crud and options.form_reset_var and options.form_reset_var not in namespace:
-        annotations[options.form_reset_var] = int
-        namespace[options.form_reset_var] = 0
+    if is_crud and options.form_reset_var:
+        _inject_var_default(
+            namespace, annotations, bases, options.form_reset_var, int, 0
+        )
 
-    _assemble_list_features(namespace, options, qualname=qualname)
+    _assemble_list_features(namespace, options, bases=bases, qualname=qualname)
 
     for sf in options.state_fields:
         if sf.name not in namespace:
@@ -284,6 +311,7 @@ def _assemble_list_features(
     namespace: dict[str, Any],
     options: ModelStateOptions,
     *,
+    bases: tuple[Any, ...],
     qualname: str,
 ) -> None:
     """Inject pagination, search, and ordering vars/events when enabled in Meta."""
@@ -291,27 +319,26 @@ def _assemble_list_features(
     lr_load = ACTION_LOAD_LIST in options.login_required_actions
 
     if options.paginate_by is not None:
-        if options.page_var not in namespace:
-            annotations[options.page_var] = int
-            namespace[options.page_var] = 1
-        if options.page_size_var not in namespace:
-            annotations[options.page_size_var] = int
-            namespace[options.page_size_var] = options.paginate_by
-        if options.total_count_var not in namespace:
-            annotations[options.total_count_var] = int
-            namespace[options.total_count_var] = 0
-        if options.page_count_var not in namespace:
-            annotations[options.page_count_var] = int
-            namespace[options.page_count_var] = 0
+        _inject_var_default(namespace, annotations, bases, options.page_var, int, 1)
+        _inject_var_default(
+            namespace,
+            annotations,
+            bases,
+            options.page_size_var,
+            int,
+            options.paginate_by,
+        )
+        _inject_var_default(namespace, annotations, bases, options.total_count_var, int, 0)
+        _inject_var_default(namespace, annotations, bases, options.page_count_var, int, 0)
 
-    if options.search_fields and options.search_var not in namespace:
-        annotations[options.search_var] = str
-        namespace[options.search_var] = ""
+    if options.search_fields:
+        _inject_var_default(namespace, annotations, bases, options.search_var, str, "")
 
-    if options.allow_dynamic_ordering and options.ordering_var not in namespace:
-        annotations[options.ordering_var] = str
+    if options.allow_dynamic_ordering:
         default_order = options.ordering[0] if options.ordering else ""
-        namespace[options.ordering_var] = default_order
+        _inject_var_default(
+            namespace, annotations, bases, options.ordering_var, str, default_order
+        )
 
     namespace["__annotations__"] = annotations
 

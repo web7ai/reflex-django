@@ -27,6 +27,7 @@ from reflex_django.state.serializer_factory import (
 )
 from reflex_django.state.request import DjangoStateRequest
 from reflex_django.state.views.list import ModelListView
+from reflex_django.state.views.meta import ModelCRUDMeta, ModelListMeta
 
 __all__ = [
     "ActionContext",
@@ -35,7 +36,9 @@ __all__ = [
     "BoolStateField",
     "DjangoStateRequest",
     "IntStateField",
+    "ModelCRUDMeta",
     "ModelCRUDView",
+    "ModelListMeta",
     "ModelListView",
     "ModelState",
     "ModelStateOptions",
