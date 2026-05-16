@@ -196,7 +196,12 @@ def assemble_model_state_namespace(
     if meta is not None:
         holder.Meta = meta
 
-    options = resolve_options(serializer_cls, meta, holder)  # type: ignore[arg-type]
+    options = resolve_options(
+        serializer_cls,
+        meta,
+        holder,  # type: ignore[arg-type]
+        use_generic_var_names=_uses_model_state_base(bases),
+    )
     namespace["_model_state_options"] = options
 
     annotations = dict(namespace.get("__annotations__", {}))

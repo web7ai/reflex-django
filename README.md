@@ -660,7 +660,7 @@ class ProductState(ModelState):
     ordering = ("-created_at",)
 ```
 
-**Generated (example):** `products`, `products_error`, `editing_id`, `name`, `price`, `sku`, `is_active`, `set_*`, **`load`**, **`save`**, **`create`**, **`delete`**, **`refresh`**, **`filter`**, **`clear_filter`**, plus legacy `save_product`, `start_edit`, `on_load_products`.
+**Generated (example):** `data`, `error`, `editing_id`, `name`, `price`, `sku`, `is_active`, `set_*`, **`load`**, **`save`**, **`create`**, **`delete`**, **`refresh`**, **`filter`**, **`clear_filter`**, plus legacy `save_product`, `start_edit`, `on_load_data`.
 
 ### Wire the UI
 
@@ -669,7 +669,7 @@ import reflex as rx
 
 def products_page() -> rx.Component:
     return rx.vstack(
-        rx.foreach(ProductState.products, lambda row: rx.hstack(
+        rx.foreach(ProductState.data, lambda row: rx.hstack(
             rx.text(row["name"]),
             rx.button("Edit", on_click=ProductState.load(row["id"])),
             rx.button("Delete", on_click=ProductState.delete(row["id"])),
@@ -704,7 +704,7 @@ class ProductState(ModelState):
 ### How it works
 
 ```text
-on_mount / refresh  →  dispatch("load_list")  →  get_queryset → serialize → self.products
+on_mount / refresh  →  dispatch("load_list")  →  get_queryset → serialize → self.data
 load(42)            →  dispatch("start_edit") →  fill name, price, … ; editing_id = 42
 save()              →  dispatch("save")       →  create or update → reset form → refresh list
 filter(is_active=True) →  store _queryset_filter → refresh
@@ -923,8 +923,12 @@ Class attributes win over inner **`Meta`**. Common options:
 | Option | Default | Purpose |
 |--------|---------|---------|
 | **`serializer` / `serializer_class`** | *(required)* | **`ReflexDjangoModelSerializer`** subclass |
-| **`list_var`** | plural of model name | List of row dicts on state |
-| **`error_var`** | `{list_var}_error` | Single error message string |
+| **`list_var`** | plural of model (`ModelCRUDView`); **`"data"`** (`ModelState`) | List of row dicts on state |
+| **`error_var`** | `{list_var}_error` (`ModelCRUDView`); **`"error"`** (`ModelState`) | Single error message string |
+| **`search_var`** | `{list_var}_search` (`ModelCRUDView`); **`"search"`** (`ModelState`) | Search input when **`search_fields`** set |
+| **`total_count_var`** | `{list_var}_total_count` (`ModelCRUDView`); **`"total_count"`** (`ModelState`) | Pagination total |
+| **`page_count_var`** | `{list_var}_page_count` (`ModelCRUDView`); **`"page_count"`** (`ModelState`) | Pagination page count |
+| **`ordering_var`** | `{list_var}_ordering` (`ModelCRUDView`); **`"ordering"`** (`ModelState`) | Dynamic sort field |
 | **`state_fields`** | writable serializer fields | Explicit editable var names |
 | **`read_only_fields`** | merged with serializer | Excluded from editable vars |
 | **`required_fields`** | first writable field | Required on save |

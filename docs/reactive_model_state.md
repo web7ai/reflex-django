@@ -653,7 +653,11 @@ flowchart TD
 |----------|---------|---------|
 | `use_canonical_api` | `True` | Inject `load`, `save`, `refresh`, … |
 | `serializer` | — | Custom serializer class |
-| `list_var` | plural of model | List var name |
+| `list_var` | `"data"` | List var name |
+| `error_var` | `"error"` | Error message var |
+| `search_var` | `"search"` | Search input var (when `search_fields` set) |
+| `total_count_var` | `"total_count"` | Pagination total (when `paginate_by` set) |
+| `page_count_var` | `"page_count"` | Pagination page count |
 | `save_event` / `delete_event` | `save_{model}`, `delete_{model}` | Legacy handler names |
 | `login_required_actions` | load, save, delete, start_edit | Which handlers get `@login_required` |
 | `permission_classes` | `()` | DRF-style permission classes |
@@ -663,7 +667,7 @@ flowchart TD
 | `read_only_fields` | `()` | Extra non-editable fields |
 | `required_fields` | first writable field | Validation |
 | `run_model_validation` | `False` | Call model `full_clean()` |
-| `structured_errors` | `False` | Per-field `{list}_field_errors` |
+| `structured_errors` | `False` | Per-field `field_errors` (`field_errors_var`) |
 | `reset_after_save` | `True` | Clear form after save |
 | `use_form_submit` | `False` | `save_*_form(form_data)` handler |
 | `load_context_processors` | `True` | Fill `self.request` from context processors |

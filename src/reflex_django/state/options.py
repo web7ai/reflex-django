@@ -8,10 +8,20 @@ from typing import Any
 from django.db import models
 
 from reflex_django.serializers import ReflexDjangoModelSerializer
+from reflex_django.state.constants import (
+    DEFAULT_ERROR_VAR,
+    DEFAULT_FIELD_ERRORS_VAR,
+    DEFAULT_LIST_VAR,
+    DEFAULT_ORDERING_VAR,
+    DEFAULT_PAGE_COUNT_VAR,
+    DEFAULT_SEARCH_VAR,
+    DEFAULT_TOTAL_COUNT_VAR,
+)
 from reflex_django.state.fields import StateField, build_state_fields
 
 
-def _pluralize(name: str) -> str:
+def pluralize_model_name(name: str) -> str:
+    """Pluralize a Django model class name (for ``Meta.list_var`` overrides)."""
     lower = name.lower()
     if lower.endswith("y") and len(lower) > 1 and lower[-2] not in "aeiou":
         return lower[:-1] + "ies"
@@ -74,21 +84,47 @@ class ModelStateOptions:
     use_canonical_api: bool
 
 
+def _default_list_var(model_name: str, *, use_generic_var_names: bool) -> str:
+    if use_generic_var_names:
+        return DEFAULT_LIST_VAR
+    return pluralize_model_name(model_name)
+
+
 def resolve_options(
     serializer_cls: type[ReflexDjangoModelSerializer],
     meta: type | None,
     state_cls: type,
+    *,
+    use_generic_var_names: bool = False,
 ) -> ModelStateOptions:
-    """Build :class:`ModelStateOptions` from serializer, ``Meta``, and class attrs."""
+    """Build :class:`ModelStateOptions` from serializer, ``Meta``, and class attrs.
+
+    When ``use_generic_var_names`` is true (``ModelState`` subclasses), unset
+    ``Meta`` keys default to ``data``, ``error``, ``search``, etc. Legacy
+    ``ModelCRUDView`` without ``ModelState`` keeps pluralized list names.
+    """
     from reflex_django.state.backends.django import DjangoORMBackend
 
     model = serializer_cls.get_model()
     model_name = model.__name__
-    list_var = _get_attr(meta, state_cls, "list_var", None) or _pluralize(model_name)
-    error_var = _get_attr(meta, state_cls, "error_var", None) or f"{list_var}_error"
+    list_var = str(
+        _get_attr(meta, state_cls, "list_var", None)
+        or _default_list_var(model_name, use_generic_var_names=use_generic_var_names)
+    )
+    error_var = str(
+        _get_attr(meta, state_cls, "error_var", None)
+        or (DEFAULT_ERROR_VAR if use_generic_var_names else f"{list_var}_error")
+    )
     structured_errors = bool(_get_attr(meta, state_cls, "structured_errors", False))
     field_errors_var = (
-        _get_attr(meta, state_cls, "field_errors_var", None) or f"{list_var}_field_errors"
+        str(
+            _get_attr(meta, state_cls, "field_errors_var", None)
+            or (
+                DEFAULT_FIELD_ERRORS_VAR
+                if use_generic_var_names
+                else f"{list_var}_field_errors"
+            )
+        )
         if structured_errors
         else None
     )
@@ -146,18 +182,32 @@ def resolve_options(
     page_var = str(_get_attr(meta, state_cls, "page_var", "page"))
     page_size_var = str(_get_attr(meta, state_cls, "page_size_var", "page_size"))
     total_count_var = str(
-        _get_attr(meta, state_cls, "total_count_var", None) or f"{list_var}_total_count"
+        _get_attr(meta, state_cls, "total_count_var", None)
+        or (
+            DEFAULT_TOTAL_COUNT_VAR
+            if use_generic_var_names
+            else f"{list_var}_total_count"
+        )
     )
     page_count_var = str(
-        _get_attr(meta, state_cls, "page_count_var", None) or f"{list_var}_page_count"
+        _get_attr(meta, state_cls, "page_count_var", None)
+        or (
+            DEFAULT_PAGE_COUNT_VAR
+            if use_generic_var_names
+            else f"{list_var}_page_count"
+        )
     )
     search_fields = tuple(_get_attr(meta, state_cls, "search_fields", ()) or ())
-    search_var = str(_get_attr(meta, state_cls, "search_var", None) or f"{list_var}_search")
+    search_var = str(
+        _get_attr(meta, state_cls, "search_var", None)
+        or (DEFAULT_SEARCH_VAR if use_generic_var_names else f"{list_var}_search")
+    )
     allow_dynamic_ordering = bool(
         _get_attr(meta, state_cls, "allow_dynamic_ordering", False)
     )
     ordering_var = str(
-        _get_attr(meta, state_cls, "ordering_var", None) or f"{list_var}_ordering"
+        _get_attr(meta, state_cls, "ordering_var", None)
+        or (DEFAULT_ORDERING_VAR if use_generic_var_names else f"{list_var}_ordering")
     )
     use_canonical_api = bool(_get_attr(meta, state_cls, "use_canonical_api", True))
 
@@ -208,4 +258,4 @@ def resolve_options(
     )
 
 
-__all__ = ["ModelStateOptions", "resolve_options"]
+__all__ = ["ModelStateOptions", "pluralize_model_name", "resolve_options"]

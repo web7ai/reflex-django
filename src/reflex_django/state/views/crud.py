@@ -18,7 +18,7 @@ class ModelCRUDView(ModelORMMixin, DispatchMixin, LoginRequiredMixin, ABC):
             serializer_class = NoteSerializer
 
             class Meta:
-                list_var = "notes"
+                # list_var defaults to "data"; override e.g. list_var = "notes"
     """
 
     class Meta:

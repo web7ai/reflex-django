@@ -91,6 +91,15 @@ class _NoCanonicalState(ModelState):
         use_canonical_api = False
 
 
+class _SearchProductState(ModelState):
+    model = RmProduct
+    fields = ["name", "price"]
+
+    class Meta:
+        search_fields = ("name",)
+        paginate_by = 10
+
+
 def test_build_serializer_from_fields_includes_id() -> None:
     _SERIALIZER_CACHE.clear()
     ser_cls = build_serializer_from_fields(RmProduct, ["name", "price"])
@@ -117,14 +126,28 @@ def test_model_inferred_from_optional_generic_subscript() -> None:
     assert _ProductStateFromGeneric.model is RmProduct
 
 
+def test_default_search_and_pagination_var_names() -> None:
+    cfg = _SearchProductState.get_options()
+    assert cfg.search_var == "search"
+    assert cfg.total_count_var == "total_count"
+    assert cfg.page_count_var == "page_count"
+    assert hasattr(_SearchProductState, "set_search")
+    assert hasattr(_SearchProductState, "clear_search")
+    assert hasattr(_SearchProductState, "_load_data")
+    assert hasattr(_SearchProductState, "on_load_data")
+
+
 def test_product_state_auto_serializer_and_vars() -> None:
-    assert hasattr(ProductState, "products")
+    assert hasattr(ProductState, "data")
     assert hasattr(ProductState, "name")
     assert hasattr(ProductState, "price")
     assert hasattr(ProductState, "is_active")
-    assert ProductState.__annotations__["products"] == list[dict[str, Any]]
+    assert ProductState.__annotations__["data"] == list[dict[str, Any]]
     cfg = ProductState.get_options()
     assert cfg.model is RmProduct
+    assert cfg.list_var == "data"
+    assert cfg.error_var == "error"
+    assert cfg.search_var == "search"
     assert cfg.use_canonical_api is True
 
 
@@ -144,8 +167,10 @@ def test_canonical_handlers_generated() -> None:
     assert hasattr(ProductState, "start_edit")
 
 
-def test_second_model_state_independent_list_var() -> None:
-    assert hasattr(CategoryState, "categories")
+def test_second_model_state_shares_default_var_names_per_class() -> None:
+    assert hasattr(CategoryState, "data")
+    assert hasattr(ProductState, "data")
+    assert CategoryState.get_options().list_var == "data"
     assert "label" in CategoryState.__annotations__
     assert "name" not in CategoryState.__annotations__
 
@@ -186,7 +211,7 @@ def test_filter_queryset_applies_stored_filter() -> None:
 
 def test_get_row_reads_from_list_var() -> None:
     state = ProductState()
-    state.products = [
+    state.data = [
         {"id": 1, "name": "A", "price": "1.00", "is_active": True},
         {"id": 2, "name": "B", "price": "2.00", "is_active": False},
     ]

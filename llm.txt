@@ -264,7 +264,7 @@ class ProductState(ModelState):
     model = Product
     fields = ["name", "price", "is_active"]
     ordering = ("-created_at",)
-# Generated: products, products_error, editing_id, field vars, load, save, refresh, filter, …
+# Generated: data, error, editing_id, field vars, load, save, refresh, filter, …
 ```
 
 Auto-builds serializer from `model` + `fields` unless `serializer_class` / `Meta.serializer` is set. Invalid field names → `ImproperlyConfigured` at import.
@@ -309,24 +309,24 @@ class MyState(AppState, ModelCRUDView):
     serializer_class = MySerializer   # or Meta.serializer = MySerializer
 
     class Meta:
-        list_var = "items"            # optional; default pluralizes model name
+        list_var = "notes"            # optional; default is "data"
         state_fields = ("title",)   # optional; default = writable serializer fields
         read_only_fields = ("user",)  # extra read-only (not on state vars)
 ```
 
 Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass already defines the same name in its class body.
 
-### Generated members (example: model `Note`, `list_var="notes"`)
+### Generated members (defaults; override via `Meta`)
 
 | Member | Role |
 |--------|------|
-| `notes` | `list[dict]` serialized rows |
-| `notes_error` | `str` validation / error message |
+| `data` | `list[dict]` serialized rows (`Meta.list_var`) |
+| `error` | `str` validation / error message (`Meta.error_var`) |
 | `editing_id` | `int`, `-1` = create mode, `>=0` = editing pk |
 | `title`, `content`, … | flat editable state vars (not `form_*` prefixes) |
 | `set_title`, … | `@rx.event` setters |
-| `_load_notes` | internal reload |
-| `on_load_notes` | page `on_load` target |
+| `_load_data` | internal reload |
+| `on_load_data` | page `on_load` target |
 | `save_note` | create or update from flat vars + `editing_id` |
 | `start_edit(item_id)` | populate vars, set `editing_id` |
 | `delete_note(item_id)` | delete + refresh list |
@@ -339,16 +339,16 @@ Assembly (via `AppStateMeta`) declares vars + handlers unless the subclass alrea
 
 | Meta | Injects |
 |------|---------|
-| `paginate_by = 20` | `page`, `page_size`, `{list}_total_count`, `{list}_page_count`, `next_page`, `prev_page`, `go_to_page`, `set_page_size` |
-| `search_fields = ("title",)` | `{list}_search`, `set_{list}_search`, `clear_{list}_search` |
-| `allow_dynamic_ordering = True` | `{list}_ordering`, `set_{list}_ordering` |
+| `paginate_by = 20` | `page`, `page_size`, `total_count`, `page_count`, `next_page`, `prev_page`, `go_to_page`, `set_page_size` |
+| `search_fields = ("title",)` | `search`, `set_search`, `clear_search` |
+| `allow_dynamic_ordering = True` | `ordering`, `set_ordering` |
 
 Default `paginate_by = None` → full list (no page vars). Hooks: `apply_search`, `paginate_queryset`, `get_ordering`, `on_page_change`.
 
 ### Event flow
 
 ```text
-on_load_notes  → dispatch("load_list")  → get_queryset → filter_queryset → serialize → notes
+on_load_data  → dispatch("load_list")  → get_queryset → filter_queryset → serialize → data
 save_note      → dispatch("save")       → validate_state → create|update → on_save_success → reset_state_fields? → refresh list
 start_edit(id) → dispatch("start_edit") → get_object → populate state vars
 ```
@@ -394,16 +394,16 @@ def get_create_kwargs(self, state_data: dict) -> dict:
 ```python
 def notes_page() -> rx.Component:
     return rx.vstack(
-        rx.cond(NotesState.notes_error != "", rx.callout(NotesState.notes_error)),
+        rx.cond(NotesState.error != "", rx.callout(NotesState.error)),
         rx.input(value=NotesState.title, on_change=NotesState.set_title),
         rx.button("Save", on_click=NotesState.save_note),
         rx.foreach(
-            NotesState.notes,
+            NotesState.data,
             lambda n: rx.button("Edit", on_click=NotesState.start_edit(n["id"])),
         ),
     )
 
-# app.add_page(notes_page, route="/notes", on_load=NotesState.on_load_notes)
+# app.add_page(notes_page, route="/notes", on_load=NotesState.on_load_data)
 ```
 
 ### Validation hooks (state-centric names — not `form_*`)
@@ -419,7 +419,7 @@ def notes_page() -> rx.Component:
 | `perform_create(ctx, state_data)` | ORM create |
 | `perform_update(ctx, instance, state_data)` | ORM update |
 
-Set `run_model_validation = True` to call Django `full_clean()`. Set `structured_errors = True` for `{list_var}_field_errors`.
+Set `run_model_validation = True` to call Django `full_clean()`. Set `structured_errors = True` for `field_errors` (`Meta.field_errors_var`).
 
 ### Read-only lists
 
