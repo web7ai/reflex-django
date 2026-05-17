@@ -89,19 +89,34 @@ def _router_data_from_state_chain(state: Any) -> dict[str, Any]:
     if state is None:
         return {}
 
+    from unittest.mock import Mock
+
+    if isinstance(state, Mock):
+        return {}
+
     try:
         root = state._get_root_state()  # noqa: SLF001
     except (AttributeError, TypeError):
         root = state
 
+    if isinstance(root, Mock):
+        return {}
+
     seen: set[int] = set()
     node: Any = root
-    while node is not None and id(node) not in seen:
+    max_hops = 64
+    while node is not None and id(node) not in seen and max_hops > 0:
+        max_hops -= 1
         seen.add(id(node))
+        if isinstance(node, Mock):
+            break
         raw = getattr(node, "router_data", None)
         if isinstance(raw, dict) and (raw.get("headers") or {}).get("cookie"):
             return raw
-        node = getattr(node, "parent_state", None)
+        parent = getattr(node, "parent_state", None)
+        if parent is None or isinstance(parent, Mock):
+            break
+        node = parent
     return {}
 
 

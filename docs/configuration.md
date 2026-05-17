@@ -91,6 +91,8 @@ From `reflex_django.default_settings` (override in your `settings.py`):
 
 Database URL also falls back from Reflex `config.db_url` to a local SQLite file when using defaults.
 
+**Bundled `MIDDLEWARE`:** includes `reflex_django.streaming_middleware.AsyncStreamingMiddleware` so Django ASGI does not warn when serving sync streaming responses (for example admin static files or `MEDIA` downloads). It subclasses Django's `MiddlewareMixin` and is safe in both sync and async chains. If you maintain your own `settings.py` without importing `reflex_django.default_settings.MIDDLEWARE`, add that class as the last entry in `MIDDLEWARE` (after `XFrameOptionsMiddleware` / `SecurityMiddleware` if you use them).
+
 ---
 
 ## Public API imports

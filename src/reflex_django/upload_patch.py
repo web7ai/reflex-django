@@ -9,8 +9,7 @@ enqueue time (reliable even when the handler event is processed on a worker task
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
+import contextvars
 import dataclasses
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
@@ -23,8 +22,10 @@ if TYPE_CHECKING:
 
     from reflex.app import App
 
-_upload_patch_lock = asyncio.Lock()
 _upload_patch_applied = False
+_upload_router_data: contextvars.ContextVar[dict[str, Any] | None] = (
+    contextvars.ContextVar("reflex_django_upload_router_data", default=None)
+)
 
 
 def _event_has_session_cookie(event: Any) -> bool:
@@ -67,13 +68,11 @@ def inject_router_data_into_event(event: Any, router_data: dict[str, Any]) -> An
     return dataclasses.replace(event, router_data=merged)
 
 
-@contextlib.asynccontextmanager
-async def _patch_event_processor_enqueue(
-    app: App,
-    router_data: dict[str, Any],
-) -> AsyncGenerator[None, None]:
-    """Wrap ``event_processor.enqueue`` so upload events carry session cookies."""
-    processor = app.event_processor
+def _wrap_event_processor_enqueue(processor: Any) -> None:
+    """Patch ``enqueue`` / ``enqueue_stream_delta`` to inject upload ``router_data``."""
+    if getattr(processor, "_reflex_django_upload_wrapped", False):
+        return
+
     orig_stream = processor.enqueue_stream_delta
     orig_enqueue = processor.enqueue
 
@@ -81,7 +80,12 @@ async def _patch_event_processor_enqueue(
         token: str,
         event: Event,
     ) -> AsyncGenerator[Any, None]:
-        patched = inject_router_data_into_event(event, router_data)
+        router_data = _upload_router_data.get()
+        patched = (
+            inject_router_data_into_event(event, router_data)
+            if router_data is not None
+            else event
+        )
         async for delta in orig_stream(token, patched):
             yield delta
 
@@ -90,16 +94,17 @@ async def _patch_event_processor_enqueue(
         event: Event,
         ev_ctx: Any = None,
     ) -> Any:
-        patched = inject_router_data_into_event(event, router_data)
+        router_data = _upload_router_data.get()
+        patched = (
+            inject_router_data_into_event(event, router_data)
+            if router_data is not None
+            else event
+        )
         return await orig_enqueue(token, patched, ev_ctx)
 
     processor.enqueue_stream_delta = enqueue_stream_delta  # type: ignore[method-assign]
     processor.enqueue = enqueue  # type: ignore[method-assign]
-    try:
-        yield
-    finally:
-        processor.enqueue_stream_delta = orig_stream  # type: ignore[method-assign]
-        processor.enqueue = orig_enqueue  # type: ignore[method-assign]
+    processor._reflex_django_upload_wrapped = True  # noqa: SLF001
 
 
 async def _patched_upload_buffered_file(
@@ -113,15 +118,18 @@ async def _patched_upload_buffered_file(
     import reflex_components_core.core._upload as upload_mod
 
     router_data = _router_data_from_starlette_request(request)
-    async with _upload_patch_lock:
-        async with _patch_event_processor_enqueue(app, router_data):
-            return await upload_mod._upload_buffered_file__orig__(
-                request,
-                app,
-                token=token,
-                handler_name=handler_name,
-                handler_upload_param=handler_upload_param,
-            )
+    _wrap_event_processor_enqueue(app.event_processor)
+    ctx_token = _upload_router_data.set(router_data)
+    try:
+        return await upload_mod._upload_buffered_file__orig__(
+            request,
+            app,
+            token=token,
+            handler_name=handler_name,
+            handler_upload_param=handler_upload_param,
+        )
+    finally:
+        _upload_router_data.reset(ctx_token)
 
 
 async def _patched_upload_chunk_file(
@@ -136,16 +144,19 @@ async def _patched_upload_chunk_file(
     import reflex_components_core.core._upload as upload_mod
 
     router_data = _router_data_from_starlette_request(request)
-    async with _upload_patch_lock:
-        async with _patch_event_processor_enqueue(app, router_data):
-            return await upload_mod._upload_chunk_file__orig__(
-                request,
-                app,
-                token=token,
-                handler_name=handler_name,
-                handler_upload_param=handler_upload_param,
-                acknowledge_on_upload_endpoint=acknowledge_on_upload_endpoint,
-            )
+    _wrap_event_processor_enqueue(app.event_processor)
+    ctx_token = _upload_router_data.set(router_data)
+    try:
+        return await upload_mod._upload_chunk_file__orig__(
+            request,
+            app,
+            token=token,
+            handler_name=handler_name,
+            handler_upload_param=handler_upload_param,
+            acknowledge_on_upload_endpoint=acknowledge_on_upload_endpoint,
+        )
+    finally:
+        _upload_router_data.reset(ctx_token)
 
 
 def apply_upload_router_data_patch() -> None:

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Django ASGI no longer warns about synchronous ``StreamingHttpResponse``
+  iterators (admin static, ``FileResponse``, etc.) when
+  ``reflex_django.streaming_middleware.AsyncStreamingMiddleware`` is enabled
+  (included in bundled ``MIDDLEWARE``).
+- ``AsyncStreamingMiddleware`` now subclasses
+  ``MiddlewareMixin`` with both sync and async support, fixing
+  ``'coroutine' object has no attribute 'get'`` and media/static 500s when the
+  middleware was placed in ``MIDDLEWARE``.
 - Upload handlers (`rx.upload` / `rx.upload_files`) now receive the same
   Django session and ``self.request.user`` as other Reflex events. Reflex
   previously enqueued upload events without ``router_data``; reflex-django
