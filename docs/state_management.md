@@ -274,6 +274,8 @@ Helper states are still **`rx.State` subclasses**. They add fields and `@rx.even
 
 Mirrors `request.user` as flat fields: `user_id`, `username`, `email`, `first_name`, `last_name`, `is_authenticated`, `is_staff`, `is_superuser`, `group_names`.
 
+**`DjangoAuthState`** (canned login/register pages) is a separate flat substate: snapshot fields match the list above except **`is_authenticated`**, which is a **`@rx.var`** backed by **`current_user()`** for UI bindings. See [Authentication](authentication.md#djangouserstate-without-appstate).
+
 For **new apps**, prefer **`AppState`** (below)—it includes the same snapshot fields plus `self.user`, `self.session`, `login`/`logout`, and optional auto-sync. Use standalone **`DjangoUserState`** when you only want a small nav state separate from CRUD/dashboard state.
 
 ```python

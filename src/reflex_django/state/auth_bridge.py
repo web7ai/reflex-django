@@ -133,6 +133,16 @@ class AuthBridgeMixin:
 
         return await sync_to_async(_exists)()
 
+    async def refresh_django_user_fields(
+        self,
+        *,
+        include_groups: bool | None = None,
+    ) -> None:
+        """Update auth snapshot vars on this substate from :func:`current_user`."""
+        from reflex_django.auth_state import apply_auth_snapshot_to_state
+
+        await apply_auth_snapshot_to_state(self, include_groups=include_groups)
+
     async def login(
         self,
         username: str,

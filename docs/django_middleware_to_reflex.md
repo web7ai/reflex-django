@@ -63,6 +63,8 @@ Works in every `@rx.event` handler while `DjangoEventBridge` is enabled (default
 
 **Do not use `request.user` in component trees** (`rx.text(request.user)` fails — Reflex only accepts primitives, vars, or components). For navbar labels use **`DjangoAuthState.username`** / **`AppState.username`**, or primitive `request.username` only inside handlers (not as a reactive var on the client).
 
+For login/logout UI on canned auth layouts, use **`DjangoAuthState.is_authenticated`** (`@rx.var` from **`current_user()`**), not the old inherited `django_user_state` snapshot path. [Authentication](authentication.md#djangouserstate-without-appstate).
+
 **Invalid:** `from reflex_django.state import request` — use `from reflex_django import request`.
 
 **Option B — context helpers** (explicit):

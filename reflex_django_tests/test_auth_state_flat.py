@@ -20,6 +20,8 @@ def test_django_auth_state_is_single_substate_under_user() -> None:
     assert hasattr(DjangoAuthState, "reset_error")
     assert hasattr(DjangoAuthState, "redirect_to_login")
     assert hasattr(DjangoAuthState, "sync_auth_ui")
+    assert hasattr(DjangoAuthState, "sync_from_django")
+    assert hasattr(DjangoAuthState, "refresh_django_user_fields")
     assert hasattr(DjangoAuthState, "is_authenticated")
     assert "is_authenticated" in DjangoAuthState.computed_vars
     assert "is_authenticated" not in DjangoAuthState.inherited_vars

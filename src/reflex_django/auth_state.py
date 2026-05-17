@@ -204,18 +204,6 @@ class DjangoUserState(AuthBridgeMixin, rx.State):
     is_superuser: bool = False
     group_names: list[str] = []
 
-    async def refresh_django_user_fields(
-        self,
-        *,
-        include_groups: bool | None = None,
-    ) -> None:
-        """Update snapshot vars from :func:`current_user` (callable from any coroutine).
-
-        Args:
-            include_groups: Same semantics as :meth:`sync_from_django`.
-        """
-        await apply_auth_snapshot_to_state(self, include_groups=include_groups)
-
     @rx.event
     async def sync_from_django(
         self,

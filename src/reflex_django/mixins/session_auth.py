@@ -200,11 +200,8 @@ def populate_session_auth_state(
         ns[cfg.submit_form_event] = rx.event(submit_form_impl)
 
     async def logout_impl(self: Any) -> Any:
-        from reflex_django.auth_state import _mark_auth_ui_dirty
-
         request = current_request()
         await AuthBridgeMixin.logout(self)
-        _mark_auth_ui_dirty(self)
         if request is None:
             return rx.call_script(_defer_nav_js(post_out))
         await session_async_save(request)

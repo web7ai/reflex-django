@@ -95,8 +95,18 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
             if k != "is_authenticated"
         }
         ns.update(_AUTH_SNAPSHOT_DEFAULTS)
-        ns["sync_from_django"] = DjangoUserState.sync_from_django
-        ns["refresh_django_user_fields"] = DjangoUserState.refresh_django_user_fields
+
+        @rx.event
+        async def sync_from_django(
+            self: Any,
+            *,
+            include_groups: bool | None = None,
+        ) -> None:
+            from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
+
+            await _sync_auth_snapshots_in_tree(self, include_groups=include_groups)
+
+        ns["sync_from_django"] = sync_from_django
         populate_session_auth_state(
             ns,
             session_cfg,

@@ -257,6 +257,8 @@ ReflexDjangoPlugin(settings_module="backend.settings", install_event_bridge=Fals
 
 Server-side authorization must still use **`current_user()`** (or stricter checks); client-visible state is for display only.
 
+**`DjangoAuthState`** (canned login/register pages) is a flat auth substate: snapshot fields match the list above, but **`is_authenticated`** is a **`@rx.var`** that reads **`current_user()`** for UI (`rx.cond`, `@login_required`). Use **`DjangoAuthState.is_authenticated`** for sidebar logout—not the old inherited `django_user_state` snapshot. Details: [docs/authentication.md](docs/authentication.md).
+
 ```python
 import reflex as rx
 from reflex_django import DjangoUserState
@@ -457,7 +459,8 @@ Subclass **`AppState`** for dashboards, feature state, and **`ModelCRUDView`** C
 
 | In event handlers | In UI (`rx.cond`, components) |
 |-------------------|-------------------------------|
-| **`self.request`** — bridged Django request (`self.request.user`, `.GET`, `.path`, …) | `self.is_authenticated` |
+| **`self.request`** — bridged Django request (`self.request.user`, `.GET`, `.path`, …) | `self.is_authenticated` on **`AppState`** branches |
+| | **`DjangoAuthState.is_authenticated`** (`@rx.var`) on canned auth / sidebar logout |
 | **`self.django_request`** — raw `HttpRequest` | `self.username`, `self.email`, … |
 | `self.user` — same as `self.request.user` | Auto-updated when `REFLEX_DJANGO_AUTH_AUTO_SYNC=True` |
 | `self.session["key"]` — read/write session | |

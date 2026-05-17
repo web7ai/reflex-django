@@ -54,22 +54,28 @@ There is **no second auth implementation**—handlers use Django’s session row
 | Layer | Where | Use for |
 |-------|--------|---------|
 | **Live** | `self.user`, `self.session` in `@rx.event` handlers | Authorization, ORM scoping, session writes |
-| **Snapshot** | `self.is_authenticated`, `self.username`, `self.email`, … | UI bindings (`rx.cond`, `rx.text`) |
+| **Snapshot** | `self.is_authenticated`, `self.username`, `self.email`, … | UI bindings on **`AppState`** / **`DjangoUserState`** branches (`rx.cond`, `rx.text`) |
+| **Live UI (canned auth)** | **`DjangoAuthState.is_authenticated`** (`@rx.var`) | Sidebar logout, **`@login_required`** page gate — reads **`current_user()`** per event |
 
 ```python
 # Live — always current for this event; not sent to the browser as a Reflex var
 if self.user.is_authenticated:
     await MyModel.objects.filter(owner=self.user).adelete()
 
-# Snapshot — synced to the client for components
+# Snapshot — synced to the client for AppState / dashboard branches
 rx.cond(DashboardState.is_authenticated, rx.text(DashboardState.username), ...)
+
+# Canned auth branch — live session via @rx.var (not the inherited django_user_state snapshot)
+rx.cond(DjangoAuthState.is_authenticated, logout_button, ...)
 ```
 
-**Rule:** Never use snapshot fields alone to allow deletes, admin actions, or private data—always check `self.user` or `require_login_user()` in the handler.
+In component code, **`DjangoAuthState.is_authenticated`** is a Reflex **`Var`** (for example `BooleanCastedVar`), not a Python **`bool`**—that is expected. The client evaluates it from server state after each event.
 
-When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **all** **`DjangoUserState`** substates (including **`DjangoAuthState`** and **`AppState`** branches), so navbars and dashboards update after login/logout without calling `sync_from_django` on every page.
+**Rule:** Never use snapshot or computed UI fields alone to allow deletes, admin actions, or private data—always check `self.user` or `require_login_user()` in the handler.
 
-**`DjangoUserState.sync_from_django`** (e.g. in page `on_load`) performs the same full-tree refresh. Use it when the template chains `on_load=[DjangoUserState.sync_from_django, …]` but the UI binds **`DjangoAuthState.is_authenticated`** (sidebar logout, canned auth vars).
+When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **all** **`DjangoUserState`** substates and **`DjangoAuthState`** (username, email, …), so navbars and dashboards update after login/logout without calling `sync_from_django` on every page. **`DjangoAuthState.is_authenticated`** is separate: it is a **`@rx.var`** that calls **`current_user()`** and does not rely on the old inherited snapshot on a parent `django_user_state` substate.
+
+**`DjangoUserState.sync_from_django`** (e.g. in page `on_load`) performs the same full-tree refresh for snapshot fields. Optional **`DjangoAuthState.sync_auth_ui`** refreshes snapshots and marks inherited fields dirty when you mix auth and app substates in one layout.
 
 ---
 
@@ -517,7 +523,9 @@ await self.refresh_django_user_fields()
 await self.sync_from_django(include_groups=True)
 ```
 
-`sync_from_django` walks the client state tree and refreshes **every** `DjangoUserState` substate, not only the handler’s node—so `DjangoAuthState.is_authenticated` stays aligned when `on_load` references `DjangoUserState.sync_from_django`.
+`sync_from_django` walks the client state tree and refreshes **every** `DjangoUserState` substate and **`DjangoAuthState`** (snapshot fields such as `username`), not only the handler’s node.
+
+For **`DjangoAuthState`**, use **`DjangoAuthState.is_authenticated`** in UI (`@rx.var` from **`current_user()`**). Do not expect the legacy inherited path `…django_user_state.is_authenticated` on the auth branch—that parent substate no longer exists on the flat auth class.
 
 Group names are only loaded when `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` is `True` or `include_groups=True` is passed.
 
@@ -607,7 +615,7 @@ Works on **page functions** (no `self`) and **event handlers** (`async def handl
 ```python
 from reflex_django.auth import login_required
 
-# Page: UI gate using DjangoAuthState snapshot + redirect on mount
+# Page: UI gate using DjangoAuthState.is_authenticated (@rx.var) + redirect on mount
 @rx.page(route="/dashboard")
 @login_required
 def dashboard():
@@ -748,7 +756,30 @@ LoginState = session_auth_mixin(
 )
 ```
 
-`DjangoAuthState` (canned auth pages) is a flat class built from `DjangoUserState` + login/register/reset mixins.
+`DjangoAuthState` (canned auth pages) is a **flat** Reflex substate: **`AuthBridgeMixin` + `rx.State`**, with login/register/reset mixins merged in one class (not a nested `DjangoUserState` → `DjangoAuthState` substate chain).
+
+| Field / API | Role on `DjangoAuthState` |
+|-------------|---------------------------|
+| `user_id`, `username`, `email`, … | Owned snapshot fields (synced like `DjangoUserState`) |
+| **`is_authenticated`** | **`@rx.var`** — live `current_user().is_authenticated` for UI and `@login_required` |
+| `sync_from_django` | Same tree sync as `DjangoUserState` (delegated implementation) |
+| `sync_auth_ui` | Optional: refresh snapshots + dirty-mark on auth substate after layout mount |
+| `logout`, `submit_login`, … | Session auth events from `session_auth_mixin` |
+
+**Sidebar / layout example:**
+
+```python
+from reflex_django.auth.state import DjangoAuthState
+
+def sidebar_logout():
+    return rx.cond(
+        DjangoAuthState.is_authenticated,
+        rx.button("Log out", on_click=DjangoAuthState.logout),
+        rx.fragment(),
+    )
+```
+
+**App dashboards** that use **`AppState`** / **`OverviewState`** should keep using that branch’s snapshot **`is_authenticated`** (or **`self.request.user`** in handlers). Mixing branches is fine: Welcome text can come from `load_metrics` + `self.request.user` while logout uses **`DjangoAuthState.is_authenticated`**.
 
 ---
 
@@ -815,7 +846,9 @@ See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AU
 | Confused `request.user` in UI | User model in component tree | Use `self.username` / `self.is_authenticated` in `rx.*` |
 | Login works once, next event anonymous | Browser cookie stale | `_sync_session_cookie_then_nav` after login |
 | UI shows logged out while handler sees user | Snapshot not synced | Enable `REFLEX_DJANGO_AUTH_AUTO_SYNC` or `on_load=State.sync_from_django` |
-| Logout button hidden (`DjangoAuthState.is_authenticated` false) | `is_authenticated` is inherited on `DjangoAuthState`; UI may not re-render | Use `DjangoAuthState.auth_logged_in` in sidebar (set by `sync_from_django`); keep `on_load=DjangoUserState.sync_from_django` |
+| Logout button flashes then hides | UI bound to inherited `django_user_state.is_authenticated` snapshot, or stale snapshot on auth branch | Use **`DjangoAuthState.is_authenticated`** (`@rx.var`, library ≥ fix); reinstall editable package and **restart Reflex** so `DjangoAuthState` rebuilds |
+| `print(DjangoAuthState.is_authenticated)` shows a `Var`, not `True`/`False` | Expected in Python component code | Vars are reactive; test in the browser or in an event handler with `current_user()` |
+| Logout hidden on small screens | Sidebar `display` breakpoints hide the column | Show sidebar from `md`/`lg` up (see your `sidebar.py` `display=[...]`) |
 | `RuntimeError: No Django session` | Handler outside event / bridge failed | Ensure bridge runs; check logs for preprocess errors |
 | Permission always denied | Wrong codename or user lacks perm | Verify in Django admin; use `user.has_perm` in shell |
 | `ImportError: _session_async_save` | Old import path | Use `from reflex_django.state.auth_bridge import session_async_save` |

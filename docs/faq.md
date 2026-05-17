@@ -36,6 +36,10 @@ Reflex events are not HTTP requests. Only `DjangoEventBridge` runs (session, use
 
 No—for authorization use `current_user()` or `require_login_user()` on the server.
 
+### Can I trust `DjangoAuthState.is_authenticated` in the sidebar?
+
+Use it for **UI only** (`rx.cond`, `@login_required` page shell). It is a **`@rx.var`** that reads **`current_user()`** on the server during events—not a Python `bool` in your component module. For mutations, still use **`self.request.user`** or **`require_login_user()`** in handlers. See [Authentication — `DjangoAuthState`](authentication.md#djangouserstate-without-appstate).
+
 ---
 
 ## Configuration and routing
