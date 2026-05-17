@@ -13,7 +13,6 @@ configure_django()
 from reflex_django.auth_state import DjangoUserState  # noqa: E402
 from reflex_django.mixins.session_auth import SessionAuthConfig, session_auth_mixin  # noqa: E402
 
-
 class _AppStub(rx.State):
     app_flag: bool = False
 
@@ -70,6 +69,17 @@ def test_session_auth_mixin_custom_field_and_event_names() -> None:
     assert hasattr(Cls, "set_u")
     assert hasattr(Cls, "set_p")
     assert not hasattr(Cls, "submit_login_form")
+
+
+def test_session_auth_logout_handler_calls_auth_bridge() -> None:
+    """Default ``logout`` event must delegate to AuthBridgeMixin (not ``self.logout()``)."""
+    import inspect
+
+    from reflex_django.mixins import session_auth as mod
+
+    src = inspect.getsource(mod.populate_session_auth_state)
+    assert "AuthBridgeMixin.logout(self)" in src
+    assert "await self.logout()" not in src
 
 
 def test_mixins_package_reexports_session_auth() -> None:

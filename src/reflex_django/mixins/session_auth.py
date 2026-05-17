@@ -14,7 +14,7 @@ import reflex as rx
 from reflex_django.auth.login_fields import DEFAULT_LOGIN_FIELDS
 from reflex_django.auth_state import DjangoUserState
 from reflex_django.context import current_request
-from reflex_django.state.auth_bridge import session_async_save
+from reflex_django.state.auth_bridge import AuthBridgeMixin, session_async_save
 
 # Backward compatibility for modules that imported the private name.
 _session_async_save = session_async_save
@@ -182,7 +182,7 @@ def populate_session_auth_state(
 
     async def logout_impl(self: Any) -> Any:
         request = current_request()
-        await self.logout()
+        await AuthBridgeMixin.logout(self)
         if request is None:
             return rx.call_script(_defer_nav_js(post_out))
         await session_async_save(request)
