@@ -114,7 +114,9 @@ def populate_session_auth_state(
     ns[e_var] = ""
 
     async def on_load_impl(self: Any) -> Any:
-        await self.refresh_django_user_fields()
+        from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
+
+        await _sync_auth_snapshots_in_tree(self)
         if when_auth is None or not self.is_authenticated:
             return None
         request = current_request()
@@ -146,11 +148,15 @@ def populate_session_auth_state(
     ns[f"set_{p_var}"] = make_pass_setter()
 
     async def _finish_login(self: Any, request: Any) -> Any:
-        from reflex_django.auth_state import apply_auth_snapshot_to_state
+        from reflex_django.auth_state import (
+            _mark_auth_ui_dirty,
+            apply_auth_snapshot_to_state,
+        )
 
         setattr(self, p_var, "")
         await session_async_save(request)
         await apply_auth_snapshot_to_state(self)
+        _mark_auth_ui_dirty(self)
         return _sync_session_cookie_then_nav(request, post_in)
 
     async def submit_impl(self: Any) -> Any:
@@ -194,8 +200,11 @@ def populate_session_auth_state(
         ns[cfg.submit_form_event] = rx.event(submit_form_impl)
 
     async def logout_impl(self: Any) -> Any:
+        from reflex_django.auth_state import _mark_auth_ui_dirty
+
         request = current_request()
         await AuthBridgeMixin.logout(self)
+        _mark_auth_ui_dirty(self)
         if request is None:
             return rx.call_script(_defer_nav_js(post_out))
         await session_async_save(request)

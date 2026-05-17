@@ -182,22 +182,88 @@ class AuthBridgeMixin:
         return rx.toast.error("You do not have permission to perform this action.")
 
 
-async def _sync_auth_snapshots_in_tree(state: Any) -> None:
-    """Refresh auth snapshot vars on every :class:`~reflex_django.auth_state.DjangoUserState` substate."""
+def _iter_django_user_state_classes() -> Any:
+    """Yield every registered :class:`~reflex_django.auth_state.DjangoUserState` subclass."""
     from reflex_django.auth_state import DjangoUserState
+
+    seen: set[type] = set()
+    stack: list[type] = [rx.State]
+    while stack:
+        cls = stack.pop()
+        if cls in seen:
+            continue
+        seen.add(cls)
+        if issubclass(cls, DjangoUserState):
+            yield cls
+        for sub in cls.get_substates():
+            stack.append(sub)
+    try:
+        from reflex_django.auth.state_builders import get_or_create_django_auth_state
+
+        auth_cls = get_or_create_django_auth_state()
+        if auth_cls not in seen:
+            yield auth_cls
+    except ImportError:
+        pass
+
+
+def _resolve_substate_node(root: Any, state_cls: type) -> Any | None:
+    """Return the live substate instance for ``state_cls``, or ``None``."""
+    path = state_cls.get_full_name().split(".")
+    try:
+        return root.get_substate(path)
+    except ValueError:
+        return None
+
+
+async def _sync_auth_snapshots_in_tree(
+    state: Any,
+    *,
+    include_groups: bool | None = None,
+) -> None:
+    """Refresh auth snapshot vars on every :class:`~reflex_django.auth_state.DjangoUserState` substate."""
+    from reflex_django.auth_state import (
+        DjangoUserState,
+        _auth_snapshot_owner,
+        apply_auth_snapshot_to_state,
+    )
 
     root = state._get_root_state() if hasattr(state, "_get_root_state") else state
 
-    async def visit(node: Any) -> None:
-        if isinstance(node, DjangoUserState):
-            from reflex_django.auth_state import apply_auth_snapshot_to_state
+    owners_seen: set[int] = set()
+    nodes_seen: set[int] = set()
 
-            await apply_auth_snapshot_to_state(node)
-        substates = getattr(node, "substates", None) or {}
-        for child in substates.values():
-            await visit(child)
+    async def sync_node(node: Any) -> None:
+        try:
+            from reflex_django.auth.state import DjangoAuthState
+        except ImportError:
+            DjangoAuthState = None  # type: ignore[misc, assignment]
+        if not isinstance(node, DjangoUserState) and not (
+            DjangoAuthState is not None and isinstance(node, DjangoAuthState)
+        ):
+            return
+        nid = id(node)
+        if nid in nodes_seen:
+            return
+        nodes_seen.add(nid)
+        owner = _auth_snapshot_owner(node)
+        oid = id(owner)
+        if oid in owners_seen:
+            return
+        owners_seen.add(oid)
+        await apply_auth_snapshot_to_state(owner, include_groups=include_groups)
 
-    await visit(root)
+    for state_cls in _iter_django_user_state_classes():
+        node = _resolve_substate_node(root, state_cls)
+        if node is not None:
+            await sync_node(node)
+
+    async def visit_instance_tree(node: Any) -> None:
+        await sync_node(node)
+        for child in (getattr(node, "substates", None) or {}).values():
+            await visit_instance_tree(child)
+
+    await visit_instance_tree(root)
 
 
 async def maybe_sync_app_state_auth(state: Any) -> None:

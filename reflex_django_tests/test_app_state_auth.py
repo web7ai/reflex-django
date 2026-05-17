@@ -155,6 +155,84 @@ def test_auto_sync_refreshes_all_django_user_substates() -> None:
     asyncio.run(_go())
 
 
+def test_apply_auth_snapshot_marks_inherited_substates_dirty() -> None:
+    from reflex_django.auth_state import _mark_inherited_auth_snapshot_dirty
+
+    parent = mock.Mock()
+    parent.inherited_vars = {}
+    parent.substates = {}
+    child = mock.Mock()
+    child.inherited_vars = {"is_authenticated": mock.Mock()}
+    child.dirty_vars = set()
+    child.substates = {}
+    child._mark_dirty = mock.Mock()
+    parent.substates = {"django_auth_state": child}
+
+    _mark_inherited_auth_snapshot_dirty(parent)
+
+    assert "is_authenticated" in child.dirty_vars
+    child._mark_dirty.assert_called()
+
+
+def test_sync_django_auth_substates_marks_auth_nodes_dirty() -> None:
+    from reflex_django.auth.state import DjangoAuthState
+    from reflex_django.auth_state import _sync_django_auth_substates
+
+    auth = mock.Mock()
+    auth.inherited_vars = {"is_authenticated": mock.Mock()}
+    auth.dirty_vars = set()
+    auth._mark_dirty = mock.Mock()
+    auth.substates = {}
+    root = mock.Mock()
+    root.substates = {DjangoAuthState.get_name(): auth}
+
+    def _isinstance(obj: object, cls: type) -> bool:
+        return obj is auth or isinstance(obj, cls)
+
+    with mock.patch("reflex_django.auth_state.isinstance", side_effect=_isinstance):
+        _sync_django_auth_substates(root)
+
+    assert "is_authenticated" in auth.dirty_vars
+    auth._mark_dirty.assert_called()
+
+
+def test_sync_auth_ui_syncs_tree_and_marks_dirty() -> None:
+    from reflex_django.auth.state import DjangoAuthState
+
+    auth = mock.Mock()
+    auth.inherited_vars = {"is_authenticated": mock.Mock()}
+    auth.dirty_vars = set()
+    auth._mark_dirty = mock.Mock()
+
+    async def _go() -> None:
+        with mock.patch(
+            "reflex_django.state.auth_bridge._sync_auth_snapshots_in_tree",
+            new=mock.AsyncMock(),
+        ) as tree_sync:
+            await DjangoAuthState.sync_auth_ui.fn(auth)
+        tree_sync.assert_awaited_once_with(auth)
+        assert "is_authenticated" in auth.dirty_vars
+        auth._mark_dirty.assert_called()
+
+    asyncio.run(_go())
+
+
+def test_sync_from_django_syncs_entire_auth_tree() -> None:
+    from reflex_django.auth_state import DjangoUserState
+
+    state = _DashboardState()
+
+    async def _go() -> None:
+        with mock.patch(
+            "reflex_django.state.auth_bridge._sync_auth_snapshots_in_tree",
+            new=mock.AsyncMock(),
+        ) as tree_sync:
+            await DjangoUserState.sync_from_django.fn(state, include_groups=True)
+        tree_sync.assert_awaited_once_with(state, include_groups=True)
+
+    asyncio.run(_go())
+
+
 def test_login_returns_false_when_no_request() -> None:
     state = _DashboardState()
 

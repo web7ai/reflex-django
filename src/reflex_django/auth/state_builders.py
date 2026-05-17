@@ -7,11 +7,26 @@ import sys
 import types
 from typing import Any
 
+import reflex as rx
+
 from reflex_django.auth.mixins.navigation import populate_navigation_state
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
 from reflex_django.auth_state import DjangoUserState
 from reflex_django.conf import configure_django
 from reflex_django.mixins.session_auth import SessionAuthConfig, populate_session_auth_state
+from reflex_django.state.auth_bridge import AuthBridgeMixin
+
+# Snapshot fields owned on ``DjangoAuthState`` (``is_authenticated`` is a ``@rx.var``).
+_AUTH_SNAPSHOT_DEFAULTS: dict[str, Any] = {
+    "user_id": None,
+    "username": "",
+    "email": "",
+    "first_name": "",
+    "last_name": "",
+    "is_staff": False,
+    "is_superuser": False,
+    "group_names": [],
+}
 
 _STATE_MODULE = "reflex_django.auth.state"
 
@@ -41,7 +56,8 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
     Reflex treats each dynamically subclassed :class:`reflex.state.State` as its
     own substate. Chaining mixins with repeated class names produced nested
     ``DjangoAuthState`` substates that failed on socket connect. This builder
-    merges every mixin into a single class that extends :class:`DjangoUserState`.
+    merges every mixin into a single class. ``is_authenticated`` is a live
+    :func:`~reflex.var` (see navigation mixin), not an inherited snapshot field.
     """
     configure_django()
 
@@ -73,9 +89,14 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
 
     def exec_body(ns: dict[str, Any]) -> None:
         ns["__module__"] = _STATE_MODULE
-        annotations: dict[str, type] = dict(
-            getattr(DjangoUserState, "__annotations__", {})
-        )
+        annotations: dict[str, type] = {
+            k: v
+            for k, v in getattr(DjangoUserState, "__annotations__", {}).items()
+            if k != "is_authenticated"
+        }
+        ns.update(_AUTH_SNAPSHOT_DEFAULTS)
+        ns["sync_from_django"] = DjangoUserState.sync_from_django
+        ns["refresh_django_user_fields"] = DjangoUserState.refresh_django_user_fields
         populate_session_auth_state(
             ns,
             session_cfg,
@@ -94,10 +115,10 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
             cls_name=cls_name,
             annotations=annotations,
         )
-        populate_navigation_state(ns, cls_name=cls_name)
+        populate_navigation_state(ns, cls_name=cls_name, annotations=annotations)
         ns["__annotations__"] = annotations
 
-    cls = types.new_class(cls_name, (DjangoUserState,), {}, exec_body)
+    cls = types.new_class(cls_name, (AuthBridgeMixin, rx.State), {}, exec_body)
     _store_auth_state_class(cls)
     return cls
 

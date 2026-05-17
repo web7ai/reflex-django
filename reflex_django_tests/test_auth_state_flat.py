@@ -8,15 +8,21 @@ configure_django()
 
 
 def test_django_auth_state_is_single_substate_under_user() -> None:
+    import reflex as rx
+
     from reflex_django.auth.state import DjangoAuthState
-    from reflex_django.auth_state import DjangoUserState
+    from reflex_django.state.auth_bridge import AuthBridgeMixin
 
     assert DjangoAuthState.__name__ == "DjangoAuthState"
-    assert DjangoAuthState.__bases__ == (DjangoUserState,)
+    assert DjangoAuthState.__bases__ == (AuthBridgeMixin, rx.State)
     assert hasattr(DjangoAuthState, "login_error")
     assert hasattr(DjangoAuthState, "registration_error")
     assert hasattr(DjangoAuthState, "reset_error")
     assert hasattr(DjangoAuthState, "redirect_to_login")
+    assert hasattr(DjangoAuthState, "sync_auth_ui")
+    assert hasattr(DjangoAuthState, "is_authenticated")
+    assert "is_authenticated" in DjangoAuthState.computed_vars
+    assert "is_authenticated" not in DjangoAuthState.inherited_vars
 
 
 def test_build_django_auth_state_returns_singleton() -> None:

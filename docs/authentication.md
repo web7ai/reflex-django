@@ -67,7 +67,9 @@ rx.cond(DashboardState.is_authenticated, rx.text(DashboardState.username), ...)
 
 **Rule:** Never use snapshot fields alone to allow deletes, admin actions, or private data—always check `self.user` or `require_login_user()` in the handler.
 
-When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **`AppState`** subclasses, so navbars and dashboards update after login/logout without calling `sync_from_django` on every page.
+When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **all** **`DjangoUserState`** substates (including **`DjangoAuthState`** and **`AppState`** branches), so navbars and dashboards update after login/logout without calling `sync_from_django` on every page.
+
+**`DjangoUserState.sync_from_django`** (e.g. in page `on_load`) performs the same full-tree refresh. Use it when the template chains `on_load=[DjangoUserState.sync_from_django, …]` but the UI binds **`DjangoAuthState.is_authenticated`** (sidebar logout, canned auth vars).
 
 ---
 
@@ -511,9 +513,11 @@ Refresh manually:
 
 ```python
 await self.refresh_django_user_fields()
-# or
+# or (updates every DjangoUserState substate, including DjangoAuthState)
 await self.sync_from_django(include_groups=True)
 ```
+
+`sync_from_django` walks the client state tree and refreshes **every** `DjangoUserState` substate, not only the handler’s node—so `DjangoAuthState.is_authenticated` stays aligned when `on_load` references `DjangoUserState.sync_from_django`.
 
 Group names are only loaded when `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` is `True` or `include_groups=True` is passed.
 
@@ -811,6 +815,7 @@ See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AU
 | Confused `request.user` in UI | User model in component tree | Use `self.username` / `self.is_authenticated` in `rx.*` |
 | Login works once, next event anonymous | Browser cookie stale | `_sync_session_cookie_then_nav` after login |
 | UI shows logged out while handler sees user | Snapshot not synced | Enable `REFLEX_DJANGO_AUTH_AUTO_SYNC` or `on_load=State.sync_from_django` |
+| Logout button hidden (`DjangoAuthState.is_authenticated` false) | `is_authenticated` is inherited on `DjangoAuthState`; UI may not re-render | Use `DjangoAuthState.auth_logged_in` in sidebar (set by `sync_from_django`); keep `on_load=DjangoUserState.sync_from_django` |
 | `RuntimeError: No Django session` | Handler outside event / bridge failed | Ensure bridge runs; check logs for preprocess errors |
 | Permission always denied | Wrong codename or user lacks perm | Verify in Django admin; use `user.has_perm` in shell |
 | `ImportError: _session_async_save` | Old import path | Use `from reflex_django.state.auth_bridge import session_async_save` |

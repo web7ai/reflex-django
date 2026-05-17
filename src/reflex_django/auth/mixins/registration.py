@@ -76,7 +76,9 @@ def populate_registration_state(
     ns[s_var] = False
 
     async def on_load_register_impl(self: Any) -> Any:
-        await self.refresh_django_user_fields()
+        from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
+
+        await _sync_auth_snapshots_in_tree(self)
         if when_auth is None or not self.is_authenticated:
             return None
         request = current_request()

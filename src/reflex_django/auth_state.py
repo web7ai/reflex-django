@@ -80,6 +80,72 @@ async def _group_names_for_user(user: Any) -> list[str]:
     return [name async for name in user.groups.values_list("name", flat=True)]
 
 
+_AUTH_SNAPSHOT_FIELDS: tuple[str, ...] = (
+    "user_id",
+    "username",
+    "email",
+    "first_name",
+    "last_name",
+    "is_authenticated",
+    "is_staff",
+    "is_superuser",
+    "group_names",
+)
+
+
+def _auth_snapshot_owner(state: Any) -> Any:
+    """Return the substate that owns auth snapshot vars (not inherited)."""
+    node = state
+    while node is not None and "is_authenticated" in getattr(node, "inherited_vars", {}):
+        node = node.parent_state
+    return node if node is not None else state
+
+
+def _mark_inherited_auth_snapshot_dirty(state: Any) -> None:
+    """Mark inherited auth fields dirty on substates (e.g. ``DjangoAuthState``).
+
+    Reflex routes inherited assignments to the parent and does not mark the
+    child substate dirty, so ``rx.cond(DjangoAuthState.is_authenticated, ...)``
+    does not re-render unless we flag the child explicitly.
+    """
+    def visit(node: Any) -> None:
+        for field in _AUTH_SNAPSHOT_FIELDS:
+            if field in getattr(node, "inherited_vars", {}):
+                node.dirty_vars.add(field)
+        mark_dirty = getattr(node, "_mark_dirty", None)
+        if callable(mark_dirty):
+            mark_dirty()
+        for child in (getattr(node, "substates", None) or {}).values():
+            visit(child)
+
+    visit(state)
+
+
+def _mark_auth_ui_dirty(state: Any) -> None:
+    """Force UI re-render for inherited ``is_authenticated`` on a substate."""
+    if "is_authenticated" in getattr(state, "inherited_vars", {}):
+        state.dirty_vars.add("is_authenticated")
+        mark_dirty = getattr(state, "_mark_dirty", None)
+        if callable(mark_dirty):
+            mark_dirty()
+
+
+def _sync_django_auth_substates(root: Any) -> None:
+    """Walk the instance tree and mark auth UI dirty on every ``DjangoAuthState``."""
+    try:
+        from reflex_django.auth.state import DjangoAuthState
+    except ImportError:
+        return
+
+    def visit(node: Any) -> None:
+        if isinstance(node, DjangoAuthState):
+            _mark_auth_ui_dirty(node)
+        for child in (getattr(node, "substates", None) or {}).values():
+            visit(child)
+
+    visit(root)
+
+
 async def apply_auth_snapshot_to_state(
     state: DjangoUserState,
     *,
@@ -90,22 +156,36 @@ async def apply_auth_snapshot_to_state(
     Plain async helper for server-side code (event bridge, mixins). Reflex may
     wrap :meth:`DjangoUserState.refresh_django_user_fields` as an event handler;
     call this function when you need a direct coroutine.
+
+    Writes to the substate that **owns** the fields (usually ``DjangoUserState``),
+    then marks inherited auth fields dirty on descendant substates so bindings on
+    ``DjangoAuthState`` and ``AppState`` branches re-render.
     """
+    owner = _auth_snapshot_owner(state)
     user = current_user()
     want_groups = (
         _settings_include_groups() if include_groups is None else include_groups
     )
     groups = await _group_names_for_user(user) if want_groups else None
     snap = user_snapshot(user, group_names=groups if want_groups else [])
-    state.user_id = snap["id"]
-    state.username = snap["username"]
-    state.email = snap["email"]
-    state.first_name = snap["first_name"]
-    state.last_name = snap["last_name"]
-    state.is_authenticated = snap["is_authenticated"]
-    state.is_staff = snap["is_staff"]
-    state.is_superuser = snap["is_superuser"]
-    state.group_names = snap["group_names"]
+    try:
+        from reflex_django.auth.state import DjangoAuthState
+    except ImportError:
+        DjangoAuthState = None  # type: ignore[misc, assignment]
+    skip_auth_flag = DjangoAuthState is not None and isinstance(owner, DjangoAuthState)
+    owner.user_id = snap["id"]
+    owner.username = snap["username"]
+    owner.email = snap["email"]
+    owner.first_name = snap["first_name"]
+    owner.last_name = snap["last_name"]
+    if not skip_auth_flag:
+        owner.is_authenticated = snap["is_authenticated"]
+    owner.is_staff = snap["is_staff"]
+    owner.is_superuser = snap["is_superuser"]
+    owner.group_names = snap["group_names"]
+    _mark_inherited_auth_snapshot_dirty(owner)
+    root = owner._get_root_state() if hasattr(owner, "_get_root_state") else owner
+    _sync_django_auth_substates(root)
 
 
 class DjangoUserState(AuthBridgeMixin, rx.State):
@@ -144,12 +224,25 @@ class DjangoUserState(AuthBridgeMixin, rx.State):
     ) -> None:
         """Refresh snapshot fields from :func:`reflex_django.current_user`.
 
+        Updates every :class:`DjangoUserState` substate in the client tree
+        (including :class:`~reflex_django.auth.state.DjangoAuthState`) so UI
+        bindings like ``DjangoAuthState.is_authenticated`` stay aligned when
+        ``on_load`` targets :class:`DjangoUserState`.
+
         Args:
             include_groups: When ``None``, use
                 ``settings.REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS``.
                 When ``True``, load group names with one async query.
         """
-        await self.refresh_django_user_fields(include_groups=include_groups)
+        from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
+
+        await _sync_auth_snapshots_in_tree(self, include_groups=include_groups)
 
 
-__all__ = ["DjangoUserState", "apply_auth_snapshot_to_state", "user_snapshot"]
+__all__ = [
+    "DjangoUserState",
+    "_auth_snapshot_owner",
+    "_mark_auth_ui_dirty",
+    "apply_auth_snapshot_to_state",
+    "user_snapshot",
+]
