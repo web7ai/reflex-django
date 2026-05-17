@@ -29,7 +29,7 @@ small adapter.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from reflex.middleware import Middleware
 from reflex_django.conf import configure_django
@@ -38,24 +38,110 @@ from reflex_django.context import begin_event_request, end_event_request
 if TYPE_CHECKING:
     from django.http import HttpRequest
     from reflex_base.event import Event
+    from starlette.requests import Request
 
     from reflex.app import App
     from reflex.state import BaseState, StateUpdate
 
 
-def _build_request_from_event(event: Event) -> HttpRequest:
-    """Build a Django HttpRequest from a Reflex event's router data.
+def _router_data_from_starlette_request(request: Request) -> dict[str, Any]:
+    """Build ``router_data`` from a Starlette upload HTTP request.
 
     Args:
-        event: The incoming Reflex event whose ``router_data`` carries
-            cookie/header/IP information.
+        request: The incoming ``/_upload`` request (includes browser cookies).
+
+    Returns:
+        A dict compatible with :func:`_build_request_from_router_data`.
+    """
+    cookie_header = request.headers.get("cookie", "")
+    if not cookie_header and request.cookies:
+        cookie_header = "; ".join(f"{k}={v}" for k, v in request.cookies.items())
+
+    headers: dict[str, str] = {}
+    for key, value in request.headers.items():
+        headers[key.lower()] = value
+    if cookie_header:
+        headers["cookie"] = cookie_header
+
+    client_ip = ""
+    if request.client is not None:
+        client_ip = request.client.host or ""
+
+    query: dict[str, str] = {}
+    for key, value in request.query_params.multi_items():
+        query[str(key)] = str(value)
+
+    return {
+        "headers": headers,
+        "ip": client_ip,
+        "pathname": request.url.path,
+        "query": query,
+    }
+
+
+def _router_data_from_state_chain(state: Any) -> dict[str, Any]:
+    """Return the nearest ``router_data`` with a session cookie on the state tree.
+
+    Upload handlers often run on substates (e.g. ``ProfileState``); cookies live
+    on the root state's ``router_data`` and are visible via inheritance in handlers
+    but must be resolved explicitly for the event bridge.
+    """
+    if state is None:
+        return {}
+
+    try:
+        root = state._get_root_state()  # noqa: SLF001
+    except (AttributeError, TypeError):
+        root = state
+
+    seen: set[int] = set()
+    node: Any = root
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        raw = getattr(node, "router_data", None)
+        if isinstance(raw, dict) and (raw.get("headers") or {}).get("cookie"):
+            return raw
+        node = getattr(node, "parent_state", None)
+    return {}
+
+
+def _resolve_router_data(event: Event, state: BaseState | None) -> dict[str, Any]:
+    """Merge event and state ``router_data``, preferring event cookies when set.
+
+    Upload events from Reflex often omit ``router_data``; persisted
+    ``state.router_data`` from prior Socket.IO events may still carry the session
+    cookie as a fallback.
+
+    Args:
+        event: The incoming Reflex event.
+        state: Client state from the event processor (may hold prior ``router_data``).
+
+    Returns:
+        Effective router data for the Django event bridge.
+    """
+    raw_event_rd = getattr(event, "router_data", None)
+    event_rd: dict[str, Any] = raw_event_rd if isinstance(raw_event_rd, dict) else {}
+    if (event_rd.get("headers") or {}).get("cookie"):
+        return event_rd
+
+    state_rd = _router_data_from_state_chain(state)
+    if (state_rd.get("headers") or {}).get("cookie"):
+        return {**state_rd, **event_rd}
+
+    return event_rd
+
+
+def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
+    """Build a Django HttpRequest from Reflex ``router_data``.
+
+    Args:
+        router_data: Cookie/header/IP/path information for the synthetic request.
 
     Returns:
         A populated :class:`django.http.HttpRequest`.
     """
     from django.http import HttpRequest
 
-    router_data = getattr(event, "router_data", None) or {}
     headers: dict[str, str] = dict(router_data.get("headers") or {})
     cookie_header = headers.get("cookie", "")
     client_ip = router_data.get("ip", "")
@@ -109,6 +195,25 @@ def _build_request_from_event(event: Event) -> HttpRequest:
         request.META.setdefault(meta_key, value)
 
     return request
+
+
+def _build_request_from_event(
+    event: Event,
+    state: BaseState | None = None,
+) -> HttpRequest:
+    """Build a Django HttpRequest from a Reflex event (and optional state).
+
+    Args:
+        event: The incoming Reflex event whose ``router_data`` carries
+            cookie/header/IP information.
+        state: Client state used to fall back when the event omits cookies
+            (typical for upload handlers before the upload patch runs).
+
+    Returns:
+        A populated :class:`django.http.HttpRequest`.
+    """
+    router_data = _resolve_router_data(event, state)
+    return _build_request_from_router_data(router_data)
 
 
 def _attach_session(request: HttpRequest) -> None:
@@ -192,6 +297,9 @@ class DjangoEventBridge(Middleware):
     def __init__(self) -> None:
         """Ensure Django is configured before any event is processed."""
         configure_django()
+        from reflex_django.upload_patch import apply_upload_router_data_patch
+
+        apply_upload_router_data_patch()
 
     async def preprocess(
         self,
@@ -203,7 +311,8 @@ class DjangoEventBridge(Middleware):
 
         Args:
             app: The Reflex application (unused).
-            state: The client state (unused; bridge does not mutate state).
+            state: The client state; used to recover ``router_data`` when upload
+                events omit cookies (see :func:`_resolve_router_data`).
             event: The incoming Reflex event whose ``router_data`` carries the
                 cookie/header/IP information needed to rebuild a Django
                 request.
@@ -213,7 +322,7 @@ class DjangoEventBridge(Middleware):
         """
         end_event_request()
         try:
-            request = _build_request_from_event(event)
+            request = _build_request_from_event(event, state)
             _attach_session(request)
             _activate_i18n_for_request(request)
             await _attach_user(request)
@@ -221,9 +330,11 @@ class DjangoEventBridge(Middleware):
             return None
 
         begin_event_request(request)
+        from reflex.state import BaseState as _BaseState
         from reflex_django.state.auth_bridge import maybe_sync_app_state_auth
 
-        await maybe_sync_app_state_auth(state)
+        if isinstance(state, _BaseState):
+            await maybe_sync_app_state_auth(state)
         return None
 
     async def postprocess(

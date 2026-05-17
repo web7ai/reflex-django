@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Upload handlers (`rx.upload` / `rx.upload_files`) now receive the same
+  Django session and ``self.request.user`` as other Reflex events. Reflex
+  previously enqueued upload events without ``router_data``; reflex-django
+  injects cookies from the ``/_upload`` HTTP request and falls back to persisted
+  ``state.router_data`` when needed, so ``@login_required`` on upload handlers
+  no longer spuriously redirects logged-in users.
+
 ### Added
 
 - `reflex_django.state.ModelState`: declarative CRUD state from a

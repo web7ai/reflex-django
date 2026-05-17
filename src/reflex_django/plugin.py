@@ -188,7 +188,9 @@ class ReflexDjangoPlugin(Plugin):
 
         if self.install_event_bridge:
             from reflex_django.middleware import DjangoEventBridge
+            from reflex_django.upload_patch import apply_upload_router_data_patch
 
+            apply_upload_router_data_patch()
             app.add_middleware(DjangoEventBridge())
 
         if self.install_auth_pages:
