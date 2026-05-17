@@ -246,6 +246,8 @@ async def catalog(self): ...
 
 Reflex events skip `SessionMiddleware`. After `login()` / `logout()`, call `_sync_session_cookie_then_nav` from `reflex_django.mixins.session_auth` so the browser `sessionid` matches the server row.
 
+**Django `sessionid` vs Reflex `token`:** Django auth uses the **`sessionid` cookie** (session table + `request.user`). Reflex stores a separate per-tab UUID in **`sessionStorage` under key `token`** (`router.session.client_token`) for WebSocket/state identity—not login. Logout must clear cookies, `router_data` cookie mirrors, and client storage (`browser_auth_logout_clear_js`) or stale `token` can cause `/` ↔ `/login` loops. See `docs/authentication.md#browser-storage-django-sessionid-vs-reflex-token-for-django-developers`.
+
 ### Settings
 
 - `REFLEX_DJANGO_AUTH_AUTO_SYNC` (default True): bridge calls `refresh_django_user_fields()` on each event for `AppState` instances.

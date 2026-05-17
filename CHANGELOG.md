@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Logout and login navigation now clear Reflex ``sessionStorage`` (including the
   stale websocket ``token``) and logout also clears ``localStorage``, matching
   manual devtools fixes for post-logout redirect loops.
+- ``authentication.md`` documents Django ``sessionid`` cookies vs Reflex
+  ``sessionStorage`` ``token`` for developers coming from plain Django views.
 - Upload handlers (`rx.upload` / `rx.upload_files`) now receive the same
   Django session and ``self.request.user`` as other Reflex events. Reflex
   previously enqueued upload events without ``router_data``; reflex-django

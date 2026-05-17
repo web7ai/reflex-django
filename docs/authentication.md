@@ -45,6 +45,8 @@ flowchart TB
 
 There is **no second auth implementation**—handlers use Django’s session row and user model. OAuth, JWT, and multi-tenant auth are not built in yet.
 
+For how **cookies**, **sessionStorage**, and **server-side Reflex state** fit together, see [Browser storage: Django `sessionid` vs Reflex `token`](#browser-storage-django-sessionid-vs-reflex-token-for-django-developers).
+
 ---
 
 ## Two layers: live objects vs reactive snapshot
@@ -687,9 +689,88 @@ REFLEX_DJANGO_AUTH_AUTO_SYNC = False
 
 ---
 
+## Browser storage: Django `sessionid` vs Reflex `token` (for Django developers)
+
+If you are used to **Django-only** apps, login usually means: the browser gets a **`sessionid` cookie**, Django loads the session row from the database (or cache), and **`request.user`** is set in middleware. Reflex adds a **second client identifier** that is easy to confuse with “the session” because it is also called `token` and lives in the browser—but it is **not** your Django session and **not** a JWT or API key.
+
+### Three different things in the browser
+
+| What | Where | Who owns it | What it means |
+|------|--------|-------------|----------------|
+| **`sessionid`** (name from `SESSION_COOKIE_NAME`, default `sessionid`) | **HTTP cookie** | **Django** | Primary key into Django’s session store. This is **who is logged in**. The bridge reads it from `router_data.headers.cookie` (or the real cookie on full page loads) and builds `request.user` via `aget_user`. |
+| **`csrftoken`** (from `CSRF_COOKIE_NAME`, default `csrftoken`) | **HTTP cookie** | **Django** | CSRF protection for unsafe HTTP requests. Often sent with Reflex events when present; cleared on logout together with `sessionid`. |
+| **`token`** | **`sessionStorage`** (key literally named `token`) | **Reflex** | **Per-tab client id** (UUID). Same value as `self.router.session.client_token` in Python. Used to associate this browser tab with **Reflex server state** over the WebSocket—not with Django’s `django_session` table. |
+
+Other keys you may see in **sessionStorage** (for example `react-router-scroll-positions`) are Reflex/router UI cache. They are unrelated to Django login.
+
+**Do not confuse** Reflex’s `token` with:
+
+- Django’s **`sessionid`** cookie (session auth),
+- Password-reset URL segments named `[token]` or `[key]` (Django’s one-time reset token),
+- A bearer/API token you might add in a custom API.
+
+### Where each piece is used in the pipeline
+
+```mermaid
+flowchart TB
+  subgraph browser [Browser tab]
+    SS["sessionStorage.token\n(Reflex client UUID)"]
+    CK["Cookie: sessionid, csrftoken\n(Django)"]
+  end
+  subgraph reflex_server [Reflex + reflex-django]
+    WS[WebSocket / Socket.IO event]
+    RD[router_data on state tree]
+    Bridge[DjangoEventBridge]
+    Req[Synthetic HttpRequest]
+    User[request.user via aget_user]
+  end
+  subgraph django_store [Django]
+    SessRow[(Session row in DB/cache)]
+  end
+  SS --> WS
+  CK --> RD
+  CK --> WS
+  WS --> RD
+  RD --> Bridge --> Req
+  Req --> SessRow
+  SessRow --> User
+```
+
+1. **Full page load (HTTP)** — The browser sends **`sessionid`** in the `Cookie` header. Django middleware (on admin, API routes, etc.) loads the session as usual.
+2. **Reflex event (WebSocket)** — The client sends **`router_data`** (path, headers, and often a copy of cookies). **`DjangoEventBridge`** builds a synthetic `HttpRequest`, copies cookies into `request.COOKIES`, loads the session with **`SESSION_ENGINE`**, and resolves **`request.user`**—the same as a view, without running the full `MIDDLEWARE` stack.
+3. **Reflex `token`** — Identifies **this tab’s** connection to Reflex state on the server (hydration, reconnect, background tasks). It does **not** replace `sessionid`; Django auth for handlers still comes from the **session cookie** (and mirrored cookie string in `router_data`).
+
+### Login: what changes
+
+| Step | Django | Browser |
+|------|--------|---------|
+| `await self.login(...)` / `alogin` | Creates/updates the **session row** and binds the user | — |
+| `session_async_save` | Persists the session backend | — |
+| `mirror_auth_cookies_to_state_tree` | — | Copies **`sessionid`** into **`router_data.headers.cookie`** on the Reflex state tree so later events without cookie headers still see the new session |
+| `_sync_session_cookie_then_nav` | — | **`sessionStorage.clear()`** (drops stale Reflex `token`), expires old **`sessionid`** in JS, writes new **`sessionid`**, then navigates (e.g. to `/`) |
+
+So after login you want **both**: a valid Django session row **and** the browser holding the matching **`sessionid`** cookie (plus a fresh Reflex client id after storage clear).
+
+### Logout: what must be cleared
+
+| Step | Django | Browser / Reflex |
+|------|--------|------------------|
+| `await self.logout()` / `alogout` | **`flush`** session row; user is anonymous on the server | — |
+| `strip_auth_cookies_from_request` | Removes `sessionid` / `csrftoken` from the **synthetic** request for this event | — |
+| `clear_auth_cookies_from_state_tree` | — | Strips `sessionid` / `csrftoken` from persisted **`router_data`** on all substates |
+| `_sync_session_cookie_then_nav(..., clear_cookie=True)` | — | Expires **`sessionid`** and **`csrftoken`** cookies, **`sessionStorage.clear()`** and **`localStorage.clear()`**, then navigates to `/login` |
+
+If you only clear Django’s session row and cookies but leave the old Reflex **`token`** in **sessionStorage**, the tab can reconnect with a **stale Reflex state** (still showing authenticated UI) while cookies are empty—classic **`/` ↔ `/login` redirect loop**. That is why logout clears client storage as well as cookies via `browser_auth_logout_clear_js` in `reflex_django.session_js`.
+
+### Mental model (one paragraph)
+
+**Django answers “who is this user?”** using the **`sessionid` cookie** and the session table. **Reflex answers “which tab / which copy of UI state?”** using **`sessionStorage.token`** and server-side state keyed by that client id. reflex-django wires Django into Reflex events by rebuilding **`request.user`** from cookies on every event; you must keep **cookies**, **`router_data` cookie mirrors**, and **Reflex client storage** in sync on login and logout because Reflex does not run `SessionMiddleware` or send `Set-Cookie` for you on Socket.IO events.
+
+---
+
 ## Session cookie sync after login
 
-Reflex events **do not** run `SessionMiddleware`, so `alogin` may not send `Set-Cookie` to the browser. Without syncing, the next full page load can still send an old `sessionid`.
+Reflex events **do not** run `SessionMiddleware`, so `alogin` may not send `Set-Cookie` to the browser. Without syncing, the next full page load can still send an old `sessionid`. See [Browser storage: Django `sessionid` vs Reflex `token`](#browser-storage-django-sessionid-vs-reflex-token-for-django-developers) for the full picture.
 
 **After `await self.login(...)` or registration**, mirror the cookie and navigate:
 
