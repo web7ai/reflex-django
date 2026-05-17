@@ -69,21 +69,181 @@ rx.cond(DashboardState.is_authenticated, rx.text(DashboardState.username), ...)
 
 When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **`AppState`** subclasses, so navbars and dashboards update after login/logout without calling `sync_from_django` on every page.
 
-### Django-style `request` in handlers
+---
 
-Any `rx.State` handler can use the module-level proxy (same synthetic request as the bridge):
+## Accessing the Django request on `AppState`
 
-```python
-from reflex_django import request
+Every Reflex event runs with a **synthetic `HttpRequest`** built by **`DjangoEventBridge`** from `router_data` (path, query string, cookies, headers, client IP). **`AppState`** (and subclasses like **`ModelState`**) expose that request on the state instance so handlers feel like Django views.
 
-@rx.event
-async def my_handler(self):
-    if request.user.is_authenticated:
-        request.session["last_view"] = "dashboard"
-    role = request.GET.get("role")
+### Three equivalent styles
+
+| Style | Where | Best for |
+|-------|--------|----------|
+| **`self.request`** | `AppState` / `ModelState` handlers | Instance-based code, CRUD hooks (`get_queryset`, …) |
+| **`self.django_request`** | Same | When you need the raw `HttpRequest` object |
+| **`from reflex_django import request`** | Any `rx.State` handler | Plain `rx.State` without `AppState` |
+| **`current_request()` / `current_user()`** | Any handler | Explicit, functional style |
+
+All of them read the **same** bridged request for the current event. Outside an event (import time, background task), there is no request—`request.user` is anonymous and `request.GET` is empty.
+
+```mermaid
+flowchart LR
+  Bridge[DjangoEventBridge] --> Http[HttpRequest]
+  Http --> CTX[current_request contextvar]
+  CTX --> SR[self.request / request proxy]
+  CTX --> SU[self.user]
+  Dispatch[ModelCRUDView.dispatch] --> Bind[bind_request_context]
+  Bind --> SR
 ```
 
-See [Django middleware to Reflex](django_middleware_to_reflex.md) for `request.headers`, `request.COOKIES`, and query params from `router_data`.
+### `self.request` — `DjangoStateRequest` wrapper
+
+On **`AppState`**, **`self.request`** is a **`DjangoStateRequest`** that wraps the synthetic `HttpRequest` and (when context collection runs) merged **context-processor** output.
+
+| Access | What you get |
+|--------|----------------|
+| **`self.request.user`** | Live Django user (`AnonymousUser` when logged out)—use for ORM filters and authorization |
+| **`self.request.django_request`** | Same as **`self.django_request`** — raw `HttpRequest` |
+| **`self.request.GET`**, **`.POST`**, **`.path`**, **`.method`**, **`.META`**, **`.COOKIES`** | Forwarded from the underlying `HttpRequest` |
+| **`self.request.LANGUAGE_CODE`**, **`self.request.SITE_NAME`**, … | Keys from **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** (when loaded) |
+| **`self.request.context`** | `dict` copy of all processor keys (e.g. `context["user"]` for JSON snapshot) |
+
+**`self.user`** is a shortcut for **`self.request.user`** (and **`current_user()`**). Prefer **`self.request.user`** in CRUD hooks for consistency with Django view style.
+
+**Important:** **`self.request.user`** is the **live** user model. Context processors often expose a **JSON `user` snapshot** for templates—that lives in **`self.request.context["user"]`**, not in **`self.request.user`**.
+
+### Example: dashboard handler (plain `AppState`)
+
+```python
+import reflex as rx
+from reflex_django.state import AppState
+
+class DashboardState(AppState):
+    last_path: str = ""
+
+    @rx.event
+    async def on_load(self):
+        # Auth — same as self.user
+        if not self.request.user.is_authenticated:
+            return rx.redirect("/login")
+
+        # Query string from the page URL (router_data)
+        tab = self.request.GET.get("tab", "overview")
+
+        # Session (also available as self.session["key"])
+        self.request.session["last_visit"] = "dashboard"
+
+        # Optional: context processor keys when configured
+        site = getattr(self.request, "SITE_NAME", None)
+
+        self.last_path = self.request.path
+        return rx.toast.info(f"Tab={tab}, site={site}")
+```
+
+### Example: user-scoped CRUD hooks (`ModelState` / `ModelCRUDView`)
+
+During **`dispatch`** (`save`, `refresh`, `load`, …), reflex-django calls **`bind_request_context()`**, which attaches **`self.request`** with context processors when **`load_context_processors`** is `True` (default).
+
+```python
+from reflex_django.state import ModelState
+from notes.models import Note
+
+class NotesState(ModelState):
+    model = Note
+    fields = ["title", "content"]
+    ordering = ("-id",)
+
+    def get_queryset(self):
+        # Scope rows to the logged-in user
+        return Note.objects.filter(owner=self.request.user)
+
+    def get_object_lookup(self, pk: int) -> dict:
+        return {"pk": pk, "owner": self.request.user}
+
+    def get_create_kwargs(self, state_data: dict) -> dict:
+        return {**state_data, "owner": self.request.user}
+
+    def filter_queryset(self, qs):
+        # Processor key (settings.REFLEX_DJANGO_CONTEXT_PROCESSORS)
+        if getattr(self.request, "LANGUAGE_CODE", None) == "ar":
+            qs = qs.filter(locale="ar")
+        return qs
+```
+
+`ModelState` subclasses **`AppState`**, so you can use **`self.request`** in custom **`@rx.event`** methods as well as in generated CRUD hooks.
+
+### Example: read query params on a plain `rx.State`
+
+When a class does **not** subclass `AppState`, use the module proxy:
+
+```python
+import reflex as rx
+from reflex_django import request
+
+class SearchState(rx.State):
+    @rx.event
+    async def run_search(self):
+        q = request.GET.get("q", "").strip()
+        if not request.user.is_authenticated:
+            return rx.toast.error("Sign in to search")
+        # ... ORM using request.user
+```
+
+Invalid import: `from reflex_django.state import request` — use **`from reflex_django import request`**.
+
+### `self.django_request` — raw `HttpRequest`
+
+Use when a Django API expects the real request object (login, messages, third-party helpers):
+
+```python
+from reflex_django.context import current_request
+from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
+
+class AuthState(AppState):
+    @rx.event
+    async def sign_in_and_go(self):
+        ok = await self.login(self.username, self.password)
+        if not ok:
+            return await self.on_auth_failed()
+        http = self.django_request  # or current_request()
+        if http is not None:
+            return _sync_session_cookie_then_nav(http, "/")
+```
+
+### Context processors on `self.request`
+
+Enable processors in Django settings via **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** (see [Django context to Reflex](django_context_to_reflex.md)). During **`ModelCRUDView.dispatch`**, keys are merged onto **`self.request`**:
+
+```python
+# Attribute style (template-like)
+lang = self.request.LANGUAGE_CODE
+
+# Dict style (explicit)
+snapshot = self.request.context.get("user", {})
+perms = self.request.context.get("permissions", [])
+```
+
+Disable collection but keep the HTTP request:
+
+```python
+class PublicState(ModelState):
+    model = Article
+    fields = ["title", "body"]
+    load_context_processors = False  # class body or Meta
+```
+
+### What not to do
+
+| Do not | Do instead |
+|--------|------------|
+| Pass **`self.request.user`** into **`rx.text(...)`** | Use snapshot vars: **`self.username`**, **`self.is_authenticated`** |
+| Rely on **`self.is_authenticated`** alone to allow deletes | Check **`self.request.user`** or **`require_login_user()`** in the handler |
+| Expect CSRF middleware on Reflex events | Protect mutations with **`@login_required`**, permissions, or Django HTTP views |
+| Use **`self.request`** at import time | Only inside **`@rx.event`** handlers (after the bridge runs) |
+
+### HTTP details
+
+Query params, cookies, and headers come from **`event.router_data`**. See [Django middleware to Reflex](django_middleware_to_reflex.md) for the full bridge pipeline and **`from reflex_django import request`** API (`request.headers`, `request.COOKIES`, `request.path`, …).
 
 ---
 
@@ -273,6 +433,31 @@ from reflex_django.state import AppState
 
 `AppState` extends `DjangoUserState` and is the recommended base for dashboards and **`ModelCRUDView`** CRUD states.
 
+Handlers (server): **`self.request`**, **`self.django_request`**, **`self.user`**, **`self.session`**.  
+UI (reactive): **`self.is_authenticated`**, **`self.username`**, **`self.email`**, …
+
+See [Accessing the Django request on `AppState`](#accessing-the-django-request-on-appstate) for full **`self.request`** examples.
+
+### `self.request` and `self.django_request`
+
+| Property | Type | Role |
+|----------|------|------|
+| **`self.request`** | `DjangoStateRequest` | **`.user`**, **`.GET`**, **`.path`**, context-processor keys, **`.context`** dict |
+| **`self.django_request`** | `HttpRequest \| None` | Raw Django request from the event bridge |
+
+```python
+class OrdersState(AppState):
+    @rx.event
+    async def export_csv(self):
+        if not self.request.user.is_staff:
+            return await self.on_permission_denied()
+        tenant = self.request.GET.get("tenant")
+        rows = await Order.objects.filter(tenant_id=tenant).aiterator()
+        ...
+```
+
+Equivalent: **`from reflex_django import request`** then **`request.user`**, **`request.GET.get("tenant")`** in any `rx.State`.
+
 ### `self.user` (property)
 
 Returns the live Django user for the current event (`AnonymousUser` when logged out). Supports everything on your user model: `is_authenticated`, `username`, `email`, `is_staff`, `is_superuser`, and `user.groups` (use async ORM or prefetch in handlers).
@@ -287,7 +472,7 @@ class OrdersState(AppState):
         ...
 ```
 
-Equivalent without `AppState`: `from reflex_django import current_user` then `user = current_user()`.
+Equivalent without `AppState`: `from reflex_django import current_user` then `user = current_user()`, or **`self.request.user`** when you subclass **`AppState`**.
 
 ### `self.session` (property)
 
@@ -520,7 +705,7 @@ Lower-level helpers: `session_cookie_set_js`, `session_cookie_clear_js` from `re
 
 ## `AppState` + `ModelCRUDView`
 
-CRUD states should inherit **`AppState`** so list/save/delete handlers can use `self.user` and default `login_required` wrapping:
+CRUD states should inherit **`AppState`** so list/save/delete handlers can use **`self.request.user`** (or **`self.user`**) and default `login_required` wrapping. **`ModelCRUDView.dispatch`** calls **`bind_request_context()`** before hooks run—use **`self.request`** inside **`get_queryset`**, **`get_create_kwargs`**, etc.
 
 ```python
 from reflex_django.state import AppState, ModelCRUDView
@@ -620,6 +805,10 @@ See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AU
 | Symptom | Likely cause | Fix |
 |---------|----------------|-----|
 | `current_user()` always anonymous | Event bridge off | `install_event_bridge=True` on plugin |
+| `self.request.user` always anonymous | Same as above | Enable bridge; ensure `sessionid` cookie is sent |
+| `AttributeError` on `self.request` outside event | No bridged request | Only access inside `@rx.event` handlers |
+| `self.request.SITE_NAME` missing | Processors not loaded | Set `REFLEX_DJANGO_CONTEXT_PROCESSORS`; use CRUD `dispatch` or `bind_request_context` |
+| Confused `request.user` in UI | User model in component tree | Use `self.username` / `self.is_authenticated` in `rx.*` |
 | Login works once, next event anonymous | Browser cookie stale | `_sync_session_cookie_then_nav` after login |
 | UI shows logged out while handler sees user | Snapshot not synced | Enable `REFLEX_DJANGO_AUTH_AUTO_SYNC` or `on_load=State.sync_from_django` |
 | `RuntimeError: No Django session` | Handler outside event / bridge failed | Ensure bridge runs; check logs for preprocess errors |
@@ -630,11 +819,11 @@ See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AU
 
 ## Security checklist
 
-1. Authorize **mutations** with `self.user`, `require_login_user()`, or `has_perm`—not `is_authenticated` alone on the client.  
+1. Authorize **mutations** with **`self.request.user`**, **`self.user`**, `require_login_user()`, or `has_perm`—not `is_authenticated` alone on the client.  
 2. Use **`@login_required`** / **`@permission_required`** on events that return private data.  
 3. Use a stable **`SECRET_KEY`** in production (password reset tokens).  
 4. Set **`SIGNUP_ENABLED=False`** if only admins may create users.  
-5. Scope querysets to `self.user` (or `UserScopedMixin`) for multi-user data.
+5. Scope querysets to **`self.request.user`** (or `UserScopedMixin`) for multi-user data.
 
 ---
 

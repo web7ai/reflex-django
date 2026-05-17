@@ -4,6 +4,8 @@
 
 The optional subscript **`ModelState[Product]`** only helps type checkers (or infers `model` if you omit it in the class body)—the normal style is **`class ProductState(ModelState): model = Product`**.
 
+> **ModelState vs ModelCRUDView:** `ModelState` already includes `AppState` and `ModelCRUDView` under the hood. Use **`AppState, ModelCRUDView`** only when you need an explicit `serializer_class` or per-model var names (`posts`, `posts_error`). See **[ModelState and ModelCRUDView](model_state_and_crud_view.md)** for a full comparison, side-by-side examples, and migration notes.
+
 ---
 
 ## What you get
@@ -826,6 +828,7 @@ Both styles can coexist in one codebase during migration.
 
 ## Related documentation
 
+- [ModelState and ModelCRUDView](model_state_and_crud_view.md) — comparison guide with rich examples  
 - [State management](state_management.md) — plain `rx.State` vs helpers vs ModelState  
 - [Authentication](authentication.md) — `AppState`, login, permissions  
 - [Serializers](serializers.md) — `ReflexDjangoModelSerializer`  

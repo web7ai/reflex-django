@@ -457,9 +457,11 @@ Subclass **`AppState`** for dashboards, feature state, and **`ModelCRUDView`** C
 
 | In event handlers | In UI (`rx.cond`, components) |
 |-------------------|-------------------------------|
-| `self.user` — live Django user | `self.is_authenticated` |
-| `self.session["key"]` — read/write session | `self.username`, `self.email`, … |
-| `await self.login(user, pass)` | Auto-updated when `REFLEX_DJANGO_AUTH_AUTO_SYNC=True` |
+| **`self.request`** — bridged Django request (`self.request.user`, `.GET`, `.path`, …) | `self.is_authenticated` |
+| **`self.django_request`** — raw `HttpRequest` | `self.username`, `self.email`, … |
+| `self.user` — same as `self.request.user` | Auto-updated when `REFLEX_DJANGO_AUTH_AUTO_SYNC=True` |
+| `self.session["key"]` — read/write session | |
+| `await self.login(user, pass)` | |
 | `await self.logout()` | |
 | `await self.has_perm("app.action")` | |
 | `await self.has_group("admins")` | |
@@ -472,10 +474,11 @@ from reflex_django.auth import login_required, permission_required
 class DashboardState(AppState):
     @rx.event
     async def greet(self):
-        if not self.user.is_authenticated:
+        if not self.request.user.is_authenticated:
             return rx.redirect("/login")
+        tab = self.request.GET.get("tab", "home")
         if await self.has_perm("app.view_dashboard"):
-            return f"Hello, {self.user.get_username()}"
+            return f"Hello, {self.request.user.get_username()} (tab={tab})"
         return await self.on_permission_denied()
 
     @rx.event
@@ -644,7 +647,8 @@ async def _load_notes(self) -> None:
 
 **`ModelState`** is the recommended API for any Django model. Subclass it and declare **`model`** and **`fields`** on the class; reflex-django builds the serializer, list/form Reflex vars, and stable event handlers at class definition time. **`ModelState` already includes `AppState`** (auth, session, permissions).
 
-**Full guide with examples:** [docs/reactive_model_state.md](docs/reactive_model_state.md)
+**Full guide with examples:** [docs/reactive_model_state.md](docs/reactive_model_state.md)  
+**ModelState vs ModelCRUDView (comparison, migration, side-by-side UI):** [docs/model_state_and_crud_view.md](docs/model_state_and_crud_view.md)
 
 ### Minimal state
 
@@ -716,6 +720,8 @@ Each **`dispatch`** binds **`self.request`** / **`self.django_request`** when th
 ## Declarative model CRUD (`ModelCRUDView`)
 
 **`reflex_django.state.ModelCRUDView`** is the explicit-serializer stack: subclass **`AppState` + `ModelCRUDView`** with **`serializer_class`**, and get list + create/update/delete events with flat state vars and overridable hooks (**`get_queryset`**, **`validate_state`**, **`perform_create`**, …).
+
+**When to use which:** [docs/model_state_and_crud_view.md](docs/model_state_and_crud_view.md) · **Tutorial:** [docs/crud_with_mixins_and_states.md](docs/crud_with_mixins_and_states.md)
 
 **Requirements:** Django configured; **event bridge** enabled so **`login_required`** and **`get_user()`** work in handlers.
 

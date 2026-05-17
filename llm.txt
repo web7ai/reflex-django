@@ -195,8 +195,17 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 
 | Layer | API | Use |
 |-------|-----|-----|
-| Live (handlers) | `self.user`, `self.session` | Authorization, session writes |
-| Snapshot (UI) | `is_authenticated`, `username`, `email`, `group_names`, … | `rx.cond`, bindings |
+| Live (handlers) | **`self.request`**, **`self.request.user`**, `self.user`, `self.session` | Authorization, ORM scoping, `GET`/`path`/cookies |
+| Snapshot (UI) | `is_authenticated`, `username`, `email`, `group_names`, … | `rx.cond`, bindings — **not** `self.request.user` in components |
+
+### `self.request` (handlers)
+
+- **`self.request`** → `DjangoStateRequest` (`.user`, `.GET`, `.path`, `.context`, processor keys).
+- **`self.django_request`** → raw `HttpRequest`.
+- **`ModelCRUDView.dispatch`** → `bind_request_context()` merges context processors onto `self.request`.
+- Plain `rx.State` → `from reflex_django import request` instead.
+
+Human docs: `docs/authentication.md#accessing-the-django-request-on-appstate`.
 
 ### Handler examples
 
@@ -204,8 +213,9 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 class S(AppState):
     @rx.event
     async def action(self):
-        if not self.user.is_authenticated:
+        if not self.request.user.is_authenticated:
             return rx.redirect("/login")
+        tab = self.request.GET.get("tab", "home")
         self.session["theme"] = "dark"
         if await self.has_perm("app.change_model"):
             ...
@@ -255,6 +265,7 @@ Human docs: `docs/authentication.md`.
 
 **Import:** `from reflex_django.state import ModelState`  
 **Full doc:** `docs/reactive_model_state.md` (examples: Product CRUD page, BlogPost + UserScopedMixin, pagination, forms, hooks)  
+**Comparison (ModelState vs ModelCRUDView, migration, side-by-side UI):** `docs/model_state_and_crud_view.md`  
 **Requires:** event bridge on; includes **`AppState`** (auth).
 
 ### Pattern (any Django model)
@@ -302,6 +313,7 @@ class NoteState(ModelState, UserScopedMixin):
 
 **Import:** `from reflex_django.state import AppState, ModelCRUDView, ModelListView`  
 **Note:** `ModelState` is **not** an alias; it extends `AppState` + `ModelCRUDView` with `model` + `fields` shorthand.  
+**Comparison guide:** `docs/model_state_and_crud_view.md`  
 **Requires:** event bridge on; `@login_required` on most generated handlers by default.
 
 ### Pattern

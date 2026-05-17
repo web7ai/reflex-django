@@ -77,7 +77,7 @@ async def my_handler(self):
     session = current_session()
 ```
 
-**Option C — `AppState`** (auth + reactive UI snapshot):
+**Option C — `AppState`** (auth + **`self.request`** + reactive UI snapshot):
 
 ```python
 from reflex_django.state import AppState
@@ -85,9 +85,25 @@ from reflex_django.state import AppState
 class MyState(AppState):
     @rx.event
     async def my_handler(self):
-        user = self.user           # same as current_user() for this event
-        self.session["key"] = "x"  # persisted session store
+        # Live Django request for this event (DjangoStateRequest wrapper)
+        if not self.request.user.is_authenticated:
+            return rx.redirect("/login")
+
+        page = self.request.GET.get("page", "1")
+        self.session["last_page"] = page  # same store as self.request.session
+
+        # Snapshot vars for rx.cond / rx.text (not self.request.user in components)
+        greeting = f"Hello, {self.username}"
 ```
+
+| On `AppState` | Use in handlers | Use in UI components |
+|---------------|-----------------|----------------------|
+| **`self.request.user`** | ORM scoping, permissions | Do not pass to `rx.text` |
+| **`self.user`** | Same as `self.request.user` | Do not pass to `rx.text` |
+| **`self.request.GET`**, **`.path`**, **`.COOKIES`** | Query, route, cookies | N/A |
+| **`self.username`**, **`self.is_authenticated`** | Can read in handlers | **`rx.cond`**, labels |
+
+**`ModelState`** / **`ModelCRUDView`:** during **`dispatch`**, **`bind_request_context()`** also merges context-processor keys onto **`self.request`** (e.g. **`self.request.LANGUAGE_CODE`**). See [Authentication — Accessing the Django request on AppState](authentication.md#accessing-the-django-request-on-appstate).
 
 Enable with `install_event_bridge=True` (default on `ReflexDjangoPlugin`). See [Authentication](authentication.md).
 

@@ -50,7 +50,19 @@ Prefix mismatch between `ReflexDjangoPlugin` (`admin_prefix`, `backend_prefix`) 
 
 ### Difference between `ModelState` and `ModelCRUDView`?
 
-**`ModelState[M]`** extends `AppState` + `ModelCRUDView` and accepts `model` + `fields` (auto serializer + canonical `load`/`save`/…). **`ModelCRUDView`** alone is the mixin for explicit `serializer_class` style. See [Reactive ModelState](reactive_model_state.md) and [CRUD with mixins](crud_with_mixins_and_states.md).
+They use the **same CRUD pipeline**; configuration differs:
+
+| | **`ModelState`** | **`AppState, ModelCRUDView`** |
+|---|------------------|-------------------------------|
+| **Includes auth** | Yes (`AppState` built in) | You must add `AppState` |
+| **Serializer** | Auto from `model` + `fields` | You set `serializer_class` |
+| **List var** | `data` (override with `Meta.list_var`) | Pluralized (`posts`, `products`, …) |
+| **Handlers** | `load`, `save`, `refresh`, … (+ legacy aliases) | Legacy (`save_post`, `on_load_posts`) + canonical by default |
+| **When to use** | New CRUD screens (default) | Custom serializers, legacy names |
+
+**`ModelState` already subclasses `ModelCRUDView`.** You do not pick one instead of the other for CRUD—you pick convenience vs explicit control.
+
+Examples and migration: **[ModelState and ModelCRUDView](model_state_and_crud_view.md)**. Deep dives: [Reactive ModelState](reactive_model_state.md), [CRUD with mixins](crud_with_mixins_and_states.md).
 
 ---
 
@@ -87,6 +99,25 @@ That is application code. The framework does not provide an HTTP client for Refl
 ### `reflex django` vs `manage.py`?
 
 `reflex django` loads `rxconfig` first so settings match `reflex run`. [CLI](cli.md).
+
+### How do I use `self.request` on `AppState`?
+
+Subclass **`AppState`** (or **`ModelState`**) and use **`self.request`** inside **`@rx.event`** handlers after the event bridge is enabled:
+
+```python
+class MyState(AppState):
+    @rx.event
+    async def on_load(self):
+        if self.request.user.is_authenticated:
+            page = self.request.GET.get("page", "1")
+```
+
+- **`self.request.user`** — live Django user (ORM scoping, permissions).
+- **`self.request.GET`**, **`.path`**, **`.COOKIES`**, **`.META`** — synthetic `HttpRequest` from `router_data`.
+- **`self.django_request`** — raw `HttpRequest` when a library needs it.
+- **`self.username`** / **`self.is_authenticated`** — Reflex vars for UI only (not for authorization).
+
+Plain **`rx.State`**: use **`from reflex_django import request`** instead. Full examples: [Authentication — Accessing the Django request on AppState](authentication.md#accessing-the-django-request-on-appstate).
 
 ---
 

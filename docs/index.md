@@ -35,16 +35,17 @@ This documentation is written for **Python and Django developers** who want full
 12. [Database integration](database_integration.md) — migrations, `Model`, ORM backend  
 13. [CRUD without mixins](crud_without_mixins.md) — manual Product example  
 14. [reflex-django mixins](reflex_django_mixins.md) — mixin catalog and `session_auth_mixin`  
-15. [Reactive ModelState](reactive_model_state.md) — `ModelState[M]` + canonical ORM API  
-16. [CRUD with mixins and states](crud_with_mixins_and_states.md) — `ModelCRUDView` / BlogPost  
-17. [Forms and validation](forms_and_validation.md)  
-18. [Authentication](authentication.md)  
-19. [API integration](api_integration.md) — Django HTTP under `backend_prefix`  
-20. [CLI](cli.md) — `reflex django` and `reflex-django`  
-21. [Deployment](deployment.md)  
-22. [Testing](testing.md)  
-23. [Best practices](best_practices.md)  
-24. [FAQ](faq.md)
+15. [ModelState and ModelCRUDView](model_state_and_crud_view.md) — comparison, examples, when to use each  
+16. [Reactive ModelState](reactive_model_state.md) — `ModelState[M]` + canonical ORM API  
+17. [CRUD with mixins and states](crud_with_mixins_and_states.md) — `ModelCRUDView` / BlogPost  
+18. [Forms and validation](forms_and_validation.md)  
+19. [Authentication](authentication.md)  
+20. [API integration](api_integration.md) — Django HTTP under `backend_prefix`  
+21. [CLI](cli.md) — `reflex django` and `reflex-django`  
+22. [Deployment](deployment.md)  
+23. [Testing](testing.md)  
+24. [Best practices](best_practices.md)  
+25. [FAQ](faq.md)
 
 ---
 
@@ -55,8 +56,10 @@ This documentation is written for **Python and Django developers** who want full
 | Wire Django settings and prefixes | [Configuration](configuration.md) |
 | Run migrations | [CLI](cli.md) |
 | Use Django session auth in Reflex events (`AppState`, `login`, `has_perm`) | [Authentication](authentication.md) |
+| Use `self.request.user`, `self.request.GET`, Django request in handlers | [Authentication — `self.request`](authentication.md#accessing-the-django-request-on-appstate) |
 | Understand state: plain Reflex vs helpers | [State management](state_management.md) |
-| Build a list/create/edit UI for a model | [Reactive ModelState](reactive_model_state.md), [CRUD with mixins](crud_with_mixins_and_states.md), or [CRUD without mixins](crud_without_mixins.md) |
+| Build a list/create/edit UI for a model | [ModelState and ModelCRUDView](model_state_and_crud_view.md), [Reactive ModelState](reactive_model_state.md), [CRUD with mixins](crud_with_mixins_and_states.md), or [CRUD without mixins](crud_without_mixins.md) |
+| Understand `ModelState` vs `ModelCRUDView` | [ModelState and ModelCRUDView](model_state_and_crud_view.md) |
 | Serialize models for Reflex state | [Serializers](serializers.md) |
 | Expose DRF or Django views on `/api` | [API integration](api_integration.md) |
 | Deploy to production | [Deployment](deployment.md) |

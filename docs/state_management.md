@@ -327,18 +327,22 @@ from reflex_django import DjangoContextState
 
 Equivalent manual pattern: Part A4 with `collect_reflex_context`.
 
-### B4. `AppState` — Django auth + optional `ModelCRUDView`
+### B4. `AppState` — Django auth, `self.request`, optional `ModelCRUDView`
 
-`AppState` (`reflex_django.states` / `reflex_django.state`) extends **`DjangoUserState`** and is the **recommended** base when a state class needs Django auth, sessions, or declarative CRUD.
+`AppState` (`reflex_django.states` / `reflex_django.state`) extends **`DjangoUserState`** and is the **recommended** base when a state class needs Django auth, sessions, the bridged HTTP request, or declarative CRUD.
 
 | Capability | API |
 |------------|-----|
-| Live user (handlers) | `self.user` |
-| Live session read/write | `self.session["key"]` |
+| Live request (handlers) | **`self.request`** (`DjangoStateRequest`: **`.user`**, **`.GET`**, **`.path`**, processors) |
+| Raw `HttpRequest` | **`self.django_request`** |
+| Live user (handlers) | **`self.user`** (same as **`self.request.user`**) |
+| Live session read/write | **`self.session["key"]`** |
 | Login / logout | `await self.login(u, p)`, `await self.logout()` |
 | Permissions | `await self.has_perm("app.action")`, `await self.has_group("admins")` |
 | UI snapshot | `self.is_authenticated`, `self.username`, … |
 | CRUD assembly | Add `ModelCRUDView` to bases |
+
+**Full guide with examples:** [Authentication — Accessing the Django request on AppState](authentication.md#accessing-the-django-request-on-appstate).
 
 ```python
 import reflex as rx
@@ -409,17 +413,20 @@ class ProductState(ModelState):
 
 Call stable handlers from the UI: `ProductState.refresh`, `ProductState.load(id)`, `ProductState.save`, `ProductState.delete(id)`. See **[Reactive ModelState](reactive_model_state.md)** for full examples (pagination, filters, user scoping, forms, overrides).
 
-### Legacy: `AppState` + `ModelCRUDView`
+### Explicit: `AppState` + `ModelCRUDView`
 
-Explicit serializer, same hooks and dispatch pipeline:
+Hand-written serializer, same hooks and dispatch pipeline; per-model var names (`notes`, `notes_error`) unless you override `Meta.list_var`:
 
 ```python
 class NotesState(AppState, ModelCRUDView):
     serializer_class = NoteSerializer
 ```
 
+See **[ModelState and ModelCRUDView](model_state_and_crud_view.md)** for a side-by-side comparison, full page examples, and migration between styles.
+
 | Layer | Types | Doc |
 |-------|-------|-----|
+| Comparison + examples | `ModelState` vs `ModelCRUDView` | [ModelState and ModelCRUDView](model_state_and_crud_view.md) |
 | Reactive ORM (preferred) | `ModelState[M]` | [Reactive ModelState](reactive_model_state.md) |
 | Explicit serializer CRUD | `AppState` + `ModelCRUDView` | [CRUD with mixins](crud_with_mixins_and_states.md) |
 | Mixin catalog | `ListMixin`, `DispatchMixin`, `UserScopedMixin`, … | [reflex-django mixins](reflex_django_mixins.md) |
@@ -427,7 +434,7 @@ class NotesState(AppState, ModelCRUDView):
 
 Both `ModelState` and `ModelCRUDView` require the **event bridge** for default `@login_required` and `self.request.user` in hooks.
 
-**`from reflex_django import request` vs `self.request` on ModelState:** the module **`request`** is the raw bridged `HttpRequest` (Django-familiar: `user`, `GET`, `headers`). During `dispatch`, **`self.request`** is a `DjangoStateRequest` wrapper that also exposes context-processor keys (`LANGUAGE_CODE`, …). Use either in hooks; prefer **`request`** for plain auth/query and **`self.request`** when you need processor output.
+**`from reflex_django import request` vs `self.request` on AppState:** both read the same bridged `HttpRequest` for the current event. On **`AppState`**, prefer **`self.request.user`** and **`self.request.GET`** in handlers. The module **`request`** proxy is for plain **`rx.State`** classes. During **`ModelCRUDView.dispatch`**, **`bind_request_context()`** enriches **`self.request`** with context-processor keys—see [Authentication](authentication.md#accessing-the-django-request-on-appstate).
 
 ---
 
