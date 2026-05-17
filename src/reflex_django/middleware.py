@@ -120,6 +120,20 @@ def _router_data_from_state_chain(state: Any) -> dict[str, Any]:
     return {}
 
 
+def _merge_router_data_with_state_cookie(
+    state_rd: dict[str, Any],
+    event_rd: dict[str, Any],
+) -> dict[str, Any]:
+    """Shallow-merge router data but keep state ``Cookie`` when the event omits it."""
+    merged = {**state_rd, **event_rd}
+    state_headers = dict(state_rd.get("headers") or {})
+    event_headers = dict(event_rd.get("headers") or {})
+    if not event_headers.get("cookie") and state_headers.get("cookie"):
+        event_headers["cookie"] = state_headers["cookie"]
+    merged["headers"] = {**state_headers, **event_headers}
+    return merged
+
+
 def _resolve_router_data(event: Event, state: BaseState | None) -> dict[str, Any]:
     """Merge event and state ``router_data``, preferring event cookies when set.
 
@@ -141,7 +155,7 @@ def _resolve_router_data(event: Event, state: BaseState | None) -> dict[str, Any
 
     state_rd = _router_data_from_state_chain(state)
     if (state_rd.get("headers") or {}).get("cookie"):
-        return {**state_rd, **event_rd}
+        return _merge_router_data_with_state_cookie(state_rd, event_rd)
 
     return event_rd
 
@@ -349,6 +363,15 @@ class DjangoEventBridge(Middleware):
         from reflex_django.state.auth_bridge import maybe_sync_app_state_auth
 
         if isinstance(state, _BaseState):
+            user = getattr(request, "user", None)
+            if getattr(user, "is_authenticated", False):
+                sk = getattr(request.session, "session_key", None) or ""
+                if sk:
+                    from reflex_django.session_js import (
+                        mirror_auth_cookies_to_state_tree,
+                    )
+
+                    mirror_auth_cookies_to_state_tree(state, sk)
             await maybe_sync_app_state_auth(state)
         return None
 

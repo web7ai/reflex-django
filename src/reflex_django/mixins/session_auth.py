@@ -46,18 +46,24 @@ def _sync_session_cookie_then_nav(
     Navigation is deferred briefly so the cookie write is applied before the
     next load.
     """
-    from reflex_django.session_js import session_cookie_clear_js, session_cookie_set_js
+    from reflex_django.session_js import (
+        browser_auth_logout_clear_js,
+        browser_session_storage_clear_js,
+        session_cookie_clear_js,
+        session_cookie_set_js,
+    )
 
     go = _defer_nav_js(path)
-    clear_js = session_cookie_clear_js()
     if clear_cookie:
-        js = f"{clear_js} {go}"
+        js = f"{browser_auth_logout_clear_js()} {go}"
     else:
+        clear_js = session_cookie_clear_js()
         sk = getattr(request.session, "session_key", None) or ""
+        storage_js = browser_session_storage_clear_js()
         if not sk:
-            js = go
+            js = f"{storage_js} {go}"
         else:
-            js = f"{clear_js} {session_cookie_set_js(sk)} {go}"
+            js = f"{storage_js} {clear_js} {session_cookie_set_js(sk)} {go}"
     return rx.call_script(js)
 
 
@@ -155,6 +161,11 @@ def populate_session_auth_state(
 
         setattr(self, p_var, "")
         await session_async_save(request)
+        sk = getattr(request.session, "session_key", None) or ""
+        if sk:
+            from reflex_django.session_js import mirror_auth_cookies_to_state_tree
+
+            mirror_auth_cookies_to_state_tree(self, sk)
         await apply_auth_snapshot_to_state(self)
         _mark_auth_ui_dirty(self)
         return _sync_session_cookie_then_nav(request, post_in)
@@ -200,11 +211,14 @@ def populate_session_auth_state(
         ns[cfg.submit_form_event] = rx.event(submit_form_impl)
 
     async def logout_impl(self: Any) -> Any:
+        from reflex_django.session_js import browser_auth_logout_clear_js
+
         request = current_request()
         await AuthBridgeMixin.logout(self)
         if request is None:
-            return rx.call_script(_defer_nav_js(post_out))
-        await session_async_save(request)
+            return rx.call_script(
+                f"{browser_auth_logout_clear_js()} {_defer_nav_js(post_out)}"
+            )
         return _sync_session_cookie_then_nav(request, post_out, clear_cookie=True)
 
     ns[cfg.logout_event] = rx.event(logout_impl)

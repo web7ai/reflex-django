@@ -702,14 +702,14 @@ if request is not None:
     return _sync_session_cookie_then_nav(request, "/")  # post-login path
 ```
 
-Logout with cookie clear:
+Logout with cookie clear (session + CSRF in the browser, plus server session flush):
 
 ```python
 await self.logout()
 return _sync_session_cookie_then_nav(request, "/login", clear_cookie=True)
 ```
 
-Lower-level helpers: `session_cookie_set_js`, `session_cookie_clear_js` from `reflex_django`.
+`DjangoAuthState.logout` and `session_auth_mixin` handlers do this automatically. They also clear Reflex client `sessionStorage` (websocket `token`, scroll cache) and `localStorage` on logout via `browser_auth_logout_clear_js`. Login clears `sessionStorage` before writing the new `sessionid`. Lower-level helpers: `browser_auth_logout_clear_js`, `browser_auth_cookies_clear_js`, `session_cookie_set_js`, `session_cookie_clear_js` from `reflex_django.session_js`.
 
 **HttpOnly cookies:** JS cookie mirroring cannot set `HttpOnly`; see Django `SESSION_COOKIE_HTTPONLY` tradeoffs in production.
 
@@ -846,7 +846,9 @@ See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AU
 | Confused `request.user` in UI | User model in component tree | Use `self.username` / `self.is_authenticated` in `rx.*` |
 | Login works once, next event anonymous | Browser cookie stale | `_sync_session_cookie_then_nav` after login |
 | UI shows logged out while handler sees user | Snapshot not synced | Enable `REFLEX_DJANGO_AUTH_AUTO_SYNC` or `on_load=State.sync_from_django` |
-| Logout button flashes then hides | UI bound to inherited `django_user_state.is_authenticated` snapshot, or stale snapshot on auth branch | Use **`DjangoAuthState.is_authenticated`** (`@rx.var`, library ≥ fix); reinstall editable package and **restart Reflex** so `DjangoAuthState` rebuilds |
+| `/` and `/login` redirect loop after re-login | Logout strips `sessionid` from persisted `router_data`; login only updated the browser cookie; events without cookies saw anonymous on `/` but authenticated on `/login` | Upgrade reflex-django (mirrors session into `router_data` on login + fixes cookie merge in the event bridge); `pip install -e` and **restart Reflex** |
+| Loop fixed only after clearing **session storage** in devtools (`token`, `react-router-scroll-positions`) | Stale Reflex websocket `token` in `sessionStorage` reconnects to old server state after logout | Upgrade reflex-django (`browser_auth_logout_clear_js` on logout); restart Reflex |
+| Logout button flashes then hides | UI bound to inherited `django_user_state.is_authenticated` snapshot, or stale snapshot on auth branch | Use **`DjangoAuthState.is_authenticated`** (`@rx.var`); reinstall editable package and **restart Reflex** |
 | `print(DjangoAuthState.is_authenticated)` shows a `Var`, not `True`/`False` | Expected in Python component code | Vars are reactive; test in the browser or in an event handler with `current_user()` |
 | Logout hidden on small screens | Sidebar `display` breakpoints hide the column | Show sidebar from `md`/`lg` up (see your `sidebar.py` `display=[...]`) |
 | `RuntimeError: No Django session` | Handler outside event / bridge failed | Ensure bridge runs; check logs for preprocess errors |

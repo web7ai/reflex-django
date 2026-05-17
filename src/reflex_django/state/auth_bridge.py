@@ -172,15 +172,38 @@ class AuthBridgeMixin:
             return False
         await alogin(request, user)
         await session_async_save(request)
+        sk = getattr(request.session, "session_key", None) or ""
+        if sk:
+            from reflex_django.session_js import mirror_auth_cookies_to_state_tree
+
+            mirror_auth_cookies_to_state_tree(self, sk)
         await self.refresh_django_user_fields()
         return True
 
     async def logout(self) -> None:
-        """Clear the Django session for the current event."""
+        """Log out, flush the Django session, and drop stale cookie mirrors.
+
+        ``alogout`` calls :meth:`~django.contrib.sessions.backends.base.SessionBase.flush`,
+        which deletes session data and rotates the session key. This method also
+        removes session/CSRF cookies from the synthetic request and from persisted
+        ``router_data`` on the Reflex state tree so later events in the same page
+        life do not resurrect the old session. Pair with
+        :func:`~reflex_django.session_js.browser_auth_logout_clear_js` (via
+        :func:`~reflex_django.mixins.session_auth._sync_session_cookie_then_nav`)
+        when the browser must drop cookies and Reflex client storage before the
+        next document load.
+        """
+        from reflex_django.session_js import (
+            clear_auth_cookies_from_state_tree,
+            strip_auth_cookies_from_request,
+        )
+
         request = current_request()
         if request is not None:
             await alogout(request)
+            strip_auth_cookies_from_request(request)
             await session_async_save(request)
+        clear_auth_cookies_from_state_tree(self)
         await self.refresh_django_user_fields()
 
     async def on_auth_failed(self) -> Any:

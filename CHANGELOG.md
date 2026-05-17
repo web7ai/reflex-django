@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ``MiddlewareMixin`` with both sync and async support, fixing
   ``'coroutine' object has no attribute 'get'`` and media/static 500s when the
   middleware was placed in ``MIDDLEWARE``.
+- Logout now clears session and CSRF cookies in the browser (via
+  ``browser_auth_cookies_clear_js``), strips them from the synthetic Django
+  request and Reflex ``router_data``, and relies on ``alogout``'s session
+  ``flush`` so stale ``sessionid`` values are not reused on the next event.
+- Login mirrors the new ``sessionid`` into persisted Reflex ``router_data``
+  (symmetric with logout clearing), and the event bridge preserves state
+  cookies when merging ``router_data`` so post-login Socket.IO events without
+  cookie headers no longer bounce between ``/`` and ``/login``.
+- Logout and login navigation now clear Reflex ``sessionStorage`` (including the
+  stale websocket ``token``) and logout also clears ``localStorage``, matching
+  manual devtools fixes for post-logout redirect loops.
 - Upload handlers (`rx.upload` / `rx.upload_files`) now receive the same
   Django session and ``self.request.user`` as other Reflex events. Reflex
   previously enqueued upload events without ``router_data``; reflex-django
