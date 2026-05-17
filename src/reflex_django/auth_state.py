@@ -80,6 +80,34 @@ async def _group_names_for_user(user: Any) -> list[str]:
     return [name async for name in user.groups.values_list("name", flat=True)]
 
 
+async def apply_auth_snapshot_to_state(
+    state: DjangoUserState,
+    *,
+    include_groups: bool | None = None,
+) -> None:
+    """Update auth snapshot vars on ``state`` from :func:`current_user`.
+
+    Plain async helper for server-side code (event bridge, mixins). Reflex may
+    wrap :meth:`DjangoUserState.refresh_django_user_fields` as an event handler;
+    call this function when you need a direct coroutine.
+    """
+    user = current_user()
+    want_groups = (
+        _settings_include_groups() if include_groups is None else include_groups
+    )
+    groups = await _group_names_for_user(user) if want_groups else None
+    snap = user_snapshot(user, group_names=groups if want_groups else [])
+    state.user_id = snap["id"]
+    state.username = snap["username"]
+    state.email = snap["email"]
+    state.first_name = snap["first_name"]
+    state.last_name = snap["last_name"]
+    state.is_authenticated = snap["is_authenticated"]
+    state.is_staff = snap["is_staff"]
+    state.is_superuser = snap["is_superuser"]
+    state.group_names = snap["group_names"]
+
+
 class DjangoUserState(AuthBridgeMixin, rx.State):
     """Snapshot of ``request.user`` for Reflex UI (navbar, conditional layout).
 
@@ -106,21 +134,7 @@ class DjangoUserState(AuthBridgeMixin, rx.State):
         Args:
             include_groups: Same semantics as :meth:`sync_from_django`.
         """
-        user = current_user()
-        want_groups = (
-            _settings_include_groups() if include_groups is None else include_groups
-        )
-        groups = await _group_names_for_user(user) if want_groups else None
-        snap = user_snapshot(user, group_names=groups if want_groups else [])
-        self.user_id = snap["id"]
-        self.username = snap["username"]
-        self.email = snap["email"]
-        self.first_name = snap["first_name"]
-        self.last_name = snap["last_name"]
-        self.is_authenticated = snap["is_authenticated"]
-        self.is_staff = snap["is_staff"]
-        self.is_superuser = snap["is_superuser"]
-        self.group_names = snap["group_names"]
+        await apply_auth_snapshot_to_state(self, include_groups=include_groups)
 
     @rx.event
     async def sync_from_django(
@@ -138,4 +152,4 @@ class DjangoUserState(AuthBridgeMixin, rx.State):
         await self.refresh_django_user_fields(include_groups=include_groups)
 
 
-__all__ = ["DjangoUserState", "user_snapshot"]
+__all__ = ["DjangoUserState", "apply_auth_snapshot_to_state", "user_snapshot"]

@@ -182,21 +182,37 @@ class AuthBridgeMixin:
         return rx.toast.error("You do not have permission to perform this action.")
 
 
+async def _sync_auth_snapshots_in_tree(state: Any) -> None:
+    """Refresh auth snapshot vars on every :class:`~reflex_django.auth_state.DjangoUserState` substate."""
+    from reflex_django.auth_state import DjangoUserState
+
+    root = state._get_root_state() if hasattr(state, "_get_root_state") else state
+
+    async def visit(node: Any) -> None:
+        if isinstance(node, DjangoUserState):
+            from reflex_django.auth_state import apply_auth_snapshot_to_state
+
+            await apply_auth_snapshot_to_state(node)
+        substates = getattr(node, "substates", None) or {}
+        for child in substates.values():
+            await visit(child)
+
+    await visit(root)
+
+
 async def maybe_sync_app_state_auth(state: Any) -> None:
-    """Refresh auth snapshot vars on ``AppState`` when auto-sync is enabled."""
+    """Refresh auth snapshot vars on all ``DjangoUserState`` substates when auto-sync is enabled."""
     from django.conf import settings
 
     if not getattr(settings, "REFLEX_DJANGO_AUTH_AUTO_SYNC", True):
         return
-    from reflex_django.states import AppState
-
-    if isinstance(state, AppState):
-        await state.refresh_django_user_fields()
+    await _sync_auth_snapshots_in_tree(state)
 
 
 __all__ = [
     "AuthBridgeMixin",
     "SessionProxy",
+    "_sync_auth_snapshots_in_tree",
     "maybe_sync_app_state_auth",
     "session_async_save",
 ]

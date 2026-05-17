@@ -21,11 +21,17 @@ def populate_navigation_state(
     async def redirect_to_login(self: Any) -> Any:
         import reflex_django.auth.routes as auth_routes
 
+        from reflex_django.context import current_user
+
         if not self.is_hydrated:
             return type(self).redirect_to_login
-        if not self.is_authenticated:
-            return rx.redirect(auth_routes.LOGIN_ROUTE)
-        return None
+        from reflex_django.auth_state import apply_auth_snapshot_to_state
+
+        await apply_auth_snapshot_to_state(self)
+        user = current_user()
+        if getattr(user, "is_authenticated", False) or self.is_authenticated:
+            return None
+        return rx.redirect(auth_routes.LOGIN_ROUTE)
 
     ns["redirect_to_login"] = redirect_to_login
 

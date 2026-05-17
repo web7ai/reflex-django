@@ -20,9 +20,14 @@ from reflex_django.state.auth_bridge import AuthBridgeMixin, session_async_save
 _session_async_save = session_async_save
 
 
+_NAV_DELAY_MS = 150
+
+
 def _defer_nav_js(path: str) -> str:
     href = json.dumps(path)
-    return f"setTimeout(function(){{ window.location.href = {href}; }}, 50);"
+    return (
+        f"setTimeout(function(){{ window.location.href = {href}; }}, {_NAV_DELAY_MS});"
+    )
 
 
 def _sync_session_cookie_then_nav(
@@ -44,11 +49,15 @@ def _sync_session_cookie_then_nav(
     from reflex_django.session_js import session_cookie_clear_js, session_cookie_set_js
 
     go = _defer_nav_js(path)
+    clear_js = session_cookie_clear_js()
     if clear_cookie:
-        js = f"{session_cookie_clear_js()} {go}"
+        js = f"{clear_js} {go}"
     else:
         sk = getattr(request.session, "session_key", None) or ""
-        js = f"{session_cookie_set_js(sk)} {go}" if sk else go
+        if not sk:
+            js = go
+        else:
+            js = f"{clear_js} {session_cookie_set_js(sk)} {go}"
     return rx.call_script(js)
 
 
@@ -137,7 +146,11 @@ def populate_session_auth_state(
     ns[f"set_{p_var}"] = make_pass_setter()
 
     async def _finish_login(self: Any, request: Any) -> Any:
+        from reflex_django.auth_state import apply_auth_snapshot_to_state
+
         setattr(self, p_var, "")
+        await session_async_save(request)
+        await apply_auth_snapshot_to_state(self)
         return _sync_session_cookie_then_nav(request, post_in)
 
     async def submit_impl(self: Any) -> Any:

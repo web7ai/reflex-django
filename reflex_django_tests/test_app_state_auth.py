@@ -131,6 +131,30 @@ def test_ac5_auto_sync_refreshes_app_state_snapshot() -> None:
     _run_in_fresh_context(_go)
 
 
+def test_auto_sync_refreshes_all_django_user_substates() -> None:
+    from reflex_django.auth.state import DjangoAuthState
+    from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
+
+    dashboard = _DashboardState()
+    auth = DjangoAuthState()
+    auth.substates = {}
+    dashboard.substates = {DjangoAuthState.get_name(): auth}
+    auth.parent_state = dashboard
+
+    async def _go() -> None:
+        with mock.patch(
+            "reflex_django.auth_state.apply_auth_snapshot_to_state",
+            new=mock.AsyncMock(),
+        ) as snap:
+            await _sync_auth_snapshots_in_tree(dashboard)
+        assert snap.await_count == 2
+        synced = {call.args[0] for call in snap.await_args_list}
+        assert dashboard in synced
+        assert auth in synced
+
+    asyncio.run(_go())
+
+
 def test_login_returns_false_when_no_request() -> None:
     state = _DashboardState()
 

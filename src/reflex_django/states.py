@@ -53,8 +53,10 @@ class AppState(DjangoUserState, ABC, metaclass=AppStateMeta):
 
     **UI (reactive):** use ``is_authenticated``, ``username``, ``email``,
     ``group_names``, ``is_staff``, and ``is_superuser`` (Reflex vars). They are
-    refreshed automatically when ``REFLEX_DJANGO_AUTH_AUTO_SYNC`` is enabled, or
-    call :meth:`~reflex_django.auth_state.DjangoUserState.sync_from_django`.
+    refreshed automatically on every event (all ``DjangoUserState`` substates,
+    including :class:`~reflex_django.auth.state.DjangoAuthState`) when
+    ``REFLEX_DJANGO_AUTH_AUTO_SYNC`` is enabled, or call
+    :meth:`~reflex_django.auth_state.DjangoUserState.sync_from_django`.
 
     Combine with :class:`~reflex_django.state.ModelState` for declarative CRUD::
 
