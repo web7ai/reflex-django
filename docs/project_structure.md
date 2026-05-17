@@ -12,28 +12,48 @@ Recommended layout for a **monorepo** that hosts Django and Reflex together unde
 
 ## Canonical layout
 
-*Example application layout.*
+*Example application layout for a monorepo Reflex + Django project.*
 
 ```text
-myapp/
-├── rxconfig.py              # ReflexDjangoPlugin + app_name
+myapp/                         # project root (CLI name)
+├── rxconfig.py                # ReflexDjangoPlugin, RadixThemesPlugin, TailwindV4Plugin
 ├── manage.py
 ├── pyproject.toml
-├── backend/                   # Django project package
-│   ├── settings.py
+├── Dockerfile
+├── docker-compose.yml
+├── config/                    # Django project package
+│   ├── settings.py            # or settings/ package (base, dev, prod)
 │   ├── urls.py
-│   └── wsgi.py / asgi.py      # optional; reflex run uses plugin ASGI
-├── catalog/                   # Django apps (models, admin)
-│   ├── models.py
-│   ├── serializers.py         # ReflexDjangoModelSerializer (your code)
-│   └── admin.py
-└── myapp/                     # Reflex app module (name = rxconfig app_name)
-    ├── myapp.py               # rx.App, add_page
+│   └── api/urls.py            # starter: routes under /api
+├── accounts/                  # starter: UserProfile + avatar
+├── todos/                     # starter: Task model
+└── myapp/                     # Reflex app (name = rxconfig app_name)
+    ├── myapp.py               # rx.App, add_auth_pages, register_pages
+    ├── routes.py
+    ├── STRUCTURE.md
+    ├── layout/                # page_layout, header, footer (starter)
     ├── pages/
+    ├── forms/
+    ├── components/
+    ├── ui/                    # tokens, buttons, callouts, typography
     └── states/
-        ├── products.py        # manual CRUD example
-        └── posts.py           # ModelCRUDView example
 ```
+
+---
+
+## Reflex app layers
+
+| Layer | Directory | Role |
+|-------|-----------|------|
+| Entry | `myapp.py`, `routes.py` | App wiring and route registry |
+| Layout | `layout/` | Header, footer, shells |
+| Pages | `pages/` | Full screens |
+| Forms | `forms/` | `rx.form` assemblies |
+| Components | `components/` | Composed widgets |
+| UI | `ui/` | Radix primitives (see DESIGN.md) |
+| States | `states/` | `AppState`, `ModelCRUDView`, handlers |
+
+Auth routes (`/login`, `/register`, password reset) come from **`reflex_django.auth.add_auth_pages`** — not from `pages/`.
 
 ---
 
@@ -43,11 +63,11 @@ myapp/
 |------|------|
 | `rxconfig.py` | Reflex config; plugin bootstraps Django |
 | `manage.py` | Django entry; prefer `reflex django` for same settings |
-| `backend/settings.py` | `INSTALLED_APPS`, `DATABASES`, `REFLEX_DJANGO_*` |
-| `backend/urls.py` | HTTP routes under prefixes (admin, API) |
-| `myapp/myapp.py` | `app = rx.App()`, pages, optional `add_auth_pages` |
+| `config/settings.py` or `config/settings/` | `INSTALLED_APPS`, `DATABASES`, `REFLEX_DJANGO_*` |
+| `config/urls.py` | HTTP routes under prefixes (admin, API) |
+| `myapp/myapp.py` | `app = rx.App()`, `add_auth_pages`, `register_pages` |
 | `states/*.py` | `AppState`, `ModelCRUDView`, event handlers |
-| `catalog/models.py` | Django models (your domain) |
+| `todos/models.py` | Django models (your domain) |
 
 ---
 
@@ -98,7 +118,8 @@ Place `ReflexDjangoModelSerializer` subclasses next to models or in `serializers
 ## See also
 
 - [Architecture](architecture.md)  
-- [Configuration](configuration.md)
+- [Configuration](configuration.md)  
+- [CLI](cli.md)
 
 ---
 

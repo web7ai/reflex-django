@@ -17,15 +17,14 @@ from reflex_django.state.fields import (
     StateField,
     StrStateField,
     build_state_fields,
+    state_field_for_model_field,
     state_field_for_name,
 )
-from reflex_django.state.model_state import ModelCRUDView, ModelState
 from reflex_django.state.options import ModelStateOptions, resolve_options
 from reflex_django.state.serializer_factory import (
     build_serializer_from_fields,
     validate_model_fields,
 )
-from reflex_django.state.request import DjangoStateRequest
 from reflex_django.state.views.list import ModelListView
 from reflex_django.state.views.meta import ModelCRUDMeta, ModelListMeta
 
@@ -51,6 +50,7 @@ __all__ = [
     "maybe_assemble_model_state",
     "register_state_class",
     "resolve_options",
+    "state_field_for_model_field",
     "state_field_for_name",
     "validate_model_fields",
 ]
@@ -61,5 +61,13 @@ def __getattr__(name: str) -> Any:
         from reflex_django.states import AppState
 
         return AppState
+    if name in ("ModelState", "ModelCRUDView"):
+        from reflex_django.state import model_state as _model_state
+
+        return getattr(_model_state, name)
+    if name == "DjangoStateRequest":
+        from reflex_django.state.request import DjangoStateRequest
+
+        return DjangoStateRequest
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

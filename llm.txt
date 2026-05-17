@@ -476,7 +476,6 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 
 - **Via Reflex:** `uv run reflex django <subcommand>` — e.g. `migrate`, `makemigrations`, `createsuperuser`, `shell`, `collectstatic`, `help`. Loads `rxconfig` first so `ReflexDjangoPlugin` sets `DJANGO_SETTINGS_MODULE` and prefixes, then `configure_django()`.
 - **Standalone:** `uv run reflex-django <subcommand>` — forwards to Django’s `execute_from_command_line` the same way (see `src/reflex_django/cli.py`).
-- **`reflex django init`:** Exists for scaffolding but is **beta**; README recommends the **manual** setup checklist for production-minded projects.
 
 ---
 

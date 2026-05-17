@@ -2,24 +2,37 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from typing import Any
 
 from reflex_django.auth.mixins.navigation import populate_navigation_state
-from reflex_django.auth.mixins.password_reset import (
-    PasswordResetConfig,
-    populate_password_reset_state,
-)
-from reflex_django.auth.mixins.registration import (
-    RegistrationConfig,
-    populate_registration_state,
-)
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
 from reflex_django.auth_state import DjangoUserState
+from reflex_django.conf import configure_django
 from reflex_django.mixins.session_auth import SessionAuthConfig, populate_session_auth_state
 
 _STATE_MODULE = "reflex_django.auth.state"
+
+
+def _auth_state_module() -> types.ModuleType:
+    """Return ``reflex_django.auth.state``, loading it if needed."""
+    return importlib.import_module(_STATE_MODULE)
+
+
+def _cached_auth_state_class(mod: types.ModuleType | None = None) -> type | None:
+    """Read ``DjangoAuthState`` from the module dict without triggering ``__getattr__``."""
+    mod = mod or sys.modules.get(_STATE_MODULE)
+    if mod is None:
+        return None
+    existing = mod.__dict__.get("DjangoAuthState")
+    return existing if isinstance(existing, type) else None
+
+
+def _store_auth_state_class(cls: type) -> None:
+    mod_obj = _auth_state_module()
+    setattr(mod_obj, "DjangoAuthState", cls)
 
 
 def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
@@ -30,11 +43,20 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
     ``DjangoAuthState`` substates that failed on socket connect. This builder
     merges every mixin into a single class that extends :class:`DjangoUserState`.
     """
-    mod = sys.modules.get(_STATE_MODULE)
-    if mod is not None:
-        existing = getattr(mod, "DjangoAuthState", None)
-        if existing is not None:
-            return existing
+    configure_django()
+
+    from reflex_django.auth.mixins.password_reset import (
+        PasswordResetConfig,
+        populate_password_reset_state,
+    )
+    from reflex_django.auth.mixins.registration import (
+        RegistrationConfig,
+        populate_registration_state,
+    )
+
+    existing = _cached_auth_state_class()
+    if existing is not None:
+        return existing
 
     auth = auth or get_auth_settings()
     session_cfg = SessionAuthConfig(
@@ -76,25 +98,19 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
         ns["__annotations__"] = annotations
 
     cls = types.new_class(cls_name, (DjangoUserState,), {}, exec_body)
-    mod_obj = sys.modules.get(_STATE_MODULE)
-    if mod_obj is not None:
-        setattr(mod_obj, cls.__name__, cls)
+    _store_auth_state_class(cls)
     return cls
 
 
 def get_or_create_django_auth_state() -> type:
     """Return the module singleton ``DjangoAuthState`` class."""
-    mod = sys.modules.get(_STATE_MODULE)
-    if mod is not None:
-        existing = getattr(mod, "DjangoAuthState", None)
-        if existing is not None:
-            return existing
+    existing = _cached_auth_state_class()
+    if existing is not None:
+        return existing
     cls = build_django_auth_state()
     cls.__name__ = "DjangoAuthState"
     cls.__qualname__ = "DjangoAuthState"
-    mod_obj = sys.modules.get(_STATE_MODULE)
-    if mod_obj is not None:
-        setattr(mod_obj, "DjangoAuthState", cls)
+    _store_auth_state_class(cls)
     return cls
 
 

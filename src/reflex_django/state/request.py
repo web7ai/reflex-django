@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from django.contrib.auth.models import AnonymousUser
+if TYPE_CHECKING:
+    from django.contrib.auth.models import AnonymousUser
+
+
+def _anonymous_user() -> Any:
+    from django.contrib.auth.models import AnonymousUser
+
+    return AnonymousUser()
 
 
 class DjangoStateRequest:
@@ -40,9 +47,9 @@ class DjangoStateRequest:
     def user(self) -> Any:
         """Authenticated user from the synthetic request (or anonymous)."""
         if self._http is None:
-            return AnonymousUser()
+            return _anonymous_user()
         user = getattr(self._http, "user", None)
-        return user if user is not None else AnonymousUser()
+        return user if user is not None else _anonymous_user()
 
     def __getattr__(self, name: str) -> Any:
         if name in self._context:

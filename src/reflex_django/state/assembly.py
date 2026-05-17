@@ -704,6 +704,69 @@ def register_state_class(cls: type) -> None:
         setattr(mod_obj, cls.__name__, cls)
 
 
+_SIMPLE_VAR_TYPES = (str, int, bool, float)
+_SIMPLE_VAR_TYPE_NAMES = frozenset({"str", "int", "bool", "float"})
+
+
+def _is_simple_var_type(annotation: Any) -> bool:
+    if annotation in _SIMPLE_VAR_TYPES:
+        return True
+    if isinstance(annotation, str):
+        return annotation in _SIMPLE_VAR_TYPE_NAMES
+    return False
+
+
+def inject_simple_var_setters(
+    namespace: dict[str, Any],
+    *,
+    qualname: str,
+) -> None:
+    """Add ``set_{field}`` handlers for manual :class:`~reflex_django.states.AppState` form vars.
+
+    Reflex 0.9+ disables automatic setters; :class:`~reflex_django.state.ModelCRUDView`
+    still injects them during assembly. Plain states (e.g. profile forms) need this pass.
+    """
+    annotations = namespace.get("__annotations__", {})
+    for name, type_ann in annotations.items():
+        if name.startswith("_") or not _is_simple_var_type(type_ann):
+            continue
+        if name not in namespace:
+            continue
+        setter_name = f"set_{name}"
+        if setter_name in namespace:
+            continue
+
+        def make_setter(field_name: str = name, field_type: Any = type_ann) -> Any:
+            @rx.event
+            def set_field(self: Any, value: Any) -> None:
+                if field_type is bool:
+                    setattr(self, field_name, bool(value))
+                elif field_type is int:
+                    setattr(self, field_name, int(value))
+                elif field_type is float:
+                    setattr(self, field_name, float(value))
+                else:
+                    setattr(self, field_name, "" if value is None else str(value))
+
+            set_field.__name__ = setter_name
+            set_field.__qualname__ = f"{qualname}.{setter_name}"
+            return set_field
+
+        namespace[setter_name] = make_setter()
+
+
+def maybe_inject_var_setters(
+    namespace: dict[str, Any],
+    bases: tuple[type, ...],
+    *,
+    qualname: str,
+) -> None:
+    """Inject form setters for non-CRUD states when the class body declares backend vars."""
+    if _needs_assembly(bases) or _uses_model_state_base(bases):
+        return
+    inject_simple_var_setters(namespace, qualname=qualname)
+
+
 def maybe_assemble_model_state(
     namespace: dict[str, Any],
     bases: tuple[type, ...],
@@ -722,6 +785,8 @@ def maybe_assemble_model_state(
 __all__ = [
     "assemble_model_state_namespace",
     "bind_event",
+    "inject_simple_var_setters",
     "maybe_assemble_model_state",
+    "maybe_inject_var_setters",
     "register_state_class",
 ]

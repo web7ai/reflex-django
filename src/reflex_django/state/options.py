@@ -94,6 +94,37 @@ def _default_list_var(model_name: str, *, use_generic_var_names: bool) -> str:
     return pluralize_model_name(model_name)
 
 
+def _default_ordering(model: type[models.Model]) -> tuple[str, ...]:
+    """Use the model's ``Meta.ordering`` when present, else a sensible fallback."""
+    model_ordering = model._meta.ordering
+    if model_ordering:
+        return tuple(model_ordering)
+    field_names = {f.name for f in model._meta.get_fields()}
+    if "created_at" in field_names:
+        return ("-created_at",)
+    return ("-pk",)
+
+
+def _resolve_ordering(
+    meta: type | None,
+    state_cls: type,
+    model: type[models.Model],
+) -> tuple[str, ...]:
+    """Resolve list ordering: explicit ``Meta``/class attr, else model defaults."""
+    if meta is not None and hasattr(meta, "ordering"):
+        val = getattr(meta, "ordering", None)
+        if val is not None:
+            return tuple(val)
+    if "ordering" in state_cls.__dict__:
+        val = state_cls.__dict__["ordering"]
+        if val is not None:
+            return tuple(val)
+    inherited = getattr(state_cls, "ordering", None)
+    if inherited is not None:
+        return tuple(inherited)
+    return _default_ordering(model)
+
+
 def resolve_options(
     serializer_cls: type[ReflexDjangoModelSerializer],
     meta: type | None,
@@ -151,7 +182,7 @@ def resolve_options(
         required_fields = frozenset({field_names[0]})
     else:
         required_fields = frozenset()
-    ordering = tuple(_get_attr(meta, state_cls, "ordering", ("-created_at",)))
+    ordering = _resolve_ordering(meta, state_cls, model)
     model_lower = model._meta.model_name
     on_load_event = _get_attr(meta, state_cls, "on_load_event", None) or f"on_load_{list_var}"
     save_event = _get_attr(meta, state_cls, "save_event", None) or f"save_{model_lower}"
@@ -218,6 +249,7 @@ def resolve_options(
     state_fields = build_state_fields(
         field_names,
         required_fields=required_fields,
+        model=model,
     )
 
     return ModelStateOptions(

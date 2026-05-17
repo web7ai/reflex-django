@@ -5,10 +5,9 @@ from __future__ import annotations
 import reflex as rx
 
 import reflex_django.auth.routes as routes
-from reflex_django.auth.pages.base import BaseAuthPage
+from reflex_django.auth.pages.base import BaseAuthPage, _LazyOnLoad
 from reflex_django.auth.pages.components import input_100w
 from reflex_django.auth.settings import AuthSettings
-from reflex_django.auth.state import DjangoAuthState
 
 
 class PasswordResetPage(BaseAuthPage):
@@ -16,7 +15,6 @@ class PasswordResetPage(BaseAuthPage):
 
     default_title = "Reset password"
     default_on_load = None
-    state_cls = DjangoAuthState
 
     EMAIL_FIELD = "email"
 
@@ -111,8 +109,7 @@ class PasswordResetConfirmPage(BaseAuthPage):
     """Default set-new-password page. Override hook methods or :attr:`state_cls` to customize."""
 
     default_title = "Set new password"
-    default_on_load = DjangoAuthState.on_load_password_reset_confirm
-    state_cls = DjangoAuthState
+    default_on_load = _LazyOnLoad("on_load_password_reset_confirm")
 
     NEW_PASSWORD_FIELD = "new_password"
     CONFIRM_PASSWORD_FIELD = "confirm_password"

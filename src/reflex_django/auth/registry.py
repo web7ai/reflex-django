@@ -5,17 +5,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from reflex_django.auth.pages import (
-    LoginPage,
-    PasswordResetConfirmPage,
-    PasswordResetPage,
-    RegisterPage,
-)
 from reflex_django.auth.pages.base import BaseAuthPage
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
+from reflex_django.conf import configure_django
 
 if TYPE_CHECKING:
     from reflex.app import App
+
+    from reflex_django.auth.pages import (
+        LoginPage,
+        PasswordResetConfirmPage,
+        PasswordResetPage,
+        RegisterPage,
+    )
 
 _UNSET: Any = object()
 
@@ -47,7 +49,7 @@ def _resolve_on_load(
 
 def register_login_page(
     app: App,
-    page: type[BaseAuthPage] | Callable[[], Any] = LoginPage,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
     *,
     route: str | None = None,
     title: str | None = None,
@@ -61,13 +63,16 @@ def register_login_page(
 
     When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
     """
+    from reflex_django.auth.pages.login import LoginPage
+
     auth = settings or get_auth_settings()
     if not auth.enabled:
         return
-    resolved_on_load = _resolve_on_load(page, on_load)
+    resolved_page = page or LoginPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
     _register_page(
         app,
-        page,
+        resolved_page,
         route=route or auth.login_url,
         title=title or LoginPage.default_title,
         on_load=resolved_on_load,
@@ -76,7 +81,7 @@ def register_login_page(
 
 def register_register_page(
     app: App,
-    page: type[BaseAuthPage] | Callable[[], Any] = RegisterPage,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
     *,
     route: str | None = None,
     title: str | None = None,
@@ -87,13 +92,16 @@ def register_register_page(
 
     When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
     """
+    from reflex_django.auth.pages.register import RegisterPage
+
     auth = settings or get_auth_settings()
     if not auth.enabled:
         return
-    resolved_on_load = _resolve_on_load(page, on_load)
+    resolved_page = page or RegisterPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
     _register_page(
         app,
-        page,
+        resolved_page,
         route=route or auth.signup_url,
         title=title or RegisterPage.default_title,
         on_load=resolved_on_load,
@@ -102,7 +110,7 @@ def register_register_page(
 
 def register_password_reset_page(
     app: App,
-    page: type[BaseAuthPage] | Callable[[], Any] = PasswordResetPage,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
     *,
     route: str | None = None,
     title: str | None = None,
@@ -114,13 +122,16 @@ def register_password_reset_page(
     When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
     By default no ``on_load`` handler is attached (``page.default_on_load`` is ``None``).
     """
+    from reflex_django.auth.pages.password_reset import PasswordResetPage
+
     auth = settings or get_auth_settings()
     if not auth.enabled:
         return
-    resolved_on_load = _resolve_on_load(page, on_load)
+    resolved_page = page or PasswordResetPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
     _register_page(
         app,
-        page,
+        resolved_page,
         route=route or auth.password_reset_url,
         title=title or PasswordResetPage.default_title,
         on_load=resolved_on_load,
@@ -129,7 +140,7 @@ def register_password_reset_page(
 
 def register_password_reset_confirm_page(
     app: App,
-    page: type[BaseAuthPage] | Callable[[], Any] = PasswordResetConfirmPage,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
     *,
     route: str | None = None,
     title: str | None = None,
@@ -140,13 +151,16 @@ def register_password_reset_confirm_page(
 
     When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
     """
+    from reflex_django.auth.pages.password_reset import PasswordResetConfirmPage
+
     auth = settings or get_auth_settings()
     if not auth.enabled:
         return
-    resolved_on_load = _resolve_on_load(page, on_load)
+    resolved_page = page or PasswordResetConfirmPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
     _register_page(
         app,
-        page,
+        resolved_page,
         route=route or auth.password_reset_confirm_url,
         title=title or PasswordResetConfirmPage.default_title,
         on_load=resolved_on_load,
@@ -165,6 +179,7 @@ def add_auth_pages(app: App, *, settings: AuthSettings | None = None) -> None:
         settings: Optional pre-resolved settings; defaults to
             :func:`get_auth_settings`.
     """
+    configure_django()
     auth = settings or get_auth_settings()
     if not auth.enabled:
         return

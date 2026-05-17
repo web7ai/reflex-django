@@ -4,15 +4,13 @@ Registers a ``django`` command group on Reflex's ``reflex`` CLI (via an import
 hook installed from a ``.pth`` file in the wheel) and exposes the standalone
 ``reflex-django`` console script.
 
-- ``reflex django init <name>`` — scaffold a Reflex + Django + uv project.
 - ``reflex django <django-args>`` — forwards to Django's management runner.
-- ``reflex-django …`` — same forwarding as ``reflex django`` (without ``init``).
+- ``reflex-django …`` — same forwarding as ``reflex django``.
 """
 
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from typing import ClassVar
 
 import click
@@ -76,7 +74,7 @@ def _make_django_forward_command(cmd_name: str) -> click.Command:
 
 
 class DjangoCliGroup(click.Group):
-    """``django`` group with explicit ``init`` plus dynamic Django subcommands."""
+    """``django`` group that forwards unknown subcommands to Django management."""
 
     _forward_cache: ClassVar[dict[str, click.Command]] = {}
 
@@ -97,39 +95,13 @@ class DjangoCliGroup(click.Group):
     "django",
     cls=DjangoCliGroup,
     invoke_without_command=True,
-    short_help="Django helpers: init a Reflex+Django app, or run manage.py commands.",
+    short_help="Run Django management commands with your Reflex rxconfig settings.",
 )
 @click.pass_context
 def django_cli_group(ctx: click.Context) -> None:
-    """Django integration: ``init`` scaffolds a project; any other name is forwarded."""
+    """Forward subcommands to Django (``migrate``, ``shell``, …)."""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
-
-
-@django_cli_group.command("init")
-@click.argument("project_name")
-@click.option(
-    "--editable-reflex-django",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Install reflex-django from this directory (``uv add --editable``) instead of PyPI.",
-)
-def django_init(
-    project_name: str,
-    editable_reflex_django: Path | None,
-) -> None:
-    """Create a new directory with uv, Reflex, reflex-django, and django_settings."""
-    from reflex_django.init_project import run_reflex_django_init
-
-    root = run_reflex_django_init(
-        project_name,
-        editable_reflex_django=editable_reflex_django,
-    )
-    click.echo(f"Created starter Reflex + Django project at {root}")
-    click.echo("")
-    click.echo(f"  cd {root.name}")
-    click.echo("  uv sync")
-    click.echo("  uv run reflex-django createsuperuser")
-    click.echo("  uv run reflex run")
 
 
 def register_django_cli_group_if_needed(
@@ -156,11 +128,6 @@ django_cli = django_cli_group
 def main() -> None:
     """Entry point for the ``reflex-django`` console script."""
     argv = sys.argv[1:]
-    if argv and argv[0] == "init":
-        from reflex_django.init_project import main_argv_init
-
-        main_argv_init(argv[1:])
-        return
     if not argv:
         argv = ["help"]
     _execute(argv, prog_name="reflex-django")

@@ -162,8 +162,6 @@ reflex-django registers a **`django`** command group on the **`reflex`** CLI (vi
 
 Any subcommand name other than the special cases below is forwarded to Django’s `execute_from_command_line`. The wrapper first loads your **`rxconfig`** (so `ReflexDjangoPlugin` can set `DJANGO_SETTINGS_MODULE` and path prefixes) and then calls **`configure_django()`**, so the same settings module Reflex uses at runtime is used for migrations and other management commands.
 
-**Init scaffolding (omitted here).** `reflex django init` and `reflex-django init` exist to scaffold a starter tree but are considered **beta**; this README does not document them. Prefer the manual flow in [How to set up](#how-to-set-up) above.
-
 ---
 
 ## States, context, and bridges

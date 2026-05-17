@@ -51,12 +51,6 @@ uv run reflex-django migrate
 
 ---
 
-## `reflex django init` (beta)
-
-`reflex django init` scaffolds a starter tree. The README treats this as **beta**; prefer [Quickstart](quickstart.md) or [Existing Django project](existing_django_project.md).
-
----
-
 ## Advanced usage
 
 Pass through arbitrary Django args:

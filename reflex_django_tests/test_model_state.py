@@ -16,7 +16,7 @@ configure_django()
 
 from reflex_django.serializers import ReflexDjangoModelSerializer
 from reflex_django.state import AppState, ModelCRUDView, ModelState, resolve_options
-from reflex_django.state.fields import StrStateField
+from reflex_django.state.fields import BoolStateField, StrStateField
 from reflex_django.state.mixins.scoping import UserScopedMixin
 
 
@@ -31,11 +31,27 @@ class MsNote(models.Model):
         app_label = "reflex_django_tests"
 
 
+class MsTask(models.Model):
+    title = models.CharField(max_length=64)
+    done = models.BooleanField(default=False)
+
+    class Meta:
+        app_label = "reflex_django_tests"
+        ordering = ["-id"]
+
+
 class MsNoteSerializer(ReflexDjangoModelSerializer):
     class Meta:
         model = MsNote
         fields = ("id", "title", "content", "description", "created_at")
         read_only_fields = ("id", "created_at")
+
+
+class MsTaskSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = MsTask
+        fields = ("id", "title", "done")
+        read_only_fields = ("id",)
 
 
 class _NotesState(AppState, ModelCRUDView, UserScopedMixin):
@@ -131,6 +147,27 @@ def test_resolve_options_writable_fields() -> None:
     assert names == ("content", "description", "title")
     assert "id" in cfg.read_only_fields
     assert "created_at" in cfg.read_only_fields
+    assert cfg.ordering == ("-created_at",)
+
+
+def test_resolve_options_ordering_from_model_meta() -> None:
+    class _TaskState(AppState, ModelCRUDView):
+        class Meta:
+            serializer = MsTaskSerializer
+
+    cfg = resolve_options(MsTaskSerializer, _TaskState.Meta, _TaskState)
+    assert cfg.ordering == ("-id",)
+
+
+def test_resolve_options_boolean_field_uses_bool_state_field() -> None:
+    class _TaskState(AppState, ModelCRUDView):
+        class Meta:
+            serializer = MsTaskSerializer
+
+    cfg = resolve_options(MsTaskSerializer, _TaskState.Meta, _TaskState)
+    done_sf = next(sf for sf in cfg.state_fields if sf.name == "done")
+    assert isinstance(done_sf, BoolStateField)
+    assert _TaskState.__annotations__["done"] is bool
 
 
 def test_explicit_state_fields_override_read_only() -> None:

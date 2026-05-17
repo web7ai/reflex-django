@@ -49,7 +49,7 @@ def test_login_page_uses_state_cls_submit_handler() -> None:
     from reflex_django.auth.state import DjangoAuthState
 
     assert LoginPage.get_state() is DjangoAuthState
-    assert LoginPage.state_cls is DjangoAuthState
+    assert LoginPage.state_cls is None
     form = LoginPage.form_body(LoginPage.auth_settings())
     assert form is not None
 

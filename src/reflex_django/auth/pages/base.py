@@ -15,6 +15,21 @@ from reflex_django.auth.pages.components import (
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
 
 
+class _LazyOnLoad:
+    """Resolve a state ``on_load`` handler after :func:`~reflex_django.conf.configure_django`."""
+
+    __slots__ = ("_method_name",)
+
+    def __init__(self, method_name: str) -> None:
+        self._method_name = method_name
+
+    def __get__(self, obj: object, owner: type | None = None) -> Any:
+        if owner is None:
+            msg = "_LazyOnLoad must be accessed on a page class"
+            raise AttributeError(msg)
+        return getattr(owner.get_state(), self._method_name)
+
+
 class AuthPageMeta(type):
     """Make ``LoginPage()`` return a component (Reflex calls page callables with ``()``)."""
 

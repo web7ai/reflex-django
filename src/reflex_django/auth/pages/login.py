@@ -10,18 +10,16 @@ from reflex_django.auth.login_fields import (
     login_identifier_label,
     login_identifier_placeholder,
 )
-from reflex_django.auth.pages.base import BaseAuthPage
-from reflex_django.auth.pages.components import input_100w
+from reflex_django.auth.pages.base import BaseAuthPage, _LazyOnLoad
+from reflex_django.auth.pages.components import brand_icon, input_100w, labeled_field
 from reflex_django.auth.settings import AuthSettings
-from reflex_django.auth.state import DjangoAuthState
 
 
 class LoginPage(BaseAuthPage):
     """Default sign-in page. Override hook methods or :attr:`state_cls` to customize."""
 
     default_title = "Sign in"
-    default_on_load = DjangoAuthState.on_load_login
-    state_cls = DjangoAuthState
+    default_on_load = _LazyOnLoad("on_load_login")
 
     USERNAME_FIELD = "username"
     PASSWORD_FIELD = "password"
@@ -44,15 +42,27 @@ class LoginPage(BaseAuthPage):
 
     @classmethod
     def heading(cls) -> rx.Component:
-        return rx.heading(cls.heading_text(), size="7")
+        return rx.center(
+            brand_icon(),
+            rx.heading(
+                cls.heading_text(),
+                size="6",
+                as_="h2",
+                text_align="center",
+                width="100%",
+            ),
+            direction="column",
+            spacing="5",
+            width="100%",
+        )
 
     @classmethod
     def identifier_field(cls, auth: AuthSettings) -> rx.Component:
         id_label = login_identifier_label(auth.login_fields)
         id_placeholder = login_identifier_placeholder(auth.login_fields)
         id_autocomplete = login_identifier_autocomplete(auth.login_fields)
-        return rx.fragment(
-            rx.text(id_label),
+        return labeled_field(
+            id_label,
             input_100w(
                 cls.USERNAME_FIELD,
                 placeholder=id_placeholder,
@@ -62,13 +72,23 @@ class LoginPage(BaseAuthPage):
 
     @classmethod
     def password_field(cls) -> rx.Component:
-        return rx.fragment(
-            rx.text("Password"),
+        auth = cls.auth_settings()
+        return labeled_field(
+            "Password",
             input_100w(
                 cls.PASSWORD_FIELD,
                 type="password",
-                placeholder="Password",
+                placeholder="Enter your password",
                 autocomplete="current-password",
+            ),
+            trailing=rx.cond(
+                auth.password_reset_enabled,
+                rx.link(
+                    cls.forgot_link_text(),
+                    href=routes.PASSWORD_RESET_ROUTE,
+                    size="3",
+                ),
+                rx.fragment(),
             ),
         )
 
@@ -83,23 +103,20 @@ class LoginPage(BaseAuthPage):
 
     @classmethod
     def submit_button(cls) -> rx.Component:
-        return rx.button(cls.submit_label(), width="100%")
+        return rx.button(cls.submit_label(), size="3", width="100%")
 
     @classmethod
     def footer_links(cls, auth: AuthSettings) -> rx.Component:
         return rx.center(
-            rx.hstack(
-                rx.cond(
-                    auth.signup_enabled,
-                    rx.link(cls.signup_link_text(), href=routes.SIGNUP_ROUTE),
-                    rx.fragment(),
+            rx.cond(
+                auth.signup_enabled,
+                rx.hstack(
+                    rx.text("New here?", size="3"),
+                    rx.link(cls.signup_link_text(), href=routes.SIGNUP_ROUTE, size="3"),
+                    opacity="0.85",
+                    spacing="2",
                 ),
-                rx.cond(
-                    auth.password_reset_enabled,
-                    rx.link(cls.forgot_link_text(), href=routes.PASSWORD_RESET_ROUTE),
-                    rx.fragment(),
-                ),
-                spacing="4",
+                rx.fragment(),
             ),
             width="100%",
         )
@@ -112,7 +129,7 @@ class LoginPage(BaseAuthPage):
             cls.error_display(),
             cls.submit_button(),
             cls.footer_links(auth),
-            spacing="3",
+            spacing="4",
             width="100%",
         )
 

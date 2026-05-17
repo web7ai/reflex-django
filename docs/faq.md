@@ -88,10 +88,6 @@ That is application code. The framework does not provide an HTTP client for Refl
 
 `reflex django` loads `rxconfig` first so settings match `reflex run`. [CLI](cli.md).
 
-### Should I use `reflex django init`?
-
-Beta scaffold only—not the recommended path. Use [Quickstart](quickstart.md) or [Existing Django project](existing_django_project.md).
-
 ---
 
 ## Troubleshooting quick links

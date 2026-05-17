@@ -35,7 +35,7 @@ def test_django_cli_help_when_no_subcommand(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     sentinel.assert_not_called()
-    assert "init" in result.output
+    assert "Django" in result.output
 
 
 def test_django_cli_passes_through_dash_help(monkeypatch) -> None:

@@ -172,7 +172,6 @@ uv run reflex run
 ## Developer notes
 
 - `reflex run` composes ASGI internally; merging into your existing `asgi.py` is not documented as a first-class API—see generic notes in [Deployment](deployment.md).
-- Do **not** use `reflex django init` as the brownfield path (beta scaffold per README).
 
 ---
 

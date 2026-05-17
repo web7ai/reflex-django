@@ -49,6 +49,27 @@ def test_ac1_app_state_user_property_reflects_authenticated_user() -> None:
         assert state.user.is_authenticated is True
 
 
+def test_app_state_request_user_matches_user_property() -> None:
+    state = _DashboardState()
+    user = mock.Mock()
+    user.username = "bob"
+    user.email = "bob@example.com"
+    user.is_authenticated = True
+    http_request = mock.Mock()
+    http_request.user = user
+
+    with mock.patch(
+        "reflex_django.state.auth_bridge.current_request",
+        return_value=http_request,
+    ), mock.patch(
+        "reflex_django.context.current_request",
+        return_value=http_request,
+    ):
+        assert state.request.user.username == "bob"
+        assert state.request.user is state.user
+        assert state.django_request is http_request
+
+
 def test_ac2_session_write_persists_across_events() -> None:
     bridge = DjangoEventBridge()
     state = _DashboardState()
@@ -161,3 +182,14 @@ def test_app_state_inherits_django_user_state_and_model_crud() -> None:
 
     assert issubclass(_Notes, AppState)
     assert issubclass(_Notes, DjangoUserState)
+
+
+def test_app_state_injects_setters_for_manual_form_vars() -> None:
+    class _ProfileState(AppState):
+        display_name: str = ""
+        email: str = ""
+        bio: str = ""
+
+    assert hasattr(_ProfileState, "set_display_name")
+    assert hasattr(_ProfileState, "set_email")
+    assert hasattr(_ProfileState, "set_bio")

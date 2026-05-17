@@ -88,10 +88,23 @@ def _session_proxy() -> SessionProxy:
 class AuthBridgeMixin:
     """Django user/session access and auth helpers for Reflex state handlers.
 
-    Mixed into :class:`~reflex_django.states.AppState`. Use ``self.user`` and
-    ``self.session`` in event handlers; use ``self.is_authenticated``,
-    ``self.username``, etc. in UI (Reflex vars, synced via the event bridge).
+    Mixed into :class:`~reflex_django.states.AppState`. Use ``self.request``,
+    ``self.user``, and ``self.session`` in event handlers (for example
+    ``self.request.user``); use ``self.is_authenticated``, ``self.username``,
+    etc. in UI (Reflex vars, synced via the event bridge).
     """
+
+    @property
+    def request(self) -> Any:
+        """Bridged Django request for the current event (``self.request.user``, etc.)."""
+        from reflex_django.state.request import DjangoStateRequest
+
+        return DjangoStateRequest(current_request())
+
+    @property
+    def django_request(self) -> Any | None:
+        """Raw :class:`django.http.HttpRequest` for the current event."""
+        return current_request()
 
     @property
     def user(self) -> Any:
