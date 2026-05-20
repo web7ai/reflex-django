@@ -107,6 +107,8 @@ nav:
     - Django Middleware in Reflex: django_middleware_to_reflex.md
   - Authentication:
     - Session Authentication: authentication.md
+  - Internationalization:
+    - i18n & Translations: i18n.md
   - Database & CRUD:
     - Database Integration: database_integration.md
     - Model Serializers: serializers.md

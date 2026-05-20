@@ -96,6 +96,7 @@ We recommend exploring the documentation in this structured sequence to get a co
     * [Django Context in Reflex](django_context_to_reflex.md) — Running Django context processors per Socket.IO event.
     * [Django Middleware in Reflex](django_middleware_to_reflex.md) — How the Event Bridge brings `request.user` and session data to your event handlers.
     * [Session Authentication](authentication.md) — Full session authentication, permission decorators, and user sessions.
+    * [Internationalization (i18n)](i18n.md) — Language negotiation, translated strings, RTL layouts, and the language switcher.
 
 4. **Database & CRUD Development**
     * [Database Integration](database_integration.md) — Migrations, asynchronous ORM calls, and model structures.
@@ -125,6 +126,7 @@ Need to solve a specific problem? Check out these direct guides:
 | Configure Django settings and paths | [Configuration Guide](configuration.md) |
 | Run Django database migrations | [CLI Reference](cli.md) |
 | Access Django sessions and `request.user` in event handlers | [Session Authentication](authentication.md) |
+| Switch language, detect RTL, serve translated strings in Reflex | [Internationalization (i18n)](i18n.md) |
 | Read raw query parameters (`GET`/`POST`) or cookies in state | [Authentication — Accessing Request](authentication.md#accessing-the-django-request-on-appstate) |
 | Create a list, create, edit, or delete UI for a database model | [Reactive ModelState](reactive_model_state.md) or [CRUD Without Mixins](crud_without_mixins.md) |
 | Serialize database models into React-friendly dictionaries | [Serializers Reference](serializers.md) |
