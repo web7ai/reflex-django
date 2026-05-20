@@ -45,11 +45,11 @@ This documentation is written for **Python and Django developers** who want full
 ## Choose your path
 
 <div class="path-grid">
-  <a href="quickstart.md" class="path-card">
+  <a href="quickstart/" class="path-card">
     <h3>🚀 Starting from Scratch</h3>
     <p>Initialize a new full-stack project combining the power of Django ORM and Reflex reactivity in minutes.</p>
   </a>
-  <a href="existing_django_project.md" class="path-card">
+  <a href="existing_django_project/" class="path-card">
     <h3>🔌 Existing Django Codebase</h3>
     <p>Seamlessly mount a modern Reflex frontend onto your existing Django enterprise application.</p>
   </a>
