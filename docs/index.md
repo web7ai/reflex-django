@@ -11,9 +11,6 @@
     <em>Run a Django ASGI backend and Reflex app in one unified process. Easy to build, highly interactive.</em>
 </p>
 <p align="center">
-<a href="https://github.com/mohannadirshedat/reflex-django/actions">
-    <img src="https://github.com/mohannadirshedat/reflex-django/workflows/pytest/badge.svg" alt="Test Status">
-</a>
 <a href="https://pypi.org/project/reflex-django">
     <img src="https://img.shields.io/pypi/v/reflex-django?color=%2334D058&label=pypi%20package" alt="PyPI package">
 </a>
