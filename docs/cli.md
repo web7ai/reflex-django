@@ -1,94 +1,147 @@
-# CLI
+# Command Line Interface (CLI)
 
-Run **Django management commands** through the same settings module as `reflex run`.
+Running a unified backend means managing both Reflex web states and Django database structures. Rather than forcing you to jump between separate configuration contexts, `reflex-django` exposes a unified Command Line Interface. 
 
----
-
-## Prerequisites
-
-- [Installation](installation.md)  
-- [Configuration](configuration.md)
+This enables you to run any native Django management command (such as migrations, superuser registration, or database shells) using the exact same environment and settings module as `reflex run`.
 
 ---
 
-## Two entry points
+## 1. The Two CLI Entry Points
 
-| Command | Description |
-|---------|-------------|
-| `reflex django <subcommand>` | Django group on the Reflex CLI (`.pth` bootstrap) |
-| `reflex-django <subcommand>` | Standalone console script (`pyproject.toml` `[project.scripts]`) |
+`reflex-django` provides two equivalent entry points to interact with your unified backend:
 
-Both load **`rxconfig`** (when present), call **`configure_django()`**, then forward to `django.core.management.execute_from_command_line`.
+```text
+               1. Integrated Reflex CLI (pth bootstrap)
+                  $ uv run reflex django <subcommand>
+                                  │
+                                  ▼
+               2. Standalone Console Script (Direct)
+                  $ uv run reflex-django <subcommand>
+```
 
----
-
-## Common commands
+### Entry Point A: The Integrated Reflex CLI
+The package automatically integrates itself directly into Reflex's native command-line interface using a custom `.pth` bootstrapper. This is the recommended style as it keeps all commands under the single, unified `reflex` keyword:
 
 ```bash
-uv run reflex django migrate
+uv run reflex django <subcommand>
+```
+
+### Entry Point B: The Standalone CLI Script
+If you prefer direct console calls, the package registers a standalone script in `pyproject.toml` under the `[project.scripts]` block. This acts as a direct alias:
+
+```bash
+uv run reflex-django <subcommand>
+```
+
+Both entry points execute the exact same loader: they locate `rxconfig.py`, initialize your environment variables, boot Django asynchronously, and forward your subcommands straight to Django's native execution pipeline.
+
+---
+
+## 2. Common Operations Guide
+
+Here is a catalog of the most common management tasks and how to execute them within your unified project structure.
+
+### Database Migrations
+Always use these commands to generate and execute migrations so that your schema changes target the exact database configuration resolved in your `rxconfig`:
+
+```bash
+# Generate database schema migration scripts
 uv run reflex django makemigrations
-uv run reflex django createsuperuser
-uv run reflex django shell
-uv run reflex django collectstatic
-uv run reflex django help
+
+# Apply migrations to your database
+uv run reflex django migrate
+
+# Review the SQL statements that will be executed for a migration
+uv run reflex django sqlmigrate shop 0001
 ```
 
-Equivalent:
+### Creating Administration Accounts
+Spawn interactive prompts to register superusers who can access the standard Django Admin panel:
 
 ```bash
-uv run reflex-django migrate
+uv run reflex django createsuperuser
+```
+
+### Running Interactive Python Shells
+Launch a pre-configured interactive Python shell with the unified Reflex-Django environment and database connections fully booted:
+
+```bash
+uv run reflex django shell
+```
+
+### Collecting Static Files
+Compile and collect Django's admin and model assets into your configured static directory prior to production deployments:
+
+```bash
+uv run reflex django collectstatic --noinput
 ```
 
 ---
 
-## How settings are loaded
+## 3. How Settings & Bootstrapping Work
 
-1. `_load_rxconfig()` imports Reflex config via `reflex_base.config.get_config()`.
-2. `ReflexDjangoPlugin.__post_init__` sets `DJANGO_SETTINGS_MODULE` (setdefault) and path prefix env vars.
-3. `configure_django()` runs `django.setup()`.
+To guarantee that your migrations target the same database as your live server, the CLI boots using a precise three-stage initialization sequence:
 
-> **Tip:** Migrations use the **same** database as runtime when `rxconfig` and env agree.
+```text
+    Stage 1: Config Parsing
+    Locates and imports rxconfig.py using Reflex's native config loaders.
+              │
+              ▼
+    Stage 2: Environment Resolution
+    Plugin sets the DJANGO_SETTINGS_MODULE and resolves system path variables.
+              │
+              ▼
+    Stage 3: Django Bootstrapping
+    Invokes configure_django() which executes django.setup() in the active thread.
+              │
+              ▼
+    Stage 4: Command Execution
+    Forwards terminal arguments directly to Django's execution parser.
+```
+
+1. **Config Parsing**: The script invokes `_load_rxconfig()`, which utilizes `reflex_base.config.get_config()` to load the active configuration parameters.
+2. **Environment Resolution**: The `ReflexDjangoPlugin` registers your configured backend settings, setting `DJANGO_SETTINGS_MODULE` (defaulting to your custom configuration or falling back to the default package settings).
+3. **Django Bootstrapping**: `configure_django()` is triggered, running `django.setup()` to initialize models, apps, and database connections.
+4. **Command Execution**: The script hands off argument parsing to Django's `execute_from_command_line` pipeline, ensuring native support for flags, plans, and custom parameters.
 
 ---
 
-## Advanced usage
+## 4. Advanced Operations & Parameter Forwarding
 
-Pass through arbitrary Django args:
+Because both entry points are direct passthroughs, you can append any standard Django flags, names, or optional parameters:
+
+### Migration Dry Runs
+Examine what migrations will be executed without modifying your database:
 
 ```bash
 uv run reflex django migrate --plan
-uv run reflex django makemigrations catalog --name add_product
+```
+
+### Targeted Schema Generation
+Generate migrations targeting a specific app with a custom description:
+
+```bash
+uv run reflex django makemigrations catalog --name add_discount_field
+```
+
+### Running Specific Management Commands
+If you register custom Django management commands (inside `<app_name>/management/commands/`), you can execute them directly:
+
+```bash
+uv run reflex django my_custom_command --flag-active
 ```
 
 ---
 
-## Common mistakes
+## 5. Troubleshooting CLI Issues
 
-- Running `manage.py` directly with a different `DJANGO_SETTINGS_MODULE` than `rxconfig`.  
-- Running migrate before creating `rxconfig.py` in a Reflex-only directory (falls back to `default_settings`).
-
----
-
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| Wrong database | Ensure `rxconfig` loads; check env `DJANGO_SETTINGS_MODULE` |
-| `No module named 'rxconfig'` | Run from project root; standalone `reflex-django` swallows config load errors |
+| Symptom | Cause | Solution |
+|:---|:---|:---|
+| `ModuleNotFoundError: No module named 'rxconfig'` | The command was executed from outside your project root directory. | Ensure your terminal is in the folder containing `rxconfig.py` before running commands. |
+| Migrations target the wrong database. | The CLI is reading from default settings rather than your active project settings. | Verify that `DJANGO_SETTINGS_MODULE` is correctly set in your environment or defined in your `rxconfig` plugin options. |
+| Custom app models are not being discovered. | The Django app containing the models is missing from your configuration. | Ensure the app is registered within the `INSTALLED_APPS` block of your settings file. |
+| `CommandError: You must set settings.ALLOWED_HOSTS` | Production settings are being loaded without host configurations. | Configure environment variables to pass production settings or specify hosts in your active settings file. |
 
 ---
 
-## Developer notes
-
-- Implementation: `src/reflex_django/cli.py`, `src/reflex_django/_reflex_cli_bootstrap.py`.
-
----
-
-## See also
-
-- [Database integration](database_integration.md)  
-- [Deployment](deployment.md)
-
----
-
-**Navigation:** [← API integration](api_integration.md) | [Next: Deployment →](deployment.md) | [Docs index](index.md)
+**Navigation:** [← Forms & Validation](forms_and_validation.md) | [Next: Testing Guide →](testing.md)

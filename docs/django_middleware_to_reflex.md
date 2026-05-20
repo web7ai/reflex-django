@@ -1,175 +1,152 @@
-# Django middleware to Reflex
+# Django Middleware in Reflex
 
-How **`DjangoEventBridge`** exposes Django session and user context to Reflex **events**—and what it does **not** do.
+In a standard Django application, request processing is managed by a pipeline of sequential classes defined in your `MIDDLEWARE` settings (such as `SessionMiddleware`, `AuthenticationMiddleware`, and `CsrfViewMiddleware`). These middleware classes run on traditional HTTP requests.
 
----
+However, in a Reflex application, interactive user inputs (like button clicks, form typing, or page navigations) occur over a persistent **Socket.IO WebSocket connection**. Because WebSocket packets bypass Django's standard HTTP routing, your existing middleware stack does not run on these events.
 
-## Prerequisites
-
-- [Architecture](architecture.md)
+To solve this, **reflex-django** introduces the **`DjangoEventBridge`**. It intercepts incoming WebSocket packets, extracts request context, and maps it directly onto your state handlers.
 
 ---
 
-## The problem
+## What the Event Bridge Runs
 
-Django **`MIDDLEWARE`** runs on HTTP requests. Reflex button clicks and `on_load` handlers use **Socket.IO events**, not Django views. Without a bridge, `request.user` and `request.session` are unavailable in `@rx.event` code.
+On every socket event, the `DjangoEventBridge` intercepts the packet and executes a lightweight, optimized pre-processing routine to bridge the frameworks:
 
----
-
-## What the bridge runs
-
-On each event, `DjangoEventBridge.preprocess` (`src/reflex_django/middleware.py`):
-
-1. `end_event_request()` — clear stale contextvar  
-2. Build `HttpRequest` from `event.router_data` (path, query string, cookies, headers, client IP)  
-3. `_attach_session(request)` via `SESSION_ENGINE`  
-4. `_activate_i18n_for_request(request)` when `USE_I18N` and `REFLEX_DJANGO_I18N_EVENT_BRIDGE`  
-5. `await _attach_user(request)` using **`aget_user`** (async)  
-6. `begin_event_request(request)`  
-7. When `REFLEX_DJANGO_AUTH_AUTO_SYNC` is true, `await state.refresh_django_user_fields()` for **`AppState`** subclasses
-
-Returns `None` (never short-circuits the event).
-
----
-
-## What the bridge does not run
-
-- `CsrfViewMiddleware`  
-- `SecurityMiddleware`  
-- Custom middleware chains  
-- Full Django HTTP request/response cycle  
-
-For CSRF on Django HTTP forms under a prefix, use normal Django views. For Reflex mutations, enforce authorization in handlers (`current_user()`, permissions).
-
----
-
-## Using the bound request
-
-**Option A — `request` proxy (recommended, Django-familiar)** — any `rx.State`:
-
-```python
-from reflex_django import request
-
-@rx.event
-async def my_handler(self):
-    user = request.user
-    session = request.session
-    page = request.GET.get("page")
-    token = request.headers.get("authorization")
-    path = request.path
+```text
+[1] Incoming WebSocket Event Packet
+      │
+      ▼
+[2] Extract router_data (Path, Query parameters, Cookies, Headers, IP Address)
+      │
+      ▼
+[3] Build a Synthetic HttpRequest
+      │
+      ▼
+[4] Load Django Session Store (using active SESSION_ENGINE)
+      │
+      ▼
+[5] Resolve User (asynchronously using Django's aget_user)
+      │
+      ▼
+[6] Bind request context to thread-safe current_request contextvar
+      │
+      ▼
+[7] Execute State Event Handler (e.g., on_click)
 ```
 
-Works in every `@rx.event` handler while `DjangoEventBridge` is enabled (default). Outside an event, `request.user` is anonymous and `request.GET` is empty.
+1. **Context Cleanup**: Automatically clears out stale thread-local request and user contexts from previous events to prevent leaks.
+2. **Rebuild Request**: Instantiates a mock Django `HttpRequest` and populates standard attributes (like `.path`, `.GET`, `.COOKIES`, and `.headers`) based on the client browser's active routing data.
+3. **Session Hydration**: Loads the session data from your backend session engine (e.g., database, cache, or file-based session rows) matching the `sessionid` cookie value.
+4. **User Authentication**: Asynchronously calls Django's native **`aget_user`** to authenticate the active user session against your configured database authentication backends.
+5. **Thread-Safe Binding**: Binds this request context to thread-safe local variable containers, making functional helpers like `current_user()` and `current_request()` fully operational.
+6. **State Synchronization**: Updates reactive snapshot fields for any active state inheriting from `AppState`.
 
-**Do not use `request.user` in component trees** (`rx.text(request.user)` fails — Reflex only accepts primitives, vars, or components). For navbar labels use **`DjangoAuthState.username`** / **`AppState.username`**, or primitive `request.username` only inside handlers (not as a reactive var on the client).
+---
 
-For login/logout UI on canned auth layouts, use **`DjangoAuthState.is_authenticated`** (`@rx.var` from **`current_user()`**), not the old inherited `django_user_state` snapshot path. [Authentication](authentication.md#djangouserstate-without-appstate).
+## What the Event Bridge Does NOT Run
 
-**Invalid:** `from reflex_django.state import request` — use `from reflex_django import request`.
+To keep WebSocket communication highly performant, certain security and routing middlewares are omitted:
 
-**Option B — context helpers** (explicit):
+* **`CsrfViewMiddleware`**: WebSockets are immune to standard cross-site request forgery attacks because the handshake is established under strict origin checks. CSRF middleware does not run on socket events.
+* **`SecurityMiddleware` & `XFrameOptionsMiddleware`**: Because Starlette manages the outer connection, standard security headers are set during the initial handshake, and do not need to be re-evaluated on individual click events.
+* **Custom HTTP Middlewares**: Any custom classes registered in your `settings.py` `MIDDLEWARE` block that expect to return a standard `HttpResponse` are skipped.
+
+> [!TIP]
+> **Form Security Best Practice:** If you are exposing traditional HTML forms on Django views under `/api/`, always include standard `{% csrf_token %}` tokens. For Reflex components, enforce security by checking `self.request.user.is_authenticated` or verifying model-level permissions inside your event handlers.
+
+---
+
+## Safely Accessing the Request Context
+
+You can access the request context inside any Reflex event handler using one of three developer patterns:
+
+### Pattern A: The Dotted Request Proxy (Recommended)
+You can import the `request` proxy directly. This proxy behaves exactly like a traditional Django `request` object inside views:
 
 ```python
-from reflex_django import current_user, current_request, current_session
+# frontend/states/search.py
+import reflex as rx
+from reflex_django import request  # Import the global request proxy
+from shop.models import Product
 
-@rx.event
-async def my_handler(self):
-    user = current_user()
-    http = current_request()
-    session = current_session()
+class SearchState(rx.State):
+    results: list[str] = []
+
+    @rx.event
+    async def perform_search(self):
+        # 1. Access request headers
+        auth_header = request.headers.get("authorization")
+        
+        # 2. Access URL query string parameters
+        query = request.GET.get("q", "").strip()
+        
+        # 3. Access cookies
+        session_cookie = request.COOKIES.get("sessionid")
+        
+        # 4. Access the active authenticated user
+        if not request.user.is_authenticated:
+            return rx.toast.error("Please log in to search our catalog.")
+            
+        # 5. Access the request path
+        active_path = request.path
+        
+        # Query models scoped to the active user
+        qs = Product.objects.filter(name__icontains=query)
+        self.results = [p.name async for p in qs]
 ```
 
-**Option C — `AppState`** (auth + **`self.request`** + reactive UI snapshot):
+### Pattern B: Functional Context Helpers
+If you prefer explicit functional declarations, use the built-in context accessors:
 
 ```python
+# frontend/states/profile.py
+import reflex as rx
+from reflex_django import current_request, current_user, current_session
+
+class ProfileState(rx.State):
+    @rx.event
+    async def load_profile(self):
+        request = current_request()
+        user = current_user()
+        session = current_session()
+        
+        self.username = user.username if user.is_authenticated else "Guest"
+```
+
+### Pattern C: The `AppState` Base Class
+If your state inherits from `AppState`, the request context is bound directly onto the class instance as **`self.request`**:
+
+```python
+# frontend/states/billing.py
+import reflex as rx
 from reflex_django.state import AppState
 
-class MyState(AppState):
+class BillingState(AppState):
     @rx.event
-    async def my_handler(self):
-        # Live Django request for this event (DjangoStateRequest wrapper)
-        if not self.request.user.is_authenticated:
+    async def process_payment(self):
+        # self.request is an instance-bound DjangoStateRequest wrapper
+        user = self.request.user
+        client_ip = self.request.META.get("REMOTE_ADDR")
+        
+        if not user.is_authenticated:
             return rx.redirect("/login")
-
-        page = self.request.GET.get("page", "1")
-        self.session["last_page"] = page  # same store as self.request.session
-
-        # Snapshot vars for rx.cond / rx.text (not self.request.user in components)
-        greeting = f"Hello, {self.username}"
+            
+        # Write directly to the persistent Django session store
+        self.session["last_payment_status"] = "pending"
 ```
 
-| On `AppState` | Use in handlers | Use in UI components |
-|---------------|-----------------|----------------------|
-| **`self.request.user`** | ORM scoping, permissions | Do not pass to `rx.text` |
-| **`self.user`** | Same as `self.request.user` | Do not pass to `rx.text` |
-| **`self.request.GET`**, **`.path`**, **`.COOKIES`** | Query, route, cookies | N/A |
-| **`self.username`**, **`self.is_authenticated`** | Can read in handlers | **`rx.cond`**, labels |
+---
 
-**`ModelState`** / **`ModelCRUDView`:** during **`dispatch`**, **`bind_request_context()`** also merges context-processor keys onto **`self.request`** (e.g. **`self.request.LANGUAGE_CODE`**). See [Authentication — Accessing the Django request on AppState](authentication.md#accessing-the-django-request-on-appstate).
+## Comparison: HTTP Middleware vs Event Bridge
 
-Enable with `install_event_bridge=True` (default on `ReflexDjangoPlugin`). See [Authentication](authentication.md).
+| Architectural Feature | Traditional Django HTTP Route (e.g., `/admin`) | Reactive Reflex WebSocket Event (e.g., `on_click`) |
+|:---|:---|:---|
+| **Entry Point** | Outer Dispatcher ──► Django ASGI Handler | Starlette Server ──► `DjangoEventBridge` |
+| **Active Pipeline** | Evaluates full `MIDDLEWARE` settings list | Triggers bridge pre-processor only |
+| **Session Engine** | Loaded via `SessionMiddleware` | Resolved via `SESSION_ENGINE` on synthetic request |
+| **Authentication** | Loaded via `AuthenticationMiddleware` | Resolved via async `aget_user()` database call |
+| **CORS / CSRF Controls** | Evaluated via standard headers and cookies | Origin is checked during WebSocket handshake |
 
 ---
 
-## HTTP vs event comparison
-
-| | HTTP (Django prefix) | Reflex event |
-|---|---------------------|--------------|
-| Entry | Dispatcher → Django ASGI | Reflex → `DjangoEventBridge` |
-| Middleware | Full `MIDDLEWARE` | Bridge only |
-| Session | `SessionMiddleware` | Session engine on synthetic request |
-| User | `AuthenticationMiddleware` | `aget_user` in bridge |
-
----
-
-## `postprocess`
-
-`postprocess` calls `end_event_request()`. Reflex’s processor may only invoke `preprocess` reliably; the next event’s preprocess clears stale bindings anyway (documented in source comments).
-
----
-
-## Advanced usage
-
-Call a specific middleware manually inside a handler if you truly need one-off behavior—pattern only; not a supported extension API:
-
-```python
-# Illustrative — adapt to your middleware
-from django.middleware.locale import LocaleMiddleware
-mw = LocaleMiddleware(lambda r: None)
-mw.process_request(request)
-```
-
-Prefer `REFLEX_DJANGO_I18N_EVENT_BRIDGE` for locale.
-
----
-
-## Common mistakes
-
-- Expecting `CsrfViewMiddleware` on Reflex POST events.  
-- Disabling the bridge and calling `current_user()` expecting a logged-in user.
-
----
-
-## Developer notes
-
-- Tests: `reflex_django_tests/test_event_bridge.py` (stub events, cookies, user).
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| Always `AnonymousUser` | Cookies not sent; session not synced after login — [Authentication](authentication.md) |
-| Wrong language | `REFLEX_DJANGO_I18N_EVENT_BRIDGE`, `USE_I18N` |
-
----
-
-## See also
-
-- [Django context to Reflex](django_context_to_reflex.md)  
-- [Authentication](authentication.md)
-
----
-
-**Navigation:** [← Routing](routing.md) | [Next: Django context to Reflex →](django_context_to_reflex.md)
+**Navigation:** [← Django Context in Reflex](django_context_to_reflex.md) | [Next: Session Authentication →](authentication.md)

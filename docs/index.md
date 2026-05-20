@@ -7,9 +7,11 @@
     <h1 align="center" style="border-bottom: none; font-size: 3.2rem; font-weight: 850; margin-bottom: 0px; background: linear-gradient(135deg, #3f51b5, #00b0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; font-family: 'Outfit', sans-serif;">reflex-django</h1>
   </a>
 </p>
+
 <p align="center">
-    <em>Run a Django ASGI backend and Reflex app in one unified process. Easy to build, highly interactive.</em>
+    <em>Unify the robust backend power of Django and the highly interactive, Python-first reactive UI of Reflex into a single process.</em>
 </p>
+
 <p align="center">
 <a href="https://pypi.org/project/reflex-django">
     <img src="https://img.shields.io/pypi/v/reflex-django?color=%2334D058&label=pypi%20package" alt="PyPI package">
@@ -24,18 +26,13 @@
 
 ---
 
-**Documentation**: [https://github.com/mohannadirshedat/reflex-django](https://github.com/mohannadirshedat/reflex-django)
+Welcome to the official documentation for **reflex-django**! 
 
-**Source Code**: [https://github.com/mohannadirshedat/reflex-django](https://github.com/mohannadirshedat/reflex-django)
+This library acts as a bridge that brings **Django ASGI** and **Reflex** together in **one process** started by the single standard command: `reflex run`. 
 
----
+By combining the strength of Django's robust ecosystem (its ORM, administrative panel, session store, migration framework, and URL routing) with Reflex's fast, modern, reactive user interfaces, you get a premium developer experience. You no longer need to run, configure, and maintain separate backend and frontend development servers.
 
-**reflex-django** is a [Reflex](https://reflex.dev) plugin that runs a **Django ASGI** application and your **Reflex** app in **one process** under `reflex run`. Django handles the ORM, admin, sessions, and HTTP routes on configured path prefixes; Reflex handles the reactive UI and Socket.IO events.
-
-This documentation is written for **Python and Django developers** who want full-stack applications without maintaining separate dev servers for every local workflow.
-
-**Author:** Mohannad Irshedat  
-**Versions:** Python 3.12+, Django 6.0.x, Reflex 0.9.2+ (see `pyproject.toml` in the package).
+Whether you are starting a new greenfield application or looking to mount a highly interactive modern web interface onto an existing enterprise Django codebase, **reflex-django** is built to scale with your architectural needs.
 
 ---
 
@@ -54,76 +51,88 @@ This documentation is written for **Python and Django developers** who want full
 
 ---
 
-## Installation
+## Quick Installation
 
-Install **reflex-django** via pip:
+Get up and running immediately. You can install **reflex-django** directly from PyPI using your favorite package manager:
 
-<div class="termy">
+=== "Using uv (Recommended)"
 
-```console
-$ pip install reflex-django
----> 100%
-Successfully installed reflex-django asgiref django reflex
-```
+    ```bash
+    uv add reflex-django
+    ```
 
-</div>
+=== "Using pip"
 
----
-
-## Learning path
-
-1. [Introduction](introduction.md) — what reflex-django is and is not  
-2. [Installation](installation.md) — dependencies and plugin wiring  
-3. [Configuration](configuration.md) — `ReflexDjangoPlugin` and `REFLEX_DJANGO_*` settings  
-4. [Quickstart](quickstart.md) *or* [Existing Django project](existing_django_project.md)  
-5. [Project structure](project_structure.md) — recommended layout  
-6. [Architecture](architecture.md) — HTTP dispatcher, event bridge, lifecycles  
-7. [Routing](routing.md) — Reflex pages and Django URL prefixes  
-8. [Django middleware to Reflex](django_middleware_to_reflex.md) — `DjangoEventBridge`  
-9. [Django context to Reflex](django_context_to_reflex.md) — processors and `DjangoContextState`  
-10. [State management](state_management.md) — `AppState`, `DjangoUserState`, wire format  
-    - [Authentication](authentication.md) — `self.user` / `self.session`, login, permissions, decorators  
-11. [Serializers](serializers.md) — `ReflexDjangoModelSerializer`  
-12. [Database integration](database_integration.md) — migrations, `Model`, ORM backend  
-13. [CRUD without mixins](crud_without_mixins.md) — manual Product example  
-14. [reflex-django mixins](reflex_django_mixins.md) — mixin catalog and `session_auth_mixin`  
-15. [ModelState and ModelCRUDView](model_state_and_crud_view.md) — comparison, examples, when to use each  
-16. [Reactive ModelState](reactive_model_state.md) — `ModelState[M]` + canonical ORM API  
-17. [CRUD with mixins and states](crud_with_mixins_and_states.md) — `ModelCRUDView` / BlogPost  
-18. [Forms and validation](forms_and_validation.md)  
-19. [Authentication](authentication.md)  
-20. [API integration](api_integration.md) — Django HTTP under `backend_prefix`  
-21. [CLI](cli.md) — `reflex django` and `reflex-django`  
-22. [Deployment](deployment.md)  
-23. [Testing](testing.md)  
-24. [Best practices](best_practices.md)  
-25. [FAQ](faq.md)
+    ```bash
+    pip install reflex-django
+    ```
 
 ---
 
-## I want to…
+## Learning Path
 
-| Goal | Page |
-|------|------|
-| Wire Django settings and prefixes | [Configuration](configuration.md) |
-| Run migrations | [CLI](cli.md) |
-| Use Django session auth in Reflex events (`AppState`, `login`, `has_perm`) | [Authentication](authentication.md) |
-| Use `self.request.user`, `self.request.GET`, Django request in handlers | [Authentication — `self.request`](authentication.md#accessing-the-django-request-on-appstate) |
-| Understand state: plain Reflex vs helpers | [State management](state_management.md) |
-| Build a list/create/edit UI for a model | [ModelState and ModelCRUDView](model_state_and_crud_view.md), [Reactive ModelState](reactive_model_state.md), [CRUD with mixins](crud_with_mixins_and_states.md), or [CRUD without mixins](crud_without_mixins.md) |
-| Understand `ModelState` vs `ModelCRUDView` | [ModelState and ModelCRUDView](model_state_and_crud_view.md) |
-| Serialize models for Reflex state | [Serializers](serializers.md) |
-| Expose DRF or Django views on `/api` | [API integration](api_integration.md) |
-| Deploy to production | [Deployment](deployment.md) |
-| Debug `current_user()` or session issues | [FAQ](faq.md), [Django middleware to Reflex](django_middleware_to_reflex.md) |
+We recommend exploring the documentation in this structured sequence to get a complete grasp of the integration:
+
+1. **Foundations**
+    * [Introduction](introduction.md) — Core concepts, philosophy, and comparison.
+    * [Installation](installation.md) — Dependencies, Django setup, and basic plugin configuration.
+    * [Configuration](configuration.md) — Deep dive into the `ReflexDjangoPlugin` arguments and `REFLEX_DJANGO_*` settings.
+    * [Project Structure](project_structure.md) — Recommended folder layouts for monorepo development.
+
+2. **Core Architecture**
+    * [Architecture Overview](architecture.md) — Single-process dispatching, event bridges, and lifecycle hooks.
+    * [Routing & URL Dispatching](routing.md) — Managing paths across Reflex pages and Django prefixes.
+    * [API & HTTP Integration](api_integration.md) — Exposing Django REST Framework or standard Django views on `/api`.
+
+3. **State, Context & Auth**
+    * [State Management](state_management.md) — Synchronizing states between Python and the browser.
+    * [Django Context in Reflex](django_context_to_reflex.md) — Running Django context processors per Socket.IO event.
+    * [Django Middleware in Reflex](django_middleware_to_reflex.md) — How the Event Bridge brings `request.user` and session data to your event handlers.
+    * [Session Authentication](authentication.md) — Full session authentication, permission decorators, and user sessions.
+
+4. **Database & CRUD Development**
+    * [Database Integration](database_integration.md) — Migrations, asynchronous ORM calls, and model structures.
+    * [Model Serializers](serializers.md) — Serializing complex Django models into JSON-safe Reflex variables.
+    * [CRUD Without Mixins](crud_without_mixins.md) — Step-by-step example of hand-rolled database actions.
+    * [ModelState vs ModelCRUDView](model_state_and_crud_view.md) — Choosing between high-level CRUD tools.
+    * [Reactive ModelState](reactive_model_state.md) — Using `ModelState` for automatic form generation and live grids.
+    * [CRUD with Mixins & States](crud_with_mixins_and_states.md) — Customizing the `ModelCRUDView` workflow.
+    * [reflex-django Mixins](reflex_django_mixins.md) — Standard mixin reference library.
+    * [Forms & Validation](forms_and_validation.md) — Forms, error reporting, and UI resets.
+
+5. **Ops & Development**
+    * [Command Line Interface](cli.md) — Leveraging the `reflex django` wrapper.
+    * [Testing Guide](testing.md) — Writing unit and integration tests.
+    * [Deployment Guide](deployment.md) — Production configurations, static files, and environment requirements.
+    * [Best Practices](best_practices.md) — Guidelines for writing clean, performant, and secure apps.
+    * [FAQ](faq.md) — Answers to frequently asked questions.
 
 ---
 
-## Maintainer docs
+## Core Task Guide
 
-- [CHANGELOG.md](../CHANGELOG.md) — release history  
-- [RELEASING.md](../RELEASING.md) — publish workflow  
-- [README.md](../README.md) — package overview (links here for depth)
+Need to solve a specific problem? Check out these direct guides:
+
+| What do you want to do? | Recommended Guide |
+|:---|:---|
+| Configure Django settings and paths | [Configuration Guide](configuration.md) |
+| Run Django database migrations | [CLI Reference](cli.md) |
+| Access Django sessions and `request.user` in event handlers | [Session Authentication](authentication.md) |
+| Read raw query parameters (`GET`/`POST`) or cookies in state | [Authentication — Accessing Request](authentication.md#accessing-the-django-request-on-appstate) |
+| Create a list, create, edit, or delete UI for a database model | [Reactive ModelState](reactive_model_state.md) or [CRUD Without Mixins](crud_without_mixins.md) |
+| Serialize database models into React-friendly dictionaries | [Serializers Reference](serializers.md) |
+| Integrate DRF or standard Django HTTP views alongside the SPA | [API & HTTP Integration](api_integration.md) |
+| Deploy your unified app to a production server | [Deployment Guide](deployment.md) |
+| Debug anonymous user sessions or authentication problems | [FAQ](faq.md) |
+
+---
+
+## Maintainer Docs
+To help maintain or contribute to the library:
+
+* [CHANGELOG.md](../CHANGELOG.md) — Full release history.
+* [RELEASING.md](../RELEASING.md) — Standard package publishing workflow.
+* [README.md](../README.md) — General package overview.
 
 ---
 

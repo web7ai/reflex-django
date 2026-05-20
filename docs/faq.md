@@ -1,139 +1,138 @@
-# FAQ
+# Frequently Asked Questions (FAQ)
 
-Frequently asked questions about reflex-django.
-
----
-
-## General
-
-### What is reflex-django?
-
-A Reflex **plugin** that runs Django and Reflex in **one process** with an HTTP prefix dispatcher and an optional **event bridge** for session/user context. See [Introduction](introduction.md).
-
-### Is it a merged URL router?
-
-No. Reflex UI and `/_event/…` stay on Reflex; Django serves configured HTTP prefixes only. [Architecture](architecture.md).
-
-### I already have Django — where do I start?
-
-[Existing Django project](existing_django_project.md).
+Here is a comprehensive compilation of frequently asked questions and troubleshooting scenarios compiled by the `reflex-django` developer community.
 
 ---
 
-## Authentication and sessions
+## 1. Core Architecture
 
-### Why is `current_user()` AnonymousUser in my handler?
+### What exactly is reflex-django?
+`reflex-django` is a high-performance integration engine that runs a **fully-featured Django backend** alongside a **Reflex reactive web application** within a **single, unified ASGI process**. 
 
-- Event bridge disabled (`install_event_bridge=False`).  
-- No session cookie on the Socket.IO connection.  
-- After login, cookie not synced — use `session_auth_mixin` or canned auth (`session_js`). [Authentication](authentication.md).
-
-### Why doesn’t Django middleware run when I click a button?
-
-Reflex events are not HTTP requests. Only `DjangoEventBridge` runs (session, user, optional locale). [Django middleware to Reflex](django_middleware_to_reflex.md).
-
-### Can I trust `DjangoUserState.is_authenticated`?
-
-No—for authorization use `current_user()` or `require_login_user()` on the server.
-
-### Can I trust `DjangoAuthState.is_authenticated` in the sidebar?
-
-Use it for **UI only** (`rx.cond`, `@login_required` page shell). It is a **`@rx.var`** that reads **`current_user()`** on the server during events—not a Python `bool` in your component module. For mutations, still use **`self.request.user`** or **`require_login_user()`** in handlers. See [Authentication — `DjangoAuthState`](authentication.md#djangouserstate-without-appstate).
+It provides:
+1. An **ASGI Path Dispatcher** that intercepts incoming traffic, forwarding admin panel and HTTP API requests to Django while routing client UI and WebSocket channels (`/_event`) to Reflex.
+2. A secure **Event Bridge** that bridges request session cookies, authenticated users, and context variables over persistent WebSocket channels into your Reflex state event handlers.
+3. A declarative, class-based **Reactive CRUD Engine** (`ModelState` and `ModelCRUDView`) that generates serializers, state variables, and event handlers automatically.
 
 ---
 
-## Configuration and routing
+## 2. Authentication & Request Sessions
 
-### Admin or API returns 404
-
-Prefix mismatch between `ReflexDjangoPlugin` (`admin_prefix`, `backend_prefix`) and `ROOT_URLCONF`. [Routing](routing.md).
-
-### Plugin `settings_module` seems ignored
-
-`DJANGO_SETTINGS_MODULE` in the environment **wins** over the plugin argument. [Configuration](configuration.md).
-
-### Difference between `ModelState` and `ModelCRUDView`?
-
-They use the **same CRUD pipeline**; configuration differs:
-
-| | **`ModelState`** | **`AppState, ModelCRUDView`** |
-|---|------------------|-------------------------------|
-| **Includes auth** | Yes (`AppState` built in) | You must add `AppState` |
-| **Serializer** | Auto from `model` + `fields` | You set `serializer_class` |
-| **List var** | `data` (override with `Meta.list_var`) | Pluralized (`posts`, `products`, …) |
-| **Handlers** | `load`, `save`, `refresh`, … (+ legacy aliases) | Legacy (`save_post`, `on_load_posts`) + canonical by default |
-| **When to use** | New CRUD screens (default) | Custom serializers, legacy names |
-
-**`ModelState` already subclasses `ModelCRUDView`.** You do not pick one instead of the other for CRUD—you pick convenience vs explicit control.
-
-Examples and migration: **[ModelState and ModelCRUDView](model_state_and_crud_view.md)**. Deep dives: [Reactive ModelState](reactive_model_state.md), [CRUD with mixins](crud_with_mixins_and_states.md).
+### Why is `self.request.user` returning AnonymousUser inside my event handlers?
+This commonly happens for one of three reasons:
+1. **Event Bridge Disabled**: Ensure `install_event_bridge=True` is active inside your `ReflexDjangoPlugin` configuration options in `rxconfig.py`.
+2. **Missing Session Cookies**: The user's browser has not established a session cookie yet. Ensure the user is properly logged in or check their browser cookie state.
+3. **Mismatched WebSocket Cookies**: When authenticating users, always synchronize browser session cookies to ensure the Socket.IO persistent connection aligns with the dynamic HTTP context.
 
 ---
 
-## CRUD
+### Why doesn't my custom Django middleware run when users click buttons?
+Reflex events are **not standard HTTP requests**. When a user interacts with a Reflex page, the client browser communicates with the server via a persistent Socket.IO WebSocket channel. 
 
-### Is pagination built in?
-
-**Yes, opt-in.** Set `Meta.paginate_by = 20` (or `paginate_by = 20` on the state class body) on `ModelState` / `ModelCRUDView` / `ModelListView` to get `page`, `page_size`, pagination totals, `next_page`, `prev_page`, and related handlers. On **`ModelState`**, defaults are `total_count`, `page_count`, and `search` (not `{list_var}_search`). `page_size` is initialized from `paginate_by`. Default is `paginate_by = None` (load all rows). See [README](../README.md#list-pagination-search-and-sorting) and [Reactive ModelState](reactive_model_state.md#pagination-metapaginate_by). Manual pagination is still documented in [CRUD without mixins](crud_without_mixins.md).
-
-### Where did `crud_mixin()` go?
-
-Removed. Use `ModelCRUDView`. [CHANGELOG](../CHANGELOG.md), [llm.txt](../llm.txt).
-
-### Where did `reflex_django.authz` go?
-
-Removed. Use `reflex_django.auth.shortcuts` and `reflex_django.auth.decorators`. [CHANGELOG](../CHANGELOG.md).
+As a result, Django's standard HTTP middleware stack does not run. To solve this, `reflex-django` exposes a dedicated **`DjangoEventBridge`** which executes context setups (resolving users, sessions, and request profiles) specifically for WebSocket channels.
 
 ---
 
-## API and integrations
+### Can I trust `DjangoUserState.is_authenticated` for security access controls?
+**No. Never rely on client state variables for security.** 
 
-### Can I use DRF only?
-
-reflex-django does not depend on DRF. You may mount DRF under `backend_prefix` yourself. Reflex states can still use the ORM directly. [API integration](api_integration.md).
-
-### Can I use httpx from Reflex to call my API?
-
-That is application code. The framework does not provide an HTTP client for Reflex → Django calls in-process ORM is preferred.
+Variables like `is_authenticated` or `username` are sent to the client browser and can be modified or spoofed. Use them exclusively for UI styling (e.g. wrapping a sidebar inside `rx.cond`). For any database mutations or private data queries, **always validate permissions on the server** inside your event handlers using `self.request.user` or by applying the `@login_required` decorator.
 
 ---
 
-## CLI and deploy
+## 3. Configuration & Routing
 
-### `reflex django` vs `manage.py`?
+### Why do my Django Admin or HTTP API endpoints return 404 errors?
+This indicates a path prefix mismatch. The URL paths configured in your `ReflexDjangoPlugin` configuration must exactly match the prefixes declared inside your Django `urls.py` routing file:
 
-`reflex django` loads `rxconfig` first so settings match `reflex run`. [CLI](cli.md).
+```python
+# In rxconfig.py
+plugin = ReflexDjangoPlugin(
+    admin_prefix="/admin/",
+    backend_prefix="/api/",
+)
+```
 
-### How do I use `self.request` on `AppState`?
+```python
+# In django_project/urls.py
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/", include("shop.urls")),
+]
+```
 
-Subclass **`AppState`** (or **`ModelState`**) and use **`self.request`** inside **`@rx.event`** handlers after the event bridge is enabled:
+---
+
+### Why is the `settings_module` plugin parameter being ignored?
+In `reflex-django`, **system environment variables always take precedence**. If you have `DJANGO_SETTINGS_MODULE` defined in your active environment shell (e.g. by running a terminal command), it will override the `settings_module` parameter declared in your `rxconfig.py` plugin configuration.
+
+---
+
+## 4. CRUD Engine & States
+
+### What is the difference between `ModelState` and `ModelCRUDView`?
+Both components execute the exact same reactive CRUD pipeline under the hood, but they are configured differently to support different project setups:
+
+| Feature / Paradigm | `ModelState` (Recommended) | `ModelCRUDView` (Explicit) |
+|:---|:---|:---|
+| **Authentication Base** | Inherits `AppState` automatically. | Requires explicit inheritance from `AppState`. |
+| **Data Schema** | Automatically builds a serializer from `model` and `fields`. | Requires an explicit `serializer_class` definition. |
+| **Active List Variable** | `self.data` (Generic list) | Pluralized name (e.g. `self.posts`, `self.products`). |
+| **Default Handlers** | Generic canonical methods (`load`, `save`, `refresh`, etc.). | Pluralized legacy handlers (`save_post`, `on_load_posts`). |
+| **Best Used For** | Rapidly building new CRUD administration screens. | Integrating existing DRF schemas or custom relational joins. |
+
+---
+
+### Is pagination built into the CRUD engine?
+**Yes, as an opt-in feature.** 
+
+Simply declare `Meta.paginate_by = X` on your State class body. This automatically registers:
+* Active pagination variables: `page`, `page_size`, `total_count`, and `page_count`.
+* Event handlers: `next_page`, `prev_page`, and `paginate(page=X)` to handle page queries automatically.
+
+---
+
+### How do I access the Django `HttpRequest` inside an AppState subclass?
+Subclass `AppState` (or `ModelState`) and call **`self.request`** inside any `@rx.event` handler. The engine provides three request variables:
 
 ```python
 class MyState(AppState):
     @rx.event
-    async def on_load(self):
-        if self.request.user.is_authenticated:
-            page = self.request.GET.get("page", "1")
+    async def process_data(self):
+        # 1. Access the authenticated user
+        user = self.request.user
+        
+        # 2. Access query parameters
+        page_num = self.request.GET.get("page", "1")
+        
+        # 3. Access cookie values
+        theme = self.request.COOKIES.get("theme", "light")
 ```
 
-- **`self.request.user`** — live Django user (ORM scoping, permissions).
-- **`self.request.GET`**, **`.path`**, **`.COOKIES`**, **`.META`** — synthetic `HttpRequest` from `router_data`.
-- **`self.django_request`** — raw `HttpRequest` when a library needs it.
-- **`self.username`** / **`self.is_authenticated`** — Reflex vars for UI only (not for authorization).
-
-Plain **`rx.State`**: use **`from reflex_django import request`** instead. Full examples: [Authentication — Accessing the Django request on AppState](authentication.md#accessing-the-django-request-on-appstate).
+* **`self.request.user`**: The active authenticated Django user (used for permissions and row-level scoping).
+* **`self.request`**: A synthetic `HttpRequest` object populated with active browser router data (headers, pathnames, and queries).
+* **`self.django_request`**: The raw, un-wrapped Django `HttpRequest` (useful when third-party libraries require a native Django request instance).
 
 ---
 
-## Troubleshooting quick links
+## 5. Development & Operations
 
-| Topic | Page |
-|-------|------|
-| Event bridge | [Django middleware to Reflex](django_middleware_to_reflex.md) |
-| Context processors | [Django context to Reflex](django_context_to_reflex.md) |
-| Deploy | [Deployment](deployment.md) |
-| Tests | [Testing](testing.md) |
+### Why should I use `reflex django` instead of `python manage.py`?
+Running `python manage.py` directly does not load your Reflex configurations. 
+
+Calling **`reflex django <subcommand>`** instructs the CLI to boot Reflex first, load `rxconfig.py`, resolve environment variables, and then trigger Django. This guarantees that your migrations and database commands target the exact same database settings used during runtime.
 
 ---
 
-**Navigation:** [← Best practices](best_practices.md) | [Docs index](index.md)
+### How do I troubleshoot unstyled Django Admin pages in production?
+If the Django Admin panel boots but is missing CSS and JS styles, you have not compiled your static assets. Run the compilation command in your deployment pipeline before starting the web server:
+
+```bash
+uv run reflex django collectstatic --noinput
+```
+
+Ensure your reverse proxy (like Nginx) is configured to serve the `/static/` location directly from your compiled `STATIC_ROOT` folder.
+
+---
+
+**Navigation:** [← Best Practices](best_practices.md) | [Docs Index](index.md)

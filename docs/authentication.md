@@ -957,4 +957,4 @@ See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AU
 
 ---
 
-**Navigation:** [← Forms and validation](forms_and_validation.md) | [Next: API integration →](api_integration.md)
+**Navigation:** [← Django Middleware in Reflex](django_middleware_to_reflex.md) | [Next: Database Integration →](database_integration.md)

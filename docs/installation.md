@@ -1,112 +1,142 @@
 # Installation
 
-Install **reflex-django** alongside **Reflex** and an existing or new **Django** project.
+This guide will walk you through setting up **reflex-django** and its core dependencies. You can integrate it into a brand-new project or add it to an existing project virtual environment.
 
 ---
 
-## Requirements
+## System Requirements
 
-| Component | Version (from `pyproject.toml`) |
-|-----------|----------------------------------|
-| Python | `>=3.12,<4.0` |
-| Django | `>=6.0,<7.0` |
-| Reflex | `>=0.9.2,<1.0` |
+Before getting started, make sure your local environment meets these version requirements (as defined in `pyproject.toml`):
 
----
-
-## Install dependencies
-
-With **uv** (recommended in the package README):
-
-```bash
-uv add reflex reflex-django
-```
-
-With **pip**:
-
-```bash
-pip install reflex reflex-django
-```
+| Component | Minimum Version | Supported Range |
+|:---|:---|:---|
+| **Python** | `3.12` | `>= 3.12, < 4.0` |
+| **Django** | `6.0` | `>= 6.0, < 7.0` |
+| **Reflex** | `0.9.2` | `>= 0.9.2, < 1.0` |
 
 ---
 
-## Django `INSTALLED_APPS`
+## 1. Install Dependencies
 
-Include the Django contrib apps you need (`auth`, `sessions`, `admin`, `staticfiles`, …).
+First, install `reflex` and `reflex-django` inside your project's active virtual environment. We highly recommend using **uv** for its incredible speed and modern dependency locking, though traditional **pip** is fully supported.
 
-Add **`reflex_django`** when you use bundled helpers (`ModelCRUDView`, `register_admin`, canned auth pages, etc.):
+=== "Using uv (Recommended)"
+
+    ```bash
+    uv add reflex reflex-django
+    ```
+
+=== "Using pip"
+
+    ```bash
+    pip install reflex reflex-django
+    ```
+
+This single command installs the core libraries along with `asgiref` and the appropriate system-level dependencies.
+
+---
+
+## 2. Register with Django (`INSTALLED_APPS`)
+
+To use the library's pre-built features (such as `ModelCRUDView`, automatic admin dashboard registration, built-in login pages, and states), you need to add `"reflex_django"` to your Django settings file.
+
+Open your `settings.py` file (typically located under your Django project package folder) and include the following:
 
 ```python
+# backend/settings.py or config/settings.py
+
 INSTALLED_APPS = [
-    # ...
+    # Core Django apps
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    
+    # Add reflex-django here
     "reflex_django",
+    
+    # Your custom application apps
+    "shop",
 ]
 ```
 
-> **Note:** You can run the plugin without listing `reflex_django` in `INSTALLED_APPS` if you only use `ReflexDjangoPlugin` and import APIs from the `reflex_django` package—but helpers that expect the Django app config may not autoload.
+> [!NOTE]
+> **Minimalist Mode:** If you only plan to use the `ReflexDjangoPlugin` inside `rxconfig.py` to route HTTP endpoints and manually import custom APIs, you *can* omit `"reflex_django"` from `INSTALLED_APPS`. However, advanced features (like automatic app registration or bundled auth pages) require it to be registered to initialize Django app configs properly.
 
 ---
 
-## Minimal `rxconfig.py`
+## 3. Configure the Reflex Plugin (`rxconfig.py`)
+
+Every Reflex project has an `rxconfig.py` configuration file at its root directory. This config is loaded by the Reflex CLI during compilation and running. 
+
+To bridge the two frameworks, initialize the **`ReflexDjangoPlugin`** and pass it the dotted Python path to your Django settings module:
 
 ```python
+# rxconfig.py
 import reflex as rx
 from reflex_django import ReflexDjangoPlugin
 
 config = rx.Config(
-    app_name="myapp",
+    app_name="frontend",  # Must match your Reflex code directory name
     plugins=[
-        ReflexDjangoPlugin(settings_module="backend.settings"),
+        ReflexDjangoPlugin(
+            settings_module="backend.settings",  # Dotted path to settings.py
+        ),
     ],
 )
 ```
 
-Replace `backend.settings` with your dotted settings path.
-
-Full plugin and environment options: [Configuration](configuration.md).
+Replace `"backend.settings"` with the dotted path to your own Django settings module (e.g., `"config.settings"` or `"myproject.settings.development"`).
 
 ---
 
-## Production settings
+## 4. Verify the Installation
 
-Do **not** rely on bundled `reflex_django.default_settings` in production. The plugin warns when `REFLEX_DJANGO_AUTO_SETTINGS` is true.
-
-Use your own `settings.py` with a stable `SECRET_KEY`, `DEBUG=False`, and explicit `ALLOWED_HOSTS`. See [Configuration](configuration.md) and [Deployment](deployment.md).
-
----
-
-## Verify installation
+To verify that the integration is configured correctly and that the Django app registry is loaded, run the following CLI command:
 
 ```bash
 uv run reflex django help
 ```
 
-This loads `rxconfig`, runs `configure_django()`, and forwards to Django management commands. Details: [CLI](cli.md).
+This command acts as a wrapper: it loads `rxconfig.py`, initializes the `ReflexDjangoPlugin`, calls `configure_django()`, and then forwards the remainder of the arguments to Django's standard management utility. You should see a list of all available Django management commands.
 
 ---
 
-## Common mistakes
+## Production Security Warning
 
-- **Wrong `settings_module`** — must match `DJANGO_SETTINGS_MODULE` / your `manage.py` default.
-- **Skipping migrations** — run `reflex django migrate` before first `reflex run`.
-- **Importing models before Django setup** — let the plugin bootstrap via `rxconfig`; avoid circular imports at module top level.
-
----
-
-## Troubleshooting
-
-| Symptom | Check |
-|---------|--------|
-| `django.core.exceptions.AppRegistryNotReady` | Plugin not in `rxconfig` or `configure_django()` not run |
-| CLI uses wrong database | `rxconfig` not loaded; env `DJANGO_SETTINGS_MODULE` |
+> [!WARNING]
+> By default, if the plugin does not find an active settings module, it will fall back to a built-in development settings file (`reflex_django.default_settings`). This is extremely useful for fast local prototyping, but it is **highly insecure** for production.
+>
+> In production, you must explicitly set `REFLEX_DJANGO_AUTO_SETTINGS = False` in your environment or settings file, and provide your own `settings.py` file with:
+> * A secure, secret `SECRET_KEY`
+> * `DEBUG = False`
+> * A restricted `ALLOWED_HOSTS` whitelist
+>
+> See [Configuration](configuration.md) and [Deployment](deployment.md) for step-by-step checklists.
 
 ---
 
-## See also
+## Common Pitfalls & Troubleshooting
 
-- [Configuration](configuration.md)  
-- [Quickstart](quickstart.md) | [Existing Django project](existing_django_project.md)  
-- [CLI](cli.md)
+### Circular Imports and Registry Errors
+* **Symptom:** `django.core.exceptions.AppRegistryNotReady: Apps aren't loaded yet.`
+* **Cause:** This occurs if you attempt to import Django database models at the global module level of your Reflex files *before* the plugin has finished initializing Django.
+* **Solution:** Always import Django database models *inside* your state methods, or ensure they are imported after the initial Reflex bootstrap is completed.
+
+### Settings Precedence Conflict
+* **Symptom:** The database or configuration changes you make in `settings.py` are ignored by the CLI.
+* **Cause:** The environment variable `DJANGO_SETTINGS_MODULE` is already defined in your terminal or `.env` file, overriding your plugin's `settings_module` parameter.
+* **Solution:** Check your active environment variables:
+  ```bash
+  # Windows (PowerShell)
+  $env:DJANGO_SETTINGS_MODULE
+  
+  # macOS/Linux
+  echo $DJANGO_SETTINGS_MODULE
+  ```
+  Ensure it is either unset or points to the exact same file as your `rxconfig.py` file.
 
 ---
 

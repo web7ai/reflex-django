@@ -1,126 +1,108 @@
-# Project structure
+# Project Structure
 
-Recommended layout for a **monorepo** that hosts Django and Reflex together under `reflex run`.
-
----
-
-## Prerequisites
-
-- [Quickstart](quickstart.md) or [Existing Django project](existing_django_project.md)
+When combining **Reflex** and **Django** into a single monorepo repository, keeping your code organized is essential to prevent dependency cycles and compilation errors. This guide details the recommended structural organization for full-stack apps.
 
 ---
 
-## Canonical layout
+## The Monorepo Layout
 
-*Example application layout for a monorepo Reflex + Django project.*
+Below is the standard, production-ready directory tree for a unified `reflex-django` application.
 
 ```text
-myapp/                         # project root (CLI name)
-├── rxconfig.py                # ReflexDjangoPlugin, RadixThemesPlugin, TailwindV4Plugin
-├── manage.py
-├── pyproject.toml
-├── Dockerfile
-├── docker-compose.yml
-├── config/                    # Django project package
-│   ├── settings.py            # or settings/ package (base, dev, prod)
-│   ├── urls.py
-│   └── api/urls.py            # starter: routes under /api
-├── accounts/                  # starter: UserProfile + avatar
-├── todos/                     # starter: Task model
-└── myapp/                     # Reflex app (name = rxconfig app_name)
-    ├── myapp.py               # rx.App, add_auth_pages, register_pages
-    ├── routes.py
-    ├── STRUCTURE.md
-    ├── layout/                # page_layout, header, footer (starter)
-    ├── pages/
-    ├── forms/
-    ├── components/
-    ├── ui/                    # tokens, buttons, callouts, typography
-    └── states/
+myproject/                         # Git repository root
+├── manage.py                      # Django command line management utility
+├── rxconfig.py                    # Reflex configuration & Django plugin bootstrapper
+├── pyproject.toml                 # Package dependencies (uv or poetry)
+│
+├── config/                        # Main Django configuration package
+│   ├── __init__.py
+│   ├── settings.py                # Database, auth, and REFLEX_DJANGO_* settings
+│   └── urls.py                    # Root URL pattern dispatcher (/admin, /api)
+│
+├── shop/                          # A standard Django application app
+│   ├── migrations/
+│   ├── __init__.py
+│   ├── models.py                  # Database models (domain-specific data)
+│   ├── views.py                   # Traditional HTTP API views
+│   └── serializers.py             # Reflex-safe model serializers
+│
+└── frontend/                      # Reflex app package (matches rxconfig app_name)
+    ├── __init__.py
+    ├── frontend.py                # Main router (adds pages and wraps auth)
+    ├── layout/                    # Layout templates (navbar, sidebars, headers)
+    ├── components/                # Reusable presentation widgets
+    └── states/                    # Reactive states (subclassing AppState/ModelState)
 ```
 
 ---
 
-## Reflex app layers
+## Key Directory Roles
 
-| Layer | Directory | Role |
-|-------|-----------|------|
-| Entry | `myapp.py`, `routes.py` | App wiring and route registry |
-| Layout | `layout/` | Header, footer, shells |
-| Pages | `pages/` | Full screens |
-| Forms | `forms/` | `rx.form` assemblies |
-| Components | `components/` | Composed widgets |
-| UI | `ui/` | Radix primitives (see DESIGN.md) |
-| States | `states/` | `AppState`, `ModelCRUDView`, handlers |
+By dividing the frontend UI code and the backend database code into separate packages, you establish a clean separation of concerns:
 
-Auth routes (`/login`, `/register`, password reset) come from **`reflex_django.auth.add_auth_pages`** — not from `pages/`.
-
----
-
-## File responsibilities
-
-| File | Role |
-|------|------|
-| `rxconfig.py` | Reflex config; plugin bootstraps Django |
-| `manage.py` | Django entry; prefer `reflex django` for same settings |
-| `config/settings.py` or `config/settings/` | `INSTALLED_APPS`, `DATABASES`, `REFLEX_DJANGO_*` |
-| `config/urls.py` | HTTP routes under prefixes (admin, API) |
-| `myapp/myapp.py` | `app = rx.App()`, `add_auth_pages`, `register_pages` |
-| `states/*.py` | `AppState`, `ModelCRUDView`, event handlers |
-| `todos/models.py` | Django models (your domain) |
+| Layer | Directory | Responsibility |
+|:---|:---|:---|
+| **Django Core** | `config/` | Contains the global settings, database backends, URL patterns, and configurations. |
+| **Django Domain** | `shop/` | Contains models, migrations, standard views, test suites, and backend utility methods. |
+| **Reflex Entry** | `frontend/frontend.py` | Configures the main `rx.App` instance, defines page routes, and wires global page-load event hooks. |
+| **Reflex Layout** | `frontend/layout/` | Contains headers, navbars, responsive shells, and menus shared across different pages. |
+| **Reflex Presentation** | `frontend/components/` | Custom UI elements (e.g., product cards, confirmation modals, error alerts) that don't maintain global state. |
+| **Reflex Logic** | `frontend/states/` | Houses event handlers, state variables, permissions check routines, and ORM access methods. |
 
 ---
 
-## `ROOT_URLCONF` and plugin prefixes
+## File Responsibilities in a Unified Process
 
-The HTTP dispatcher forwards paths matching:
+To keep your code clean, stick to these core file responsibilities:
 
-- `backend_prefix` (e.g. `/api`)  
-- `admin_prefix` (default `/admin`)  
-- `STATIC_URL` when staticfiles enabled  
-- `extra_prefixes`
+```text
++-------------------+      Starts      +------------------------+
+|    rxconfig.py    | -------------->  | configure_django()     |
+| (Reflex Config)   |                  | (Initializes Backend)  |
++-------------------+                  +------------------------+
+         |                                          |
+         v                                          v
++-------------------+                  +------------------------+
+| frontend/         |                  | shop/models.py         |
+| (Pages & States)  | <=============== | (Database ORM Models)  |
++-------------------+     Queries      +------------------------+
+```
 
-Your `urlpatterns` must use the **same path segments** the browser requests. Mismatches are the most common 404 cause. See [Routing](routing.md).
-
----
-
-## Where to put serializers
-
-Place `ReflexDjangoModelSerializer` subclasses next to models or in `serializers.py` inside each Django app. Import them from Reflex state modules. See [Serializers](serializers.md).
-
----
-
-## Dev vs production static files
-
-| Mode | Static behavior |
-|------|-----------------|
-| Dev | Vite proxy + Django `ASGIStaticFilesHandler` when `DEBUG` |
-| Prod | `reflex django collectstatic` → `STATIC_ROOT`; dispatcher forwards `STATIC_URL` |
+* **`rxconfig.py`**: Initializes the `ReflexDjangoPlugin`. It acts as the gateway that boots Django before the first line of Reflex frontend code is evaluated.
+* **`frontend/frontend.py`**: Imports individual page modules and registers them using `app.add_page(index)`.
+* **`shop/models.py`**: Defines your database schemas. These should remain completely standard Django models, keeping your domain logic separate from Reflex UI logic.
+* **`frontend/states/*.py`**: Implements reactive states. You should import Django models inside state files, query them asynchronously, and map results to JSON-safe dictionaries using custom serializers.
 
 ---
 
-## Advanced usage
+## Where to Place Serializers
 
-- **Multiple Django apps:** keep domain logic in apps; Reflex states orchestrate UI only.  
-- **Multiple Reflex apps:** uncommon; separate `rxconfig` / `app_name` per UI with shared Django settings.
+Model serialization bridges the gap between database models and reactive states. 
 
-> **Warning:** Running two unrelated Reflex apps against one Django project is out of scope for the bundled plugin defaults.
+We recommend placing your **`ReflexDjangoModelSerializer`** classes in a dedicated `serializers.py` file inside each Django application folder (e.g., `shop/serializers.py`). 
 
----
-
-## Common mistakes
-
-- Reflex `app_name` in `rxconfig.py` does not match the Python package directory.  
-- Models imported at module level before `rxconfig` loads in tests without `DJANGO_SETTINGS_MODULE`.
+This keeps serialization rules close to the database schema, while your frontend states in `frontend/states/` can easily import them.
 
 ---
 
-## See also
+## Static Files Flow
 
-- [Architecture](architecture.md)  
-- [Configuration](configuration.md)  
-- [CLI](cli.md)
+Handling static assets (images, stylesheets, user uploads) is managed dynamically depending on your active runtime environment:
+
+| Mode | Static Engine | Path |
+|:---|:---|:---|
+| **Development** | Vite Development Proxy + `ASGIStaticFilesHandler` | Served dynamically on the same origin. No build compilation required. |
+| **Production** | Shared Outermost ASGI Path Dispatcher | Compiled via `reflex django collectstatic` into `STATIC_ROOT` and served directly from the dispatcher path. |
 
 ---
 
-**Navigation:** [← Existing Django project](existing_django_project.md) | [Next: Architecture →](architecture.md)
+## Next Steps
+
+Now that you are familiar with the recommended Monorepo directory structure:
+
+* Understand how the dispatcher intercepts incoming traffic: Read the [Architecture Overview](architecture.md).
+* Configure your project settings: Review the [Configuration Reference](configuration.md).
+
+---
+
+**Navigation:** [← Existing Django Project](existing_django_project.md) | [Next: Architecture →](architecture.md)

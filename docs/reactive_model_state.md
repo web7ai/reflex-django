@@ -1,837 +1,568 @@
 # Reactive ModelState
 
-**`ModelState`** is the recommended way to build reactive CRUD for **any** Django model. Subclass it, set **`model`** and **`fields`** on the class, and reflex-django assembles a serializer, Reflex state vars, and event handlers at **class definition time**. Your UI binds to stable method names (`load`, `save`, `refresh`, …) instead of memorizing per-model event names like `save_note` or `save_product`.
+The **`ModelState`** class is the high-productivity engine of `reflex-django`. It completely automates the boilerplate of database-driven forms, lists, search, pagination, and validation. By subclassing `ModelState` and declaring a Django model alongside the desired writable fields, the package dynamically compiles data schemas, registers reactive state variables, and attaches a canonical set of CRUD event handlers at **class definition time**. 
 
-The optional subscript **`ModelState[Product]`** only helps type checkers (or infers `model` if you omit it in the class body)—the normal style is **`class ProductState(ModelState): model = Product`**.
-
-> **ModelState vs ModelCRUDView:** `ModelState` already includes `AppState` and `ModelCRUDView` under the hood. Use **`AppState, ModelCRUDView`** only when you need an explicit `serializer_class` or per-model var names (`posts`, `posts_error`). See **[ModelState and ModelCRUDView](model_state_and_crud_view.md)** for a full comparison, side-by-side examples, and migration notes.
+This allows you to build sophisticated, secure, and fully reactive administration screens, dashboards, and portals with virtually zero boilerplate.
 
 ---
 
-## What you get
+## 1. How ModelState Works Under the Hood
 
-| Layer | What reflex-django provides |
-|-------|---------------------------|
-| **Auth** | `ModelState` extends `AppState` → `self.user`, `self.session`, `login`, `logout`, `has_perm`, reactive `is_authenticated`, … |
-| **Serializer** | Auto-built from `model` + `fields` (or your custom `serializer_class`) |
-| **List var** | `data` by default (`list[dict[str, Any]]` of serialized rows); override with `Meta.list_var` |
-| **Form vars** | One Reflex var per writable field (`name`, `price`, …) plus `set_name`, … |
-| **Handlers** | Canonical `load` / `save` / `refresh` / … plus legacy names (`save_product`, `start_edit`) |
-| **Hooks** | Django CBV-style overrides: `get_queryset`, `validate_state`, `perform_create`, … |
-
-You still write normal Reflex components. ModelState does not replace `rx.State` for unrelated UI (carts, wizards, counters).
-
----
-
-## Mental model
+To appreciate the simplicity of `ModelState`, it is important to understand its two distinct lifecycles: **Import-Time Assembly** and **Runtime Event Dispatching**.
 
 ```mermaid
-flowchart TB
-  UI[Reflex UI: buttons, inputs, on_mount]
-  Events["@rx.event handlers\nload, save, refresh, …"]
-  Dispatch[dispatch action]
-  Bridge[bind_request_context\nself.request.user]
-  Hooks[get_queryset → filter_queryset → serialize]
-  ORM[Django async ORM]
-  Vars[Reactive vars: data, error, name, editing_id]
-
-  UI --> Events
-  Events --> Dispatch
-  Dispatch --> Bridge
-  Dispatch --> Hooks
-  Hooks --> ORM
-  Hooks --> Vars
-  Vars --> UI
+flowchart TD
+    subgraph Import Time (Assembly)
+        A[Class Declaration] --> B[Metaclass Execution]
+        B --> C[Resolve Serializer]
+        B --> D[Declare Reactive State Vars]
+        B --> E[Inject Canonical Handlers]
+    end
+    
+    subgraph Runtime (Client Event)
+        F[UI Event: on_click/on_mount] --> G[Trigger Event Handler]
+        G --> H[Dispatch Pipeline]
+        H --> I[Bind Request Context]
+        H --> J[Run Permissions & Decs]
+        J --> K[Execute Pre-Save Hooks & Validation]
+        K --> L[Django Async ORM Query]
+        L --> M[Hydrate Reactive State Vars]
+        M --> N[Re-render UI]
+    end
 ```
 
-**At import time** (`AppStateMeta`), reflex-django:
+### Import-Time Assembly
+When your application loads and imports your state file, the metaclass (`AppStateMeta`) automatically performs the following configuration steps:
+1. **Compiles the Serializer**: It either uses your explicitly provided `serializer_class` or dynamically builds a `ReflexDjangoModelSerializer` matching your `model` and `fields`.
+2. **Declares Writable State Fields**: For each field listed in `fields`, the engine automatically declares a corresponding Reflex reactive variable (e.g. `title: str = ""` or `price: decimal.Decimal = 0.0`) and its standard setter (e.g. `set_title`).
+3. **Injects Default CRUD Handlers**: It scans the class definition. If you have not explicitly overridden them, it injects canonical event handlers: `load`, `save`, `create`, `delete`, `refresh`, `filter`, `clear_filter`, `paginate`, and `cancel_edit`.
+4. **Initializes Helper States**: It registers management variables like `editing_id` (representing the primary key currently being edited, or `-1` for a new record) and `form_reset_key` (an integer used to force-refresh the client-side DOM).
 
-1. Resolves or builds a `ReflexDjangoModelSerializer` for your model.
-2. Declares missing Reflex vars (`data`, `error`, `editing_id`, field vars, pagination vars when enabled).
-3. Injects default `@rx.event` handlers **only for names not already in your class body**.
-
-**At runtime**, each handler calls `dispatch("save")` (etc.), which binds `self.request`, runs permission checks, calls your hooks, hits the ORM, and updates reactive vars so the UI re-renders.
+### Runtime Event Dispatching
+When a user interacts with the UI (e.g. clicking a **Save** or **Delete** button):
+1. The client invokes the generated handler, which calls `self.dispatch(<action_name>)`.
+2. The dispatch pipeline wraps the call in `bind_request_context` to safely expose `self.request` and `self.request.user` to the state.
+3. It performs permission checks (evaluating `Meta.permission_classes` or checking if `@login_required` wraps the handler).
+4. It fires database querysets and operations asynchronously using Django's thread-safe async ORM primitives.
+5. Upon completion, it updates the local state variables (such as list variables, validation error buffers, and input fields) which seamlessly propagates changes to the browser DOM.
 
 ---
 
-## Quick start (Product CRUD)
+## 2. Complete CRUD Guide: Product Catalog
 
-### 1. Model
+Let's build a secure, fully functional product inventory manager with a list, search filters, editing forms, and input validation.
+
+### Step 1: Define the Django Model
+
+Ensure your Django model has appropriate field types. We will use a standard model representing inventory products.
 
 ```python
 # shop/models.py
 from django.db import models
 
 class Product(models.Model):
-    name = models.CharField(max_length=120)
-    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    sku = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=120, help_text="Common name of the item")
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    sku = models.CharField(max_length=32, unique=True, help_text="Stock keeping unit identifier")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.sku})"
 ```
 
-### 2. State (one class per model)
+### Step 2: Declare the Reactive ModelState
+
+Subclass `ModelState` to manage our database schema and UI bindings. We will configure text search, default sorting, and enable automatic validation.
 
 ```python
 # shop/state.py
-import reflex as rx
 from reflex_django.state import ModelState
 from shop.models import Product
 
 class ProductState(ModelState):
+    """Manages the backend data-flow and UI interaction for the Product model."""
     model = Product
     fields = ["name", "price", "sku", "is_active"]
     ordering = ("-created_at",)
+    
+    # Built-in search configuration (enables search variable + database Q filters)
+    search_fields = ("name", "sku")
+    
+    class Meta:
+        list_var = "products"       # Overrides default generic 'data' listing to 'products'
+        reset_after_save = True     # Safely reset form input fields after successful save
+        run_model_validation = True # Automatically execute Django's full_clean() validation
+        structured_errors = True    # Populate a dict of field-level errors (products_field_errors)
 ```
 
-That is enough for assembly to generate:
+### Step 3: Build the Reflex Page Component
 
-- **List:** `data`, `error`
-- **Form:** `name`, `price`, `sku`, `is_active`, `set_name`, …
-- **Edit mode:** `editing_id` (`-1` = create, `>= 0` = editing pk)
-- **Events:** `load`, `save`, `create`, `delete`, `refresh`, `filter`, `clear_filter`, `paginate`, `cancel_edit`
-- **Legacy aliases:** `save_product`, `start_edit`, `on_load_data`, …
-
-### 3. Page
+Now, let's assemble the frontend page. We will bind our inputs to the auto-generated properties, render any field validation errors, and wrap our inputs in an `rx.form` bound to the `form_reset_key` to ensure clean state resets.
 
 ```python
 # shop/pages.py
 import reflex as rx
 from shop.state import ProductState
 
+def product_form_field(label: str, input_component: rx.Component, error_var: rx.Var) -> rx.Component:
+    """Helper to render form inputs with validation error messages."""
+    return rx.vstack(
+        rx.text(label, size="2", weight="medium", color="gray"),
+        input_component,
+        rx.cond(
+            error_var != "",
+            rx.text(error_var, size="1", color="red", weight="medium"),
+        ),
+        spacing="1",
+        width="100%",
+    )
+
 def products_page() -> rx.Component:
     return rx.vstack(
-        rx.heading("Products"),
+        rx.heading("Inventory Catalog", size="7", weight="bold"),
+        rx.text("Manage store items, update price details, and track SKU inventory.", size="3", color="gray"),
+        rx.divider(),
+        
+        # Action Bar: Search input and Create button
+        rx.hstack(
+            rx.input(
+                placeholder="Search products by name or SKU...",
+                value=ProductState.search,
+                on_change=ProductState.set_search,
+                width="300px",
+            ),
+            rx.button("Search", on_click=ProductState.refresh),
+            rx.button("Clear", variant="outline", on_click=ProductState.clear_filter),
+            rx.spacer(),
+            rx.button(
+                "Add New Item", 
+                color_scheme="teal",
+                on_click=ProductState.create,
+            ),
+            width="100%",
+            spacing="3",
+        ),
+        
+        # Display global processing error
         rx.cond(
             ProductState.error != "",
-            rx.callout(ProductState.error, color_scheme="red"),
-        ),
-        # List (use .length() in rx.cond — not Python len())
-        rx.cond(
-            ProductState.data.length() > 0,
-            rx.foreach(
-            ProductState.data,
-            lambda row: rx.card(
-                rx.hstack(
-                    rx.vstack(
-                        rx.text(row["name"], weight="bold"),
-                        rx.text(f"SKU: {row['sku']}  ·  ${row['price']}"),
-                        rx.badge(
-                            rx.cond(row["is_active"], "Active", "Inactive"),
-                        ),
-                    ),
-                    rx.spacer(),
-                    rx.button(
-                        "Edit",
-                        on_click=ProductState.load(row["id"]),
-                    ),
-                    rx.button(
-                        "Delete",
-                        color_scheme="red",
-                        on_click=ProductState.delete(row["id"]),
-                    ),
-                    width="100%",
-                ),
-            ),
-            ),
-            rx.text("No products yet.", color="gray"),
-        ),
-        rx.divider(),
-        # Form — wrap fields in rx.form(key=form_reset_key) so the DOM remounts after
-        # save, cancel, and start_edit (see "Clearing forms" below).
-        rx.cond(
-            ProductState.editing_id >= 0,
-            rx.text(f"Editing #{ProductState.editing_id}"),
-            rx.text("New product"),
-        ),
-        rx.form(
-            rx.vstack(
-                rx.input(
-                    placeholder="Name",
-                    value=ProductState.name,
-                    on_change=ProductState.set_name,
-                ),
-                rx.input(
-                    placeholder="SKU",
-                    value=ProductState.sku,
-                    on_change=ProductState.set_sku,
-                ),
-                rx.input(
-                    placeholder="Price",
-                    value=ProductState.price,
-                    on_change=ProductState.set_price,
-                ),
-                rx.checkbox(
-                    "Active",
-                    checked=ProductState.is_active,
-                    on_change=ProductState.set_is_active,
-                ),
-                spacing="3",
+            rx.callout(
+                ProductState.error, 
+                color_scheme="red", 
+                icon="alert_triangle",
                 width="100%",
             ),
-            key=ProductState.form_reset_key,
-            width="100%",
         ),
-        rx.hstack(
-            rx.button("Save", on_click=ProductState.save),
-            rx.button("New", variant="outline", on_click=ProductState.create),
-            rx.button("Cancel", variant="ghost", on_click=ProductState.cancel_edit),
-            rx.button("Reload list", variant="ghost", on_click=ProductState.refresh),
+        
+        # Products List Table
+        rx.cond(
+            ProductState.products.length() > 0,
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell("Name"),
+                        rx.table.column_header_cell("SKU"),
+                        rx.table.column_header_cell("Price"),
+                        rx.table.column_header_cell("Status"),
+                        rx.table.column_header_cell("Actions", text_align="right"),
+                    )
+                ),
+                rx.table.body(
+                    rx.foreach(
+                        ProductState.products,
+                        lambda row: rx.table.row(
+                            rx.table.cell(row["name"], weight="bold"),
+                            rx.table.cell(row["sku"]),
+                            rx.table.cell(f"${row['price']}"),
+                            rx.table.cell(
+                                rx.cond(
+                                    row["is_active"],
+                                    rx.badge("Active", color_scheme="green"),
+                                    rx.badge("Inactive", color_scheme="gray"),
+                                )
+                            ),
+                            rx.table.cell(
+                                rx.hstack(
+                                    rx.button(
+                                        "Edit",
+                                        size="1",
+                                        variant="soft",
+                                        on_click=ProductState.load(row["id"]),
+                                    ),
+                                    rx.button(
+                                        "Delete",
+                                        size="1",
+                                        color_scheme="red",
+                                        variant="soft",
+                                        on_click=ProductState.delete(row["id"]),
+                                    ),
+                                    spacing="2",
+                                    justify="end",
+                                ),
+                                text_align="right",
+                            ),
+                        )
+                    )
+                ),
+                width="100%",
+            ),
+            rx.center(
+                rx.vstack(
+                    rx.text("No products match your query.", color="gray", size="3"),
+                    rx.button("Reset Filters", variant="ghost", on_click=ProductState.clear_filter),
+                    spacing="2",
+                    padding="4em",
+                ),
+                width="100%",
+            ),
         ),
-        spacing="4",
+        
+        rx.divider(),
+        
+        # Writable Form (displays dynamically for edits or additions)
+        rx.cond(
+            (ProductState.editing_id >= 0) | (ProductState.name != "") | (ProductState.sku != ""),
+            rx.vstack(
+                rx.hstack(
+                    rx.heading(
+                        rx.cond(
+                            ProductState.editing_id >= 0,
+                            f"Edit Product (ID: #{ProductState.editing_id})",
+                            "Register New Product",
+                        ),
+                        size="5",
+                    ),
+                    rx.spacer(),
+                    rx.button("Cancel", variant="ghost", color_scheme="gray", on_click=ProductState.cancel_edit),
+                ),
+                
+                # Wrap input fields in form and bind key to form_reset_key to force UI remounts
+                rx.form(
+                    rx.vstack(
+                        rx.grid(
+                            product_form_field(
+                                "Product Name",
+                                rx.input(
+                                    value=ProductState.name,
+                                    on_change=ProductState.set_name,
+                                    placeholder="Enter premium name...",
+                                ),
+                                ProductState.field_errors.get("name", ""),
+                            ),
+                            product_form_field(
+                                "SKU Identifer",
+                                rx.input(
+                                    value=ProductState.sku,
+                                    on_change=ProductState.set_sku,
+                                    placeholder="e.g. ELEC-TV-4K",
+                                ),
+                                ProductState.field_errors.get("sku", ""),
+                            ),
+                            product_form_field(
+                                "Price ($ USD)",
+                                rx.input(
+                                    value=ProductState.price.to(str),
+                                    on_change=ProductState.set_price,
+                                    placeholder="0.00",
+                                ),
+                                ProductState.field_errors.get("price", ""),
+                            ),
+                            columns="3",
+                            spacing="4",
+                            width="100%",
+                        ),
+                        rx.hstack(
+                            rx.checkbox(
+                                "Available in Catalog (Active)",
+                                checked=ProductState.is_active,
+                                on_change=ProductState.set_is_active,
+                            ),
+                            rx.spacer(),
+                            rx.button("Save Item", color_scheme="teal", on_click=ProductState.save),
+                            spacing="4",
+                            width="100%",
+                            padding_top="2",
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    key=ProductState.form_reset_key,
+                    width="100%",
+                ),
+                padding="1.5em",
+                border="1px solid var(--gray-5)",
+                border_radius="8px",
+                width="100%",
+                background="var(--gray-2)",
+            ),
+        ),
+        
+        spacing="5",
         width="100%",
-        max_width="48em",
+        max_width="64em",
         padding="2em",
         on_mount=ProductState.refresh,
     )
 ```
 
-Register the page with Reflex as usual (`app.add_page` or `@rx.page`). ModelState does not dictate routing.
+---
 
-### 4. Requirements
+## 3. The `form_reset_key` Remounting Pattern
 
-- Django configured (`configure_django()` or plugin).
-- **Event bridge** enabled so `login_required` and `self.request.user` work in handlers ([Django middleware to Reflex](django_middleware_to_reflex.md)).
+A common challenge in reactive web frameworks is clearing stale text and error indicators from browser-side DOM inputs. In Reflex, modifying python variables in the state clears the state variables on the server. However, unless the client elements completely reload, browsers can retain uncommitted user text (especially inside `rx.text_area` or native HTML `<input>` structures).
+
+`ModelState` solves this elegantly by exposing an auto-incrementing integer: **`form_reset_key`**.
+
+### The Lifecyle of Form Clears
+* **Save Complete**: When a row is saved (and `Meta.reset_after_save` is `True`), the state variables are reset to their default values, and the engine automatically increments `form_reset_key` by 1.
+* **Edit Start**: When you invoke `.load(pk)`, the engine retrieves the row, populates the state inputs, and increments `form_reset_key`.
+* **Cancel Edit**: When you invoke `.cancel_edit()`, the fields are cleared to their empty defaults, and the engine increments `form_reset_key`.
+
+By binding `key=YourState.form_reset_key` to the parent component, React detects the key change as a new component instance and **remounts the DOM subtree**, forcing all form inputs to discard old client-side state and align with your fresh server-side values.
+
+> [!TIP]
+> Always place your **Save / Cancel / Add** buttons *outside* or *within* the form depending on submission type. If you use custom click events (`on_click=State.save`), you do not need standard form post submission behavior.
 
 ---
 
-## Canonical API reference
+## 4. The Validation Pipeline
 
-These names are **stable across every model**. Use them in `on_click`, `on_mount`, and custom `@rx.event` wrappers.
-
-| Method | Signature | What it does |
-|--------|-----------|--------------|
-| `load` | `load(pk: int)` | Fetch one row; populate form vars; set `editing_id` |
-| `save` | `save()` | Create (if `editing_id == -1`) or update current row |
-| `create` | `create()` | Set `editing_id = -1`, then `save()` (new row) |
-| `delete` | `delete(pk=None)` | Delete by pk; default pk = current `editing_id` |
-| `refresh` | `refresh()` | Reload list var from DB (`dispatch("load_list")`) |
-| `filter` | `filter(**kwargs)` | Store Django ORM filters, then `refresh()` |
-| `clear_filter` | `clear_filter()` | Clear stored filters, then `refresh()` |
-| `paginate` | `paginate(page=…, page_size=…)` | Update page vars (if `paginate_by` set), then `refresh()` |
-| `cancel_edit` | `cancel_edit()` | Clear form fields; `editing_id = -1` |
-| `reset_state_fields` | `reset_state_fields()` | Clear editable vars, `editing_id = -1`, bump `form_reset_key` |
-| `bump_form_reset_key` | `bump_form_reset_key()` | Increment `form_reset_key` only (custom UIs) |
-| `get_row` | `get_row(pk) -> dict \| None` | Read one row from the **current** list var (no DB hit) |
-
-**Legacy names** (still generated for backward compatibility):
-
-| Canonical | Legacy equivalent |
-|-----------|-------------------|
-| `load(pk)` | `start_edit(pk)` |
-| `save()` | `save_{model_name}` e.g. `save_product` |
-| `delete(pk)` | `delete_{model_name}` |
-| `refresh()` | `on_load_data` → `_load_data` (default list var `data`) |
-| `cancel_edit()` | `cancel_edit` (same name by default) |
-
-Set `Meta.use_canonical_api = False` if you only want legacy names and no `load`/`save`/… injection.
-
----
-
-## How save and edit mode work
+`ModelState` provides a rigorous multi-stage validation pipeline that integrates with Django's model-level validators before committing changes to the database.
 
 ```text
-editing_id == -1  →  save() runs CREATE  (perform_create → acreate)
-editing_id >= 0   →  save() runs UPDATE  (perform_update → asave on instance)
-
-load(42)          →  dispatch("start_edit", pk=42)
-                     →  get_object(42) → copy fields into state vars
-                     →  editing_id = 42
-                     →  bump form_reset_key (remount bound form)
-
-create()          →  editing_id = -1, then save()  (new row)
-
-cancel_edit()     →  reset_state_fields(), editing_id = -1
+State Inputs (Client)
+        │
+        ▼
+   Clean Hook  ──────►  Runs clean_{field}() methods to normalize input formats
+        │
+        ▼
+ Validate Hook ──────►  Executes validate_state() for cross-field business logic
+        │
+        ▼
+ Django Clean  ──────►  Triggers Django full_clean() model validation (if configured)
+        │
+        ▼
+Database Commit
 ```
 
-After a successful save, the default pipeline calls `reset_state_fields()` when `Meta.reset_after_save` is `True` (default), bumps `form_reset_key` (for `rx.form` remounting), and reloads the list.
+### Stage 1: Field-Specific Normalization (`clean_{field_name}`)
+Before general validation runs, the engine checks for methods following the `clean_<field_name>(self, value)` pattern. Use this to format strings, strip empty spaces, or normalize casing.
+
+```python
+class ProductState(ModelState):
+    model = Product
+    fields = ["name", "sku", "price"]
+
+    def clean_sku(self, value: str) -> str:
+        """Strip whitespaces and force uppercase format for SKU identifiers."""
+        return value.strip().upper()
+```
+
+### Stage 2: Cross-Field Business Logic (`validate_state`)
+Override the `validate_state(self, ctx)` hook to perform custom validation that requires comparing multiple fields or checking external database rules. This method should return a dictionary mapping field names to error messages (or return an empty dictionary/None if valid).
+
+```python
+class ProductState(ModelState):
+    model = Product
+    fields = ["name", "price", "sku"]
+
+    async def validate_state(self, ctx) -> dict[str, str]:
+        # Always run default validator first to inherit basic empty/null checks
+        errors = await super().validate_state(ctx)
+        
+        # Add custom business logic
+        if self.price <= 0 and "free" not in self.name.lower():
+            errors["price"] = "Price must be greater than zero unless the product name contains 'free'."
+            
+        return errors
+```
+
+### Stage 3: Django Model Validation (`run_model_validation`)
+Setting `Meta.run_model_validation = True` configures `reflex-django` to convert the current state values into a temporary Django model instance and call Django's native `.full_clean()` method. 
+
+This automatically executes:
+* Any validators defined on model fields (e.g. `EmailValidator`, `MinValueValidator`).
+* Custom validation logic defined inside the model's clean method (`Product.clean()`).
+* Database constraints (like unique constraints) at the Python validation layer.
+
+```python
+# shop/state.py
+class ProductState(ModelState):
+    model = Product
+    fields = ["name", "sku"]
+    
+    class Meta:
+        run_model_validation = True
+        structured_errors = True  # Populates a structured field_errors dict
+```
+
+> [!WARNING]
+> Never declare `run_model_validation = True` on the class body of a State class. That variable name is reserved for the validation execution method on `ModelCRUDView`. Define it **only** within your nested `class Meta:` block.
 
 ---
 
-## Clearing forms (save, edit, cancel)
+## 5. Pagination, Custom Searches, and User Scoping
 
-Reflex state vars are cleared in Python, but **inputs can keep stale DOM text** (especially `rx.text_area`) unless the form remounts.
-
-| Event | State cleared? | `form_reset_key` bumped? |
-|-------|----------------|--------------------------|
-| Successful **save** (create or update) | Yes, when `Meta.reset_after_save=True` | Yes (`reset_state_fields`) |
-| **cancel_edit** | Yes | Yes |
-| **start_edit** / **load(pk)** | Fields replaced with row data | Yes (`populate_edit_state`) |
-
-**Recommended UI pattern** — wrap all editable fields in one `rx.form` and bind the key:
+### Built-in Search & Pagination
+If you have large datasets, enable search and pagination in the `Meta` options. The engine automatically handles page slicing and offsets:
 
 ```python
-rx.form(
-    rx.vstack(
-        rx.input(value=NotesState.title, on_change=NotesState.set_title),
-        rx.text_area(value=NotesState.content, on_change=NotesState.set_content),
-        spacing="3",
-        width="100%",
-    ),
-    key=NotesState.form_reset_key,
-    width="100%",
+class PostState(ModelState):
+    model = BlogPost
+    fields = ["title", "slug", "content"]
+    
+    # Class-level variables are parsed to construct pagination parameters
+    paginate_by = 25
+    search_fields = ("title", "content")
+```
+
+This configuration exposes a complete set of reactive pagination variables and buttons in the frontend:
+* `page`: The active page index.
+* `page_count`: The total number of pages.
+* `next_page`: Increments page and refreshes the data.
+* `prev_page`: Decrements page and refreshes the data.
+* `paginate(page=X)`: Instantly navigates to a specific page.
+
+```python
+# UI Pagination controls
+rx.hstack(
+    rx.button("Previous", on_click=PostState.prev_page, disabled=PostState.page <= 1),
+    rx.text(f"Page {PostState.page} of {PostState.page_count}", size="2"),
+    rx.button("Next", on_click=PostState.next_page, disabled=PostState.page >= PostState.page_count),
+    spacing="4",
+    align="center",
 )
 ```
 
-Put **Save / Cancel** buttons outside the form when using `on_click=NotesState.save` (not `type="submit"`).
-
-**Developer hooks:**
-
-| API | When to use |
-|-----|-------------|
-| `reset_state_fields()` | Clear vars + exit edit mode + bump key (same as cancel / post-save reset) |
-| `bump_form_reset_key()` | Remount UI only; e.g. custom wizard step without clearing `editing_id` |
-| `on_save_success(ctx, instance)` | Run logic before reset; call `reset_state_fields()` yourself if `Meta.reset_after_save = False` |
-| `Meta.form_reset_var = None` | Disable key bumping entirely |
-
-See also [Forms and validation](forms_and_validation.md#clearing-forms-after-save-and-edit).
-
----
-
-## Example: Blog posts (author-scoped)
-
-Same pattern as [CRUD with mixins](crud_with_mixins_and_states.md), but with `ModelState` and canonical methods.
+### Custom Query Filtering
+If you need search filters beyond basic text matches (such as date range filters or category drop-downs), override `filter_queryset`:
 
 ```python
-# blog/models.py
-from django.conf import settings
-from django.db import models
+from django.db.models import Q
 
-class BlogPost(models.Model):
-    title = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=220)
-    body = models.TextField(blank=True)
-    published = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-```
-
-```python
-# blog/state.py
-from reflex_django.state import ModelState
-from reflex_django.state.mixins.scoping import UserScopedMixin
-from blog.models import BlogPost
-
-class PostState(ModelState[BlogPost], UserScopedMixin):
-    fields = ["title", "slug", "body", "published"]
-    scope_field = "author_id"  # FK column on BlogPost
-    ordering = ("-created_at",)
-
-    class Meta:
-        list_var = "posts"
-        read_only_fields = ("author",)  # author set via UserScopedMixin, not form
-```
-
-`UserScopedMixin` wires:
-
-- `get_queryset()` → only current user's posts
-- `get_object_lookup(pk)` → pk + author constraint
-- `get_create_kwargs()` → injects `author_id`
-
-**Without the mixin** (explicit hooks):
-
-```python
-class PostState(ModelState[BlogPost]):
-    fields = ["title", "slug", "body", "published"]
-
-    def get_queryset(self):
-        return BlogPost.objects.filter(author=self.request.user)
-
-    def get_object_lookup(self, pk: int) -> dict:
-        return {"pk": pk, "author": self.request.user}
-
-    def get_create_kwargs(self, state_data: dict) -> dict:
-        return {**state_data, "author": self.request.user}
-```
-
-Use `self.request.user` inside hooks during `dispatch` (not only `self.user` from AppState—both work when the bridge is on).
-
----
-
-## Example: Categories (minimal public CRUD)
-
-```python
-from reflex_django.state import ModelState
-from catalog.models import Category
-
-class CategoryState(ModelState[Category]):
-    fields = ["label"]
-    ordering = ("label",)
-
-    class Meta:
-        permission_classes = ()  # public list if you customize permissions
-        login_required_actions = frozenset()  # opt out of @login_required on handlers
-```
-
-Only add this when you intentionally want anonymous access; defaults require login for load/save/delete.
-
----
-
-## Filtering, search, and pagination
-
-### ORM filter shortcut (`filter` / `clear_filter`)
-
-```python
-class ProductState(ModelState[Product]):
-    fields = ["name", "price", "is_active"]
-
-    @rx.event
-    async def show_active_only(self):
-        await self.filter(is_active=True)
-
-    @rx.event
-    async def show_all(self):
-        await self.clear_filter()
-```
-
-`filter(**kwargs)` sets `self._queryset_filter` and calls `refresh()`. `filter_queryset()` applies it on top of `get_queryset()`:
-
-```python
-def filter_queryset(self, queryset):
-    extra = getattr(self, "_queryset_filter", None)
-    if extra:
-        queryset = queryset.filter(**extra)
-    return super().filter_queryset(queryset)
-```
-
-### Built-in search (`Meta.search_fields`)
-
-```python
-class ProductState(ModelState[Product]):
-    fields = ["name", "price", "sku"]
-
-    class Meta:
-        search_fields = ("name", "sku")
-        # Generates: search, set_search, clear_search
-```
-
-Wire UI to `ProductState.search`, `ProductState.set_search`, or call `refresh()` after updating search.
-
-### Pagination (`Meta.paginate_by`)
-
-```python
-class ProductState(ModelState[Product]):
+class ProductState(ModelState):
+    model = Product
     fields = ["name", "price"]
+    
+    # Custom reactive filter criteria
+    selected_category: str = "all"
+    max_price: str = ""
 
-    class Meta:
-        paginate_by = 25
-        max_page_size = 100
-```
-
-Generated: `page`, `page_size` (initialized to `paginate_by`), `total_count`, `page_count`, `next_page`, `prev_page`, `go_to_page`, `set_page_size`.
-
-```python
-# UI
-rx.text(f"Page {ProductState.page} / {ProductState.page_count} ({ProductState.total_count} total)")
-rx.button("Next", on_click=ProductState.next_page)
-rx.button("Page 2", on_click=ProductState.paginate(page=2))
-```
-
-`page_size` on the state is set from `Meta.paginate_by` at class creation time (do not rely on the typed default `0` on `ModelState`).
-
-### Custom search on the same class
-
-```python
-class ProductState(ModelState[Product]):
-    fields = ["name", "price"]
-    search_query: str = ""
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        
+        if self.selected_category != "all":
+            queryset = queryset.filter(category__slug=self.selected_category)
+            
+        if self.max_price.strip() != "":
+            try:
+                queryset = queryset.filter(price__lte=float(self.max_price))
+            except ValueError:
+                pass
+                
+        return queryset
 
     @rx.event
-    def set_search_query(self, value: str):
-        self.search_query = value
-
-    def filter_queryset(self, qs):
-        q = self.search_query.strip()
-        if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(sku__icontains=q))
-        return super().filter_queryset(qs)
-
-    @rx.event
-    async def apply_search(self):
-        self.reset_page()  # when paginate_by is set
+    async def apply_filters(self):
+        # Always reset the pagination counter to page 1 before applying new query parameters
+        self.reset_page()
         await self.refresh()
 ```
 
----
+### User and Tenant Scoping
+Security is paramount. You must prevent users from accessing or modifying database records belonging to other users or accounts. You can achieve this by overriding state querysets and record retrieval parameters, or using the built-in `UserScopedMixin`.
 
-## Forms (`rx.form` + `use_form_submit`)
-
-Whether you use flat `value=` / `on_change=` fields or native `name=` inputs, **bind `key=State.form_reset_key`** on a parent `rx.form` so fields clear after update/create and reload correctly when entering edit mode ([Clearing forms](#clearing-forms-save-edit-cancel)).
-
-For HTML form posts with a single `form_data` dict:
-
+#### Option A: Manual Hook Overrides (Fully Custom Control)
 ```python
-class ProductState(ModelState[Product]):
-    fields = ["name", "price"]
-
-    class Meta:
-        use_form_submit = True
-        # Generates save_product_form(form_data) in addition to save()
-```
-
-```python
-rx.form(
-    rx.input(name="name"),
-    rx.input(name="price"),
-    rx.button("Save", type="submit"),
-    on_submit=ProductState.save_product_form,
-    reset_on_submit=False,
-    key=ProductState.form_reset_key,  # remount after save when reset_after_save=True
-)
-```
-
----
-
-## Custom serializer (DRF-style override)
-
-When you need nested fields, computed columns, or strict validation:
-
-```python
-from reflex_django.serializers import ReflexDjangoModelSerializer
-from reflex_django.state import ModelState
-
-class ProductSerializer(ReflexDjangoModelSerializer):
-    class Meta:
-        fields = ("id", "name", "price", "category_id", "display_name")
-        read_only_fields = ("id", "display_name")
-
-class ProductState(ModelState[Product]):
-    model = Product
-    serializer_class = ProductSerializer  # wins over auto-built from fields
-    fields = ["name", "price"]  # ignored for serializer when serializer_class set
-```
-
-**Precedence:** `Meta.serializer` or `serializer_class` **always** beats `model` + `fields` for serialization. You can still use `fields` only when no custom serializer is provided.
-
----
-
-## Auth on model pages
-
-`ModelState` includes `AppState`. In handlers:
-
-```python
-class OrderState(ModelState[Order]):
-    fields = ["status", "total"]
+class DocumentState(ModelState):
+    model = Document
+    fields = ["title", "file_path"]
 
     def get_queryset(self):
-        if self.user.is_staff:
-            return Order.objects.all()
-        return Order.objects.filter(customer=self.user)
+        """Restrict list view queries to the authenticated user."""
+        return Document.objects.filter(owner=self.request.user)
 
-    @rx.event
-    async def mark_shipped(self, order_id: int):
-        if not self.has_perm("shop.change_order"):
-            return
-        await self.load(order_id)
-        self.status = "shipped"
-        await self.save()
+    def get_object_lookup(self, pk: int) -> dict:
+        """Enforce owner constraints on load and delete queries."""
+        return {"pk": pk, "owner": self.request.user}
+
+    def get_create_kwargs(self, state_data: dict) -> dict:
+        """Inject user context into newly created database objects."""
+        return {**state_data, "owner": self.request.user}
 ```
 
-Navbar (reactive vars, no extra `on_load`):
+#### Option B: Utilizing `UserScopedMixin` (High-Productivity Wrapper)
+By mixing in `UserScopedMixin`, the package automatically wires `get_queryset`, `get_object_lookup`, and `get_create_kwargs` for you:
 
 ```python
-rx.cond(
-    OrderState.is_authenticated,
-    rx.text("Hi, ", OrderState.username),
-    rx.link("Login", href="/login"),
-)
-```
+from reflex_django.state.mixins.scoping import UserScopedMixin
 
-See [Authentication](authentication.md) for `login`, `logout`, `@permission_required`, and `REFLEX_DJANGO_AUTH_AUTO_SYNC`.
+class DocumentState(ModelState, UserScopedMixin):
+    model = Document
+    fields = ["title", "file_path"]
+    
+    # Map the model's user foreign key field name
+    scope_field = "owner_id"  
+```
 
 ---
 
-## Overrides and hooks (full guide)
+## 6. Overriding and Customizing Handlers
 
-**Rule:** If you define a method name in the class body, assembly **does not** replace it.
+If you want to perform custom logic before or after a database operation (like creating a log entry, generating a slug, or triggering an email notification), you can intercept actions at different points of the dispatch lifecycle.
 
-### Replace a generated handler
+### The Canonical API Method Signatures
+
+These are the primary methods available on every `ModelState` subclass:
+
+| Method | Signature | Description |
+|:---|:---|:---|
+| **`load`** | `load(pk: int)` | Hydrates form inputs with row fields and sets `editing_id` to `pk`. |
+| **`save`** | `save()` | Validates inputs, executes creates or updates, and reloads listings. |
+| **`create`** | `create()` | Resets form inputs, sets `editing_id = -1`, ready for item creation. |
+| **`delete`** | `delete(pk: int)` | Removes the matching database record and refreshes the data array. |
+| **`refresh`** | `refresh()` | Slices, searches, filters, and loads the active dataset. |
+| **`cancel_edit`** | `cancel_edit()` | Resets all input variables and clears `editing_id` to `-1`. |
+
+### Intercepting with Custom Event Handlers
+If you override a method like `.save()` in your subclass, `reflex-django` honors your definition and does not inject the default version. You can write custom logic and manually trigger the internal dispatch pipeline:
 
 ```python
 from reflex_django.state.constants import ACTION_SAVE
 from reflex_django.auth.decorators import login_required
 
-class ProductState(ModelState[Product]):
-    fields = ["name", "price"]
+class ArticleState(ModelState):
+    model = BlogPost
+    fields = ["title", "content"]
 
     @rx.event
-    @login_required  # you must re-apply when overriding
+    @login_required # Be sure to re-apply decorators when overriding handlers
     async def save(self):
-        if not self.name.strip():
-            self.error = "Name is required."
-            return
+        # 1. Inject or modify fields before saving
+        self.title = self.title.strip().title()
+        
+        # 2. Trigger the primary saving pipeline
         await self.dispatch(ACTION_SAVE)
-```
-
-### Hook reference (override without replacing events)
-
-| Hook | When it runs | Example |
-|------|----------------|---------|
-| `get_queryset()` | Before every list/load/edit query | `return Product.objects.filter(shop=self.shop_id)` |
-| `filter_queryset(qs)` | After `get_queryset` | Search, tags, merge `_queryset_filter` |
-| `get_ordering()` | List ordering | Dynamic sort from `ordering` var when `allow_dynamic_ordering=True` |
-| `get_object_lookup(pk)` | `load` / `delete` | `{"pk": pk, "owner": self.user}` |
-| `get_create_kwargs(data)` | Create | `{"author_id": self.user.pk, **data}` |
-| `perform_create(ctx, instance)` | After instance built, before save | Side effects |
-| `perform_update(ctx, instance)` | Before `asave` | Audit fields |
-| `perform_delete(ctx, instance)` | Delete | Soft-delete |
-| `validate_state(ctx, data)` | Before save | Cross-field rules → error dict |
-| `clean_{field}(value)` | Per field | Normalize slug |
-| `has_object_permission(ctx, obj)` | Edit/delete | Row-level check |
-| `on_save_success(ctx, instance)` | After save | Toast, redirect |
-| `on_state_invalid(ctx, errors)` | Validation failed | Custom error message |
-| `handle_exception(ctx, exc)` | Any exception in dispatch | Log + user message |
-| `setup(action)` / `teardown(action)` | Around each action | Metrics |
-
-**Validation example:**
-
-```python
-class PostState(ModelState[BlogPost]):
-    fields = ["title", "slug", "body"]
-
-    class Meta:
-        run_model_validation = True
-        structured_errors = True  # posts_field_errors: dict[str, str]
-
-    async def validate_state(self, ctx):
-        errors = await super().validate_state(ctx)
-        if len(self.title.strip()) < 3:
-            errors.setdefault("title", "Title must be at least 3 characters.")
-        return errors
-
-    def on_state_invalid(self, ctx, errors):
-        if isinstance(errors, dict):
-            self.posts_error = "; ".join(f"{k}: {v}" for k, v in errors.items())
+        
+        # 3. Perform post-save side effects
+        if not self.error:
+            return rx.toast(f"Successfully saved article: {self.title}")
 ```
 
 ---
 
-## Declaration reference
+## 7. Troubleshooting Common ModelState Issues
 
-| Attribute | Required | Role |
-|-----------|----------|------|
-| `model` | Yes* | Django model class (`model = Product`) |
-| `fields` | Yes* | Writable field names (`"author_id"` for FK attnames) |
-| `ModelState[YourModel]` | No | Optional typing / infers `model` if omitted in class body |
-| `serializer_class` / `Meta.serializer` | Optional | Overrides auto serializer |
-| `read_only_fields` | Optional | Extra read-only (beyond serializer) |
-| `ordering` | Optional | Default `("-created_at",)` — set `()` if model has no `created_at` |
-| `paginate_by`, `search_fields` | Optional | On class or `Meta` |
-
-\*When using an explicit serializer only, `ModelState[M]` and `fields` are not required.
-
-**Field validation at import:**
-
-```python
-# Raises ImproperlyConfigured: Invalid fields for shop.product: not_a_field
-class BadState(ModelState[Product]):
-    fields = ["name", "not_a_field"]
-```
-
-Auto serializer always includes `id` in `Meta.fields`.
+| Symptom | Cause | Solution |
+|:---|:---|:---|
+| `ImproperlyConfigured: Invalid fields...` | A string in the `fields` array does not exist on the Django model. | Verify the spelling of fields on your model class (use the exact database attribute name). |
+| Validation errors appear in the console but not in the UI. | `Meta.structured_errors` is disabled, or field errors are not bound in the page component. | Set `structured_errors = True` in your Meta class, and display `ProductState.field_errors.get("field")` in your UI. |
+| Changes in the database are not updating the Reflex list. | The list was not instructed to reload. | Trigger `State.refresh` inside the UI or invoke `await self.refresh()` at the end of custom state events. |
+| Form inputs remain filled after cancelling or editing. | Stale client-side DOM values are cached in browser memory. | Assign `key=State.form_reset_key` to your `rx.form` container to force a React remount. |
+| Overridden handler is not firing. | The UI is referencing the old legacy name (like `save_product`) instead of the canonical `.save`. | Check your buttons and verify that `on_click` references the updated canonical method (`ProductState.save`). |
+| `TypeError: 'bool' object is not callable` on validation. | Declaring `run_model_validation = True` on the class body shadowed the system validation method. | Move configuration options like `run_model_validation` into your nested `class Meta:` block. |
 
 ---
 
-## Reactive vars (naming)
-
-**`ModelState` defaults** (generic names — same on every model state class):
-
-| Var | Default | Type / role |
-|-----|---------|-------------|
-| `data` | `list_var` | `list[dict[str, Any]]` serialized rows |
-| `error` | `error_var` | Last validation / error message |
-| `search` | `search_var` | Search string when `Meta.search_fields` set |
-| `total_count`, `page_count` | pagination | Totals when `Meta.paginate_by` set |
-| `ordering` | `ordering_var` | Dynamic sort field when `allow_dynamic_ordering=True` |
-| `field_errors` | `field_errors_var` | `dict[str, str]` when `structured_errors=True` |
-| `editing_id` | — | `-1` create, `>=0` edit |
-| `name`, `price`, … | from `fields` | Form bindings |
-| `form_reset_key` | — | Bind to `rx.form(..., key=...)`; bumps on save reset, cancel, and `start_edit` |
-| `page`, `page_size` | when `paginate_by` set | `page_size` seeded from `paginate_by` |
-
-**`ModelCRUDView`** (without `ModelState`) still defaults to **pluralized** names (`products`, `products_error`, `products_search`, …) unless you override `Meta.list_var`.
-
-Override any name, e.g. `Meta.list_var = "notes"` → `notes`, `notes_error`, `on_load_notes`.
-
-**UI tip:** In components, test list length with **`State.data.length() > 0`**, not `len(State.data)` (lists are Reflex vars in the UI).
-
-**Typing:** `ModelState[Product]` helps static checkers; row dicts match serializer output (`id` included when in serializer fields).
-
-**Resolved options:** `ProductState.options` or `ProductState.get_options()` returns frozen `ModelStateOptions` (`.list_var`, `.paginate_by`, …).
-
----
-
-## Multiple models in one app
-
-One `ModelState` subclass per Django model; compose in UI:
-
-```python
-def dashboard() -> rx.Component:
-    return rx.hstack(
-        rx.box(posts_panel(), width="50%"),
-        rx.box(products_panel(), width="50%"),
-    )
-# posts_panel uses PostState.refresh / PostState.data
-# products_panel uses ProductState.refresh / ProductState.data
-```
-
-Unrelated UI stays on plain `rx.State`:
-
-```python
-class CartState(rx.State):
-    item_count: int = 0
-```
-
----
-
-## When to use what
-
-| Scenario | Recommended approach |
-|----------|---------------------|
-| Admin-style CRUD for one model | `ModelState[M]` + canonical methods |
-| Read-only table | `ModelState[M]` + only `refresh` / list vars, or `ModelListView` |
-| Wizard / multi-step checkout | Plain `rx.State` + services or manual ORM |
-| Navbar auth only | `AppState` without model |
-| Full manual control | `AppState, ModelCRUDView` + `serializer_class` |
-| Legacy event names only | `Meta.use_canonical_api = False` |
-
-```mermaid
-flowchart TD
-  Start[Need Django data in Reflex UI?]
-  Start -->|No| PureReflex[rx.State only]
-  Start -->|Yes| CRUD[Standard list + form + CRUD?]
-  CRUD -->|Yes| ModelState[ModelState M + model + fields]
-  CRUD -->|No| Custom[Custom flow / wizard]
-  Custom --> PlainBridge[rx.State + current_user + serializer]
-```
-
----
-
-## Escape hatches
-
-| Need | Use |
-|------|-----|
-| Non-CRUD UI | `rx.State` + `current_user()` / `current_request()` |
-| Manual serialization | `await ProductSerializer(qs, many=True).adata()` in any handler |
-| Legacy explicit CRUD | `AppState, ModelCRUDView` + `serializer_class` |
-| Skip canonical handlers | `Meta.use_canonical_api = False` |
-| Low-level pipeline | `await self.dispatch(ACTION_SAVE)` from custom code |
-| Mix states | `ProductState` + `CartState(rx.State)` on same page |
-
----
-
-## Meta options (common)
-
-| Meta key | Default | Purpose |
-|----------|---------|---------|
-| `use_canonical_api` | `True` | Inject `load`, `save`, `refresh`, … |
-| `serializer` | — | Custom serializer class |
-| `list_var` | `"data"` | List var name |
-| `error_var` | `"error"` | Error message var |
-| `search_var` | `"search"` | Search input var (when `search_fields` set) |
-| `total_count_var` | `"total_count"` | Pagination total (when `paginate_by` set) |
-| `page_count_var` | `"page_count"` | Pagination page count |
-| `save_event` / `delete_event` | `save_{model}`, `delete_{model}` | Legacy handler names |
-| `login_required_actions` | load, save, delete, start_edit | Which handlers get `@login_required` |
-| `permission_classes` | `()` | DRF-style permission classes |
-| `paginate_by` | `None` | Page size; enables pagination vars |
-| `search_fields` | `()` | Enables search var + setters |
-| `ordering` | `("-created_at",)` | Default queryset ordering |
-| `read_only_fields` | `()` | Extra non-editable fields |
-| `required_fields` | first writable field | Validation |
-| `run_model_validation` | `False` | When `True`, runs Django `full_clean()` via internal `validate_model_full_clean()` (set on **`Meta` only**, not as a class-body var — see below) |
-| `structured_errors` | `False` | Per-field `field_errors` |
-| `reset_after_save` | `True` | Clear form after save |
-| `form_reset_var` | `"form_reset_key"` | Var incremented on reset / edit load; set `None` to disable |
-| `use_form_submit` | `False` | `save_*_form(form_data)` handler |
-| `load_context_processors` | `True` | Fill `self.request` from context processors |
-
-Full catalog: [CRUD with mixins and states](crud_with_mixins_and_states.md).
-
-### Configuration and IDE autocomplete
-
-Set options on the **subclass body** (best editor hints) or in **`class Meta(ModelCRUDMeta):`**:
-
-```python
-from reflex_django.state import ModelState, ModelCRUDMeta
-
-class NotesState(ModelState):
-    model = Note
-    fields = ["title", "content"]
-    paginate_by = 20
-    search_fields = ("title", "content")
-
-    class Meta(ModelCRUDMeta):
-        reset_after_save = True
-        # run_model_validation = True  # Meta only
-```
-
-Do **not** declare `run_model_validation = True` on the class body of `ModelCRUDView` / `ModelState` — that name is reserved for the internal validation method. Use **`Meta.run_model_validation`** only.
-
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `ImproperlyConfigured` on import | Missing `fields` or invalid field name | Fix `fields`; or add `serializer_class` |
-| Empty list after login | Queryset scoped wrong | `get_queryset()` / `UserScopedMixin` |
-| `save()` does nothing visible | Validation failed | Check `error` / `field_errors` |
-| `'bool' object is not callable` on save | `run_model_validation` on class body shadows method | Use `Meta.run_model_validation` only |
-| Only 1 row when `paginate_by = 20` | Stale `page_size` / old defaults | Restart app; ensure `page_size` matches `paginate_by` (fixed in recent versions) |
-| `AttributeError: 'list' has no attribute 'length'` | Used `len()` in UI | Use `State.data.length() > 0` in `rx.cond` |
-| Handler never runs | Same name in subclass replaced assembly | Inspect class `__dict__` |
-| `self.request.user` anonymous | Bridge off or not logged in | [Authentication](authentication.md), event bridge |
-| Stale rows after external change | List not reloaded | Call `refresh()` or rely on post-save reload |
-| Form still filled after save/update | State cleared but DOM not remounted | Wrap fields in `rx.form(..., key=State.form_reset_key)` |
-| Edit form shows wrong/old text | Stale DOM when switching rows | Same `key=` binding; `start_edit` bumps the key automatically |
-| Duplicate handlers / wrong one | Overrode canonical but UI still calls legacy | Point UI at `ProductState.save` not `save_product` |
-
----
-
-## Migration from `ModelCRUDView`
-
-**Before (explicit serializer):**
-
-```python
-from reflex_django.state import AppState, ModelCRUDView
-from notes.serializers import NoteSerializer
-
-class NotesState(AppState, ModelCRUDView):
-    serializer_class = NoteSerializer
-
-    class Meta:
-        list_var = "notes"
-        save_event = "save_note"
-```
-
-**After (`ModelState`):**
-
-```python
-from reflex_django.state import ModelState
-from notes.models import Note
-
-class NotesState(ModelState):
-    model = Note
-    fields = ["title", "content"]
-    # Default vars: data, error, search, on_load_data, save, save_note, …
-```
-
-Update UI: `NotesState.data`, `NotesState.error`, `NotesState.search`, `on_load=NotesState.on_load_data`, `on_click=NotesState.save`.
-
-To keep plural names during migration, set `Meta.list_var = "notes"` (and optionally `search_var = "notes_search"`).
-
-Both styles can coexist in one codebase during migration.
-
----
-
-## Related documentation
-
-- [ModelState and ModelCRUDView](model_state_and_crud_view.md) — comparison guide with rich examples  
-- [State management](state_management.md) — plain `rx.State` vs helpers vs ModelState  
-- [Authentication](authentication.md) — `AppState`, login, permissions  
-- [Serializers](serializers.md) — `ReflexDjangoModelSerializer`  
-- [CRUD with mixins](crud_with_mixins_and_states.md) — `ModelCRUDView` / `Meta` catalog  
-- [CRUD without mixins](crud_without_mixins.md) — manual ORM in `rx.State`  
-- [Django middleware to Reflex](django_middleware_to_reflex.md) — event bridge  
+**Navigation:** [← ModelState vs. ModelCRUDView](model_state_and_crud_view.md) | [Next: CRUD with Mixins & States →](crud_with_mixins_and_states.md)
