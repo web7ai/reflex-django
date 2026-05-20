@@ -1,0 +1,168 @@
+/* Custom Styles for Material for MkDocs - reflex-django docs */
+
+:root {
+  --md-primary-fg-color: #3f51b5;
+  --md-primary-fg-color--dark: #303f9f;
+  --md-accent-fg-color: #00b0ff;
+}
+
+/* Premium styling for tables and layout */
+.md-typeset table:not([class]) {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: box-shadow 0.3s ease;
+}
+
+.md-typeset table:not([class]):hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-default-fg-color--lightest);
+  font-weight: 600;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset table:not([class]) td {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset table:not([class]) tr:last-child td {
+  border-bottom: none;
+}
+
+/* Termy: macOS Terminal Emulator Block styling */
+.termy {
+  position: relative;
+  background-color: #1a1b26;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  margin: 1.5em 0;
+  padding: 45px 20px 20px; /* Leave space for top window bar */
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* MacOS Window Top Bar */
+.termy::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  background-color: #16161e;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Three Window Buttons (Mac Style) */
+.termy::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 15px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #ff5f56;
+  box-shadow: 20px 0 0 #ffbd2e, 40px 0 0 #27c93f;
+}
+
+/* Styling nested pre and code elements inside termy */
+.termy pre {
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace !important;
+  font-size: 0.9em !important;
+  line-height: 1.6 !important;
+}
+
+.termy code {
+  background: transparent !important;
+  color: #c0caf5 !important;
+  padding: 0 !important;
+}
+
+/* Custom terminal prompt markers and highlights */
+.termy code .gp, .termy code .hljs-meta {
+  color: #7aa2f7 !important;
+  font-weight: bold;
+}
+
+.termy code .success, .termy code .go {
+  color: #9ece6a !important;
+}
+
+.termy code .s, .termy code .hljs-string {
+  color: #2ac3de !important;
+}
+
+/* Admonitions styling tweaks */
+.md-typeset .admonition {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  border-left-width: 6px;
+}
+
+/* Styled grids for "Choose your path" or index links */
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.path-card {
+  background-color: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none !important;
+  color: inherit !important;
+}
+
+.path-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+  border-color: var(--md-primary-fg-color);
+}
+
+.path-card h3 {
+  margin-top: 0 !important;
+  color: var(--md-primary-fg-color) !important;
+  font-size: 1.2rem !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.path-card p {
+  margin-bottom: 0 !important;
+  font-size: 0.9rem !important;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] .termy {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-md-color-scheme="slate"] .path-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+[data-md-color-scheme="slate"] .path-card:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+}

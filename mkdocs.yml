@@ -1,0 +1,119 @@
+site_name: reflex-django
+site_description: Run a Django backend (Django ORM, Django Admin) alongside a Reflex app in one process.
+site_author: Mohannad Irshedat
+repo_url: https://github.com/mohannadirshedat/reflex-django
+repo_name: mohannadirshedat/reflex-django
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: Fira Code
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - markdown.extensions.admonition
+  - markdown.extensions.attr_list
+  - markdown.extensions.def_list
+  - markdown.extensions.footnotes
+  - markdown.extensions.meta
+  - markdown.extensions.toc:
+      permalink: true
+  - markdown.extensions.md_in_html
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      normalize_issue_symbols: true
+      repo_url_shorthand: true
+      user: mohannadirshedat
+      repo: reflex-django
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Welcome:
+    - Overview: index.md
+    - Introduction: introduction.md
+    - Installation: installation.md
+    - Configuration: configuration.md
+  - Getting Started:
+    - Quickstart: quickstart.md
+    - Existing Django Project: existing_django_project.md
+    - Recommended Layout: project_structure.md
+  - Core Architecture:
+    - Architecture Overview: architecture.md
+    - Routing & URL Dispatching: routing.md
+    - API & HTTP Integration: api_integration.md
+  - State & Context:
+    - State Management: state_management.md
+    - Django Context in Reflex: django_context_to_reflex.md
+    - Django Middleware in Reflex: django_middleware_to_reflex.md
+  - Authentication:
+    - Session Authentication: authentication.md
+  - Database & CRUD:
+    - Database Integration: database_integration.md
+    - Model Serializers: serializers.md
+    - CRUD (No Mixins): crud_without_mixins.md
+    - ModelState vs ModelCRUDView: model_state_and_crud_view.md
+    - Reactive ModelState: reactive_model_state.md
+    - CRUD with Mixins & States: crud_with_mixins_and_states.md
+    - reflex-django Mixins: reflex_django_mixins.md
+    - Forms & Validation: forms_and_validation.md
+  - Development & Ops:
+    - Command Line Interface: cli.md
+    - Testing Guide: testing.md
+    - Deployment Guide: deployment.md
+  - Resources:
+    - Best Practices: best_practices.md
+    - FAQ: faq.md

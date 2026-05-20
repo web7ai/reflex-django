@@ -1,0 +1,3116 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Run a Django backend (Django ORM, Django Admin) alongside a Reflex app in one process.">
+      
+      
+        <meta name="author" content="Mohannad Irshedat">
+      
+      
+      
+        <link rel="prev" href="../api_integration/">
+      
+      
+        <link rel="next" href="../django_context_to_reflex/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>State Management - reflex-django</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CFira+Code:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"Fira Code"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#state-management" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="reflex-django" class="md-header__button md-logo" aria-label="reflex-django" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            reflex-django
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              State Management
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mohannadirshedat/reflex-django" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mohannadirshedat/reflex-django
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href=".." class="md-tabs__link">
+          
+  
+  
+  Welcome
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../quickstart/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/" class="md-tabs__link">
+          
+  
+  
+  Core Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  State & Context
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../authentication/" class="md-tabs__link">
+          
+  
+  
+  Authentication
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../database_integration/" class="md-tabs__link">
+          
+  
+  
+  Database & CRUD
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../cli/" class="md-tabs__link">
+          
+  
+  
+  Development & Ops
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../best_practices/" class="md-tabs__link">
+          
+  
+  
+  Resources
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="reflex-django" class="md-nav__button md-logo" aria-label="reflex-django" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    reflex-django
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mohannadirshedat/reflex-django" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mohannadirshedat/reflex-django
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Welcome
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Welcome
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../existing_django_project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Existing Django Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project_structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recommended Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Routing & URL Dispatching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API & HTTP Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State & Context
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    State & Context
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Management
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-connection-you-already-have" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The connection you already have
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-ways-to-build-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two ways to build state
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-a-plain-rxstate-no-reflex-django-mixins-or-helper-states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part A — Plain rx.State (no reflex-django mixins or helper states)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part A — Plain rx.State (no reflex-django mixins or helper states)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-pure-reflex-no-django-in-the-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A1. Pure Reflex (no Django in the handler)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-django-auth-via-the-event-bridge-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A2. Django auth via the event bridge only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a3-full-example-task-list-without-mixins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A3. Full example: task list without mixins
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a4-context-processors-in-plain-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A4. Context processors in plain state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a5-loginlogout-without-session_auth_mixin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A5. Login/logout without session_auth_mixin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-plain-rxstate-uses-from-reflex-django" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What plain rx.State uses from reflex-django
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-b-reflex-django-built-in-helper-states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part B — reflex-django built-in helper states
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part B — reflex-django built-in helper states">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#b1-djangouserstate-navbar-conditional-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B1. DjangoUserState — navbar / conditional UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b2-djangoi18nstate-language-in-the-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B2. DjangoI18nState — language in the UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b3-djangocontextstate-merged-processor-dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B3. DjangoContextState — merged processor dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b4-appstate-django-auth-selfrequest-optional-modelcrudview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B4. AppState — Django auth, self.request, optional ModelCRUDView
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b5-user_snapshot-vs-current_user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B5. user_snapshot vs current_user
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-c-mixins-and-declarative-crud-optional-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part C — Mixins and declarative CRUD (optional layer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part C — Mixins and declarative CRUD (optional layer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recommended-modelstatem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended: ModelState[M]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#explicit-appstate-modelcrudview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit: AppState + ModelCRUDView
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-an-approach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing an approach
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multiple-state-classes-in-one-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple state classes in one app
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-synchronization-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State synchronization model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#event-handler-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event handler patterns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common mistakes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../django_context_to_reflex/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Django Context in Reflex
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../django_middleware_to_reflex/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Django Middleware in Reflex
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Authentication
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database & CRUD
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Database & CRUD
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../serializers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Model Serializers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crud_without_mixins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CRUD (No Mixins)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../model_state_and_crud_view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ModelState vs ModelCRUDView
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reactive_model_state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reactive ModelState
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crud_with_mixins_and_states/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CRUD with Mixins & States
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reflex_django_mixins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    reflex-django Mixins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../forms_and_validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forms & Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development & Ops
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development & Ops
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Line Interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Resources
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../best_practices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Best Practices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-connection-you-already-have" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The connection you already have
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-ways-to-build-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two ways to build state
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-a-plain-rxstate-no-reflex-django-mixins-or-helper-states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part A — Plain rx.State (no reflex-django mixins or helper states)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part A — Plain rx.State (no reflex-django mixins or helper states)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-pure-reflex-no-django-in-the-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A1. Pure Reflex (no Django in the handler)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-django-auth-via-the-event-bridge-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A2. Django auth via the event bridge only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a3-full-example-task-list-without-mixins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A3. Full example: task list without mixins
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a4-context-processors-in-plain-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A4. Context processors in plain state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a5-loginlogout-without-session_auth_mixin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A5. Login/logout without session_auth_mixin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-plain-rxstate-uses-from-reflex-django" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What plain rx.State uses from reflex-django
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-b-reflex-django-built-in-helper-states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part B — reflex-django built-in helper states
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part B — reflex-django built-in helper states">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#b1-djangouserstate-navbar-conditional-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B1. DjangoUserState — navbar / conditional UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b2-djangoi18nstate-language-in-the-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B2. DjangoI18nState — language in the UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b3-djangocontextstate-merged-processor-dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B3. DjangoContextState — merged processor dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b4-appstate-django-auth-selfrequest-optional-modelcrudview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B4. AppState — Django auth, self.request, optional ModelCRUDView
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b5-user_snapshot-vs-current_user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B5. user_snapshot vs current_user
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-c-mixins-and-declarative-crud-optional-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Part C — Mixins and declarative CRUD (optional layer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Part C — Mixins and declarative CRUD (optional layer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recommended-modelstatem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended: ModelState[M]
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#explicit-appstate-modelcrudview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explicit: AppState + ModelCRUDView
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-an-approach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing an approach
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multiple-state-classes-in-one-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple state classes in one app
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-synchronization-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State synchronization model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#event-handler-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event handler patterns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-mistakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common mistakes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="state-management">State management<a class="headerlink" href="#state-management" title="Permanent link">&para;</a></h1>
+<p>How to build <strong>Reflex state</strong> when Django and Reflex are already connected by reflex-django—and when to add optional <strong>helper states</strong> and <strong>mixins</strong> on top.</p>
+<hr />
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../architecture/">Architecture</a> — two bridges (HTTP + events)  </li>
+<li><a href="../django_middleware_to_reflex/">Django middleware to Reflex</a> — <code>DjangoEventBridge</code>  </li>
+<li><a href="../django_context_to_reflex/">Django context to Reflex</a> — processors</li>
+</ul>
+<hr />
+<h2 id="the-connection-you-already-have">The connection you already have<a class="headerlink" href="#the-connection-you-already-have" title="Permanent link">&para;</a></h2>
+<p>Installing <code>ReflexDjangoPlugin</code> does <strong>not</strong> force you to use reflex-django state classes or CRUD mixins. It gives every Reflex event handler access to Django through:</p>
+<table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>What it provides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HTTP bridge</strong></td>
+<td><code>/admin</code>, <code>/api</code>, static URLs → Django ASGI</td>
+</tr>
+<tr>
+<td><strong>Event bridge</strong> (<code>DjangoEventBridge</code>)</td>
+<td>Synthetic <code>HttpRequest</code>, session, <code>request.user</code> per event</td>
+</tr>
+<tr>
+<td><strong><code>request</code> proxy</strong></td>
+<td><code>from reflex_django import request</code> → <code>request.user</code>, <code>request.session</code>, <code>request.GET</code>, <code>request.headers</code></td>
+</tr>
+<tr>
+<td><strong>Context helpers</strong></td>
+<td><code>current_request()</code>, <code>current_user()</code>, <code>current_session()</code>, <code>current_language()</code></td>
+</tr>
+</tbody>
+</table>
+<p>From there you can write <strong>plain <code>rx.State</code></strong> subclasses—exactly like Reflex documentation—and call Django ORM, auth, and serializers inside <code>@rx.event</code> handlers.</p>
+<pre class="mermaid"><code>flowchart TB
+  subgraph required [Always available with plugin]
+    Bridge[DjangoEventBridge]
+    Helpers[current_user / current_request]
+    ORM[Django ORM in handlers]
+  end
+  subgraph optional [Optional reflex-django layers]
+    UserState[DjangoUserState]
+    CtxState[DjangoContextState]
+    AppState[AppState + ModelCRUDView]
+    SessionMixin[session_auth_mixin]
+  end
+  Bridge --&gt; Helpers
+  Helpers --&gt; ORM
+  Helpers -.-&gt;|mirror to UI| UserState
+  ORM -.-&gt;|code generation| AppState</code></pre>
+<p><strong>Takeaway:</strong> reflex-django <strong>mixins</strong> and <strong>helper states</strong> save boilerplate; they are not required to use Django from Reflex.</p>
+<hr />
+<h2 id="two-ways-to-build-state">Two ways to build state<a class="headerlink" href="#two-ways-to-build-state" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Approach</th>
+<th>Base class</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A. Plain Reflex + bridges</strong></td>
+<td><code>rx.State</code></td>
+<td>Full control, learning Reflex, custom flows, minimal magic</td>
+</tr>
+<tr>
+<td><strong>B. reflex-django helpers</strong></td>
+<td><code>DjangoUserState</code>, <code>DjangoContextState</code>, <code>AppState</code> + <code>ModelCRUDView</code>, …</td>
+<td>Less boilerplate for nav user snapshot, context dicts, declarative CRUD</td>
+</tr>
+</tbody>
+</table>
+<p>You can mix both in one app: e.g. <code>NavbarState(DjangoUserState)</code> and <code>TasksState(rx.State)</code> side by side.</p>
+<hr />
+<h2 id="part-a-plain-rxstate-no-reflex-django-mixins-or-helper-states">Part A — Plain <code>rx.State</code> (no reflex-django mixins or helper states)<a class="headerlink" href="#part-a-plain-rxstate-no-reflex-django-mixins-or-helper-states" title="Permanent link">&para;</a></h2>
+<h3 id="a1-pure-reflex-no-django-in-the-handler">A1. Pure Reflex (no Django in the handler)<a class="headerlink" href="#a1-pure-reflex-no-django-in-the-handler" title="Permanent link">&para;</a></h3>
+<p>Django is still loaded for other pages, but this state does not touch the ORM:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">reflex</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rx</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">CounterState</span><span class="p">(</span><span class="n">rx</span><span class="o">.</span><span class="n">State</span><span class="p">):</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">increment</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+</span></code></pre></div>
+<h3 id="a2-django-auth-via-the-event-bridge-only">A2. Django auth via the event bridge only<a class="headerlink" href="#a2-django-auth-via-the-event-bridge-only" title="Permanent link">&para;</a></h3>
+<p>Use <strong><code>from reflex_django import request</code></strong> (or <strong><code>current_user()</code></strong>) inside any <code>rx.State</code>—no <code>DjangoUserState</code> required:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">reflex</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rx</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">request</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">WhoamiState</span><span class="p">(</span><span class="n">rx</span><span class="o">.</span><span class="n">State</span><span class="p">):</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Loading…&quot;</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">user</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">label</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>            <span class="sa">f</span><span class="s2">&quot;Signed in as </span><span class="si">{</span><span class="n">user</span><span class="o">.</span><span class="n">get_username</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>            <span class="k">if</span> <span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>            <span class="k">else</span> <span class="s2">&quot;Guest&quot;</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>        <span class="p">)</span>
+</span></code></pre></div>
+<p>Wire on a page:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># app.add_page(whoami_page, route=&quot;/whoami&quot;, on_load=WhoamiState.refresh)</span>
+</span></code></pre></div>
+<blockquote>
+<p><strong>Warning:</strong> <code>self.label</code> is visible in the browser. Use <code>current_user()</code> again inside handlers that <strong>mutate</strong> data or perform deletes.</p>
+</blockquote>
+<h3 id="a3-full-example-task-list-without-mixins">A3. Full example: task list without mixins<a class="headerlink" href="#a3-full-example-task-list-without-mixins" title="Permanent link">&para;</a></h3>
+<p><em>Example application code—a <code>tasks</code> app with a <code>Task</code> model.</em></p>
+<p><strong>Model and serializer</strong> (see <a href="../serializers/">Serializers</a>):</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># tasks/models.py</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">Task</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">title</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">max_length</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">done</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">owner</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">ForeignKey</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">AUTH_USER_MODEL</span><span class="p">,</span> <span class="n">on_delete</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">CASCADE</span><span class="p">)</span>
+</span></code></pre></div>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># tasks/serializers.py</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReflexDjangoModelSerializer</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tasks.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">TaskSerializer</span><span class="p">(</span><span class="n">ReflexDjangoModelSerializer</span><span class="p">):</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Task</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="n">fields</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;title&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p><strong>State — subclass <code>rx.State</code> only</strong> (not <code>AppState</code>, not <code>ModelCRUDView</code>):</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># myapp/states/tasks.py</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">reflex</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rx</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">current_user</span><span class="p">,</span> <span class="n">require_login_user</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tasks.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Task</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tasks.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="n">TaskSerializer</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">TasksState</span><span class="p">(</span><span class="n">rx</span><span class="o">.</span><span class="n">State</span><span class="p">):</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Plain Reflex state + Django bridge + serializer. No reflex-django CRUD mixins.&quot;&quot;&quot;</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">new_title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">load_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">require_login_user</span><span class="p">()</span>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>        <span class="n">qs</span> <span class="o">=</span> <span class="n">Task</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">owner</span><span class="o">=</span><span class="n">user</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;-id&quot;</span><span class="p">)</span>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">tasks</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TaskSerializer</span><span class="p">(</span><span class="n">qs</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">adata</span><span class="p">()</span>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">set_new_title</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">new_title</span> <span class="o">=</span> <span class="n">value</span>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">add_task</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>        <span class="n">title</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_title</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">title</span><span class="p">:</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="s2">&quot;Title is required.&quot;</span>
+</span><span id="__span-5-32"><a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>            <span class="k">return</span>
+</span><span id="__span-5-33"><a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">require_login_user</span><span class="p">()</span>
+</span><span id="__span-5-34"><a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-5-35"><a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>            <span class="k">await</span> <span class="n">Task</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">acreate</span><span class="p">(</span><span class="n">owner</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">done</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-5-36"><a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">new_title</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+</span><span id="__span-5-37"><a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_tasks</span><span class="p">()</span>
+</span><span id="__span-5-38"><a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+</span><span id="__span-5-39"><a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
+</span><span id="__span-5-40"><a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a>
+</span><span id="__span-5-41"><a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-5-42"><a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">toggle_done</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="__span-5-43"><a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">require_login_user</span><span class="p">()</span>
+</span><span id="__span-5-44"><a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a>        <span class="n">task</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Task</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">aget</span><span class="p">(</span><span class="n">pk</span><span class="o">=</span><span class="n">task_id</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="n">user</span><span class="p">)</span>
+</span><span id="__span-5-45"><a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a>        <span class="n">task</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">task</span><span class="o">.</span><span class="n">done</span>
+</span><span id="__span-5-46"><a id="__codelineno-5-46" name="__codelineno-5-46" href="#__codelineno-5-46"></a>        <span class="k">await</span> <span class="n">task</span><span class="o">.</span><span class="n">asave</span><span class="p">()</span>
+</span><span id="__span-5-47"><a id="__codelineno-5-47" name="__codelineno-5-47" href="#__codelineno-5-47"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_tasks</span><span class="p">()</span>
+</span><span id="__span-5-48"><a id="__codelineno-5-48" name="__codelineno-5-48" href="#__codelineno-5-48"></a>
+</span><span id="__span-5-49"><a id="__codelineno-5-49" name="__codelineno-5-49" href="#__codelineno-5-49"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-5-50"><a id="__codelineno-5-50" name="__codelineno-5-50" href="#__codelineno-5-50"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">delete_task</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="__span-5-51"><a id="__codelineno-5-51" name="__codelineno-5-51" href="#__codelineno-5-51"></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">require_login_user</span><span class="p">()</span>
+</span><span id="__span-5-52"><a id="__codelineno-5-52" name="__codelineno-5-52" href="#__codelineno-5-52"></a>        <span class="n">task</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Task</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">aget</span><span class="p">(</span><span class="n">pk</span><span class="o">=</span><span class="n">task_id</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="n">user</span><span class="p">)</span>
+</span><span id="__span-5-53"><a id="__codelineno-5-53" name="__codelineno-5-53" href="#__codelineno-5-53"></a>        <span class="k">await</span> <span class="n">task</span><span class="o">.</span><span class="n">adelete</span><span class="p">()</span>
+</span><span id="__span-5-54"><a id="__codelineno-5-54" name="__codelineno-5-54" href="#__codelineno-5-54"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_tasks</span><span class="p">()</span>
+</span></code></pre></div>
+<p><strong>Page:</strong></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">tasks_page</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rx</span><span class="o">.</span><span class="n">Component</span><span class="p">:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="k">return</span> <span class="n">rx</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">cond</span><span class="p">(</span><span class="n">TasksState</span><span class="o">.</span><span class="n">error</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">rx</span><span class="o">.</span><span class="n">callout</span><span class="p">(</span><span class="n">TasksState</span><span class="o">.</span><span class="n">error</span><span class="p">,</span> <span class="n">color_scheme</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">)),</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">input</span><span class="p">(</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>            <span class="n">placeholder</span><span class="o">=</span><span class="s2">&quot;New task&quot;</span><span class="p">,</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>            <span class="n">value</span><span class="o">=</span><span class="n">TasksState</span><span class="o">.</span><span class="n">new_title</span><span class="p">,</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>            <span class="n">on_change</span><span class="o">=</span><span class="n">TasksState</span><span class="o">.</span><span class="n">set_new_title</span><span class="p">,</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="p">),</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">button</span><span class="p">(</span><span class="s2">&quot;Add&quot;</span><span class="p">,</span> <span class="n">on_click</span><span class="o">=</span><span class="n">TasksState</span><span class="o">.</span><span class="n">add_task</span><span class="p">),</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">foreach</span><span class="p">(</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>            <span class="n">TasksState</span><span class="o">.</span><span class="n">tasks</span><span class="p">,</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>            <span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">rx</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>                <span class="n">rx</span><span class="o">.</span><span class="n">checkbox</span><span class="p">(</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>                    <span class="n">checked</span><span class="o">=</span><span class="n">t</span><span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">],</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>                    <span class="n">on_change</span><span class="o">=</span><span class="n">TasksState</span><span class="o">.</span><span class="n">toggle_done</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]),</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>                <span class="p">),</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>                <span class="n">rx</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">&quot;title&quot;</span><span class="p">]),</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>                <span class="n">rx</span><span class="o">.</span><span class="n">button</span><span class="p">(</span><span class="s2">&quot;Delete&quot;</span><span class="p">,</span> <span class="n">on_click</span><span class="o">=</span><span class="n">TasksState</span><span class="o">.</span><span class="n">delete_task</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])),</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>            <span class="p">),</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>        <span class="p">),</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>        <span class="n">width</span><span class="o">=</span><span class="s2">&quot;100%&quot;</span><span class="p">,</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>    <span class="p">)</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="c1"># app.add_page(tasks_page, route=&quot;/tasks&quot;, on_load=TasksState.load_tasks)</span>
+</span></code></pre></div>
+<p>This is the same pattern as <a href="../crud_without_mixins/">CRUD without mixins</a> but focused on <strong>state design</strong>: you own every field name, event name, and validation rule.</p>
+<h3 id="a4-context-processors-in-plain-state">A4. Context processors in plain state<a class="headerlink" href="#a4-context-processors-in-plain-state" title="Permanent link">&para;</a></h3>
+<p>You do not need <code>DjangoContextState</code> to use processors—call <code>collect_reflex_context</code> in any handler:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">reflex</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rx</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">current_request</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django.reflex_context</span><span class="w"> </span><span class="kn">import</span> <span class="n">collect_reflex_context</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">SiteState</span><span class="p">(</span><span class="n">rx</span><span class="o">.</span><span class="n">State</span><span class="p">):</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">site_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">load_site</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>        <span class="n">merged</span> <span class="o">=</span> <span class="k">await</span> <span class="n">collect_reflex_context</span><span class="p">(</span><span class="n">current_request</span><span class="p">())</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">site_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">merged</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;site_name&quot;</span><span class="p">,</span> <span class="s2">&quot;My site&quot;</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Configure processors in settings (<code>REFLEX_DJANGO_CONTEXT_PROCESSORS</code>). Details: <a href="../django_context_to_reflex/">Django context to Reflex</a>.</p>
+<h3 id="a5-loginlogout-without-session_auth_mixin">A5. Login/logout without <code>session_auth_mixin</code><a class="headerlink" href="#a5-loginlogout-without-session_auth_mixin" title="Permanent link">&para;</a></h3>
+<p>You can call Django auth APIs on <code>current_request()</code> and handle cookie sync yourself, or use canned <a href="../authentication/">Authentication</a> pages. The mixin only <strong>generates</strong> a <code>rx.State</code> subclass with standard fields and <code>submit_login</code>—it is optional sugar.</p>
+<hr />
+<h2 id="what-plain-rxstate-uses-from-reflex-django">What plain <code>rx.State</code> uses from reflex-django<a class="headerlink" href="#what-plain-rxstate-uses-from-reflex-django" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Use</th>
+<th>Import</th>
+<th>Required?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>User / session in handlers</td>
+<td><code>current_user</code>, <code>require_login_user</code></td>
+<td>Event bridge on</td>
+</tr>
+<tr>
+<td>Request / session object</td>
+<td><code>current_request</code>, <code>current_session</code></td>
+<td>Event bridge on</td>
+</tr>
+<tr>
+<td>Serialize models for UI</td>
+<td><code>ReflexDjangoModelSerializer</code></td>
+<td>No (your serializer classes)</td>
+</tr>
+<tr>
+<td>Row dict helper</td>
+<td><code>serialize_model_row</code> via <code>reflex_django.mixins</code></td>
+<td>Optional</td>
+</tr>
+<tr>
+<td>CRUD code generation</td>
+<td><code>ModelCRUDView</code></td>
+<td><strong>No</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Use <strong><code>AppState</code></strong> when you want built-in auth (<code>self.user</code>, <code>login</code>, permissions) or <strong><code>ModelCRUDView</code></strong>. Plain <code>rx.State</code> + <code>current_user()</code> remains valid for minimal apps.</p>
+<hr />
+<h2 id="part-b-reflex-django-built-in-helper-states">Part B — reflex-django built-in helper states<a class="headerlink" href="#part-b-reflex-django-built-in-helper-states" title="Permanent link">&para;</a></h2>
+<p>Helper states are still <strong><code>rx.State</code> subclasses</strong>. They add fields and <code>@rx.event</code> methods that <strong>copy</strong> bridge data into client-visible vars so your components can bind <code>State.username</code> instead of calling helpers in every render path.</p>
+<h3 id="b1-djangouserstate-navbar-conditional-ui">B1. <code>DjangoUserState</code> — navbar / conditional UI<a class="headerlink" href="#b1-djangouserstate-navbar-conditional-ui" title="Permanent link">&para;</a></h3>
+<p>Mirrors <code>request.user</code> as flat fields: <code>user_id</code>, <code>username</code>, <code>email</code>, <code>first_name</code>, <code>last_name</code>, <code>is_authenticated</code>, <code>is_staff</code>, <code>is_superuser</code>, <code>group_names</code>.</p>
+<p><strong><code>DjangoAuthState</code></strong> (canned login/register pages) is a separate flat substate: snapshot fields match the list above except <strong><code>is_authenticated</code></strong>, which is a <strong><code>@rx.var</code></strong> backed by <strong><code>current_user()</code></strong> for UI bindings. See <a href="../authentication/#djangouserstate-without-appstate">Authentication</a>.</p>
+<p>For <strong>new apps</strong>, prefer <strong><code>AppState</code></strong> (below)—it includes the same snapshot fields plus <code>self.user</code>, <code>self.session</code>, <code>login</code>/<code>logout</code>, and optional auto-sync. Use standalone <strong><code>DjangoUserState</code></strong> when you only want a small nav state separate from CRUD/dashboard state.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">reflex</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rx</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">DjangoUserState</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">NavbarState</span><span class="p">(</span><span class="n">DjangoUserState</span><span class="p">):</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="k">pass</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">navbar</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rx</span><span class="o">.</span><span class="n">Component</span><span class="p">:</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="k">return</span> <span class="n">rx</span><span class="o">.</span><span class="n">cond</span><span class="p">(</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>        <span class="n">NavbarState</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">,</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>            <span class="n">rx</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">NavbarState</span><span class="o">.</span><span class="n">username</span><span class="p">),</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>            <span class="n">rx</span><span class="o">.</span><span class="n">link</span><span class="p">(</span><span class="s2">&quot;Logout&quot;</span><span class="p">,</span> <span class="n">href</span><span class="o">=</span><span class="s2">&quot;/logout&quot;</span><span class="p">),</span>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>        <span class="p">),</span>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">link</span><span class="p">(</span><span class="s2">&quot;Login&quot;</span><span class="p">,</span> <span class="n">href</span><span class="o">=</span><span class="s2">&quot;/login&quot;</span><span class="p">),</span>
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>    <span class="p">)</span>
+</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>
+</span><span id="__span-8-19"><a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="c1"># With REFLEX_DJANGO_AUTH_AUTO_SYNC=True, AppState subclasses sync on each event.</span>
+</span><span id="__span-8-20"><a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a><span class="c1"># For DjangoUserState-only apps, keep:</span>
+</span><span id="__span-8-21"><a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a><span class="c1"># app.add_page(home, on_load=NavbarState.sync_from_django)</span>
+</span></code></pre></div>
+<ul>
+<li><strong><code>sync_from_django</code></strong> — <code>@rx.event</code> for <code>on_load</code>  </li>
+<li><strong><code>refresh_django_user_fields()</code></strong> — call after login/logout in async handlers  </li>
+</ul>
+<p>Authorization still uses <strong><code>self.user</code></strong> / <strong><code>current_user()</code></strong> on the server (<a href="../authentication/">Authentication</a>).</p>
+<h3 id="b2-djangoi18nstate-language-in-the-ui">B2. <code>DjangoI18nState</code> — language in the UI<a class="headerlink" href="#b2-djangoi18nstate-language-in-the-ui" title="Permanent link">&para;</a></h3>
+<p>Fields: <code>django_language_code</code>, <code>django_language_bidi</code>. Requires <code>USE_I18N</code> and typically <code>REFLEX_DJANGO_I18N_EVENT_BRIDGE</code>.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">DjangoI18nState</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># app.add_page(home, on_load=DjangoI18nState.sync_from_django)</span>
+</span></code></pre></div>
+<h3 id="b3-djangocontextstate-merged-processor-dict">B3. <code>DjangoContextState</code> — merged processor dict<a class="headerlink" href="#b3-djangocontextstate-merged-processor-dict" title="Permanent link">&para;</a></h3>
+<p>Fields: <code>django_context</code>, <code>django_context_json</code>. Event: <code>load_django_context</code>.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">DjangoContextState</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="c1"># app.add_page(about, on_load=DjangoContextState.load_django_context)</span>
+</span></code></pre></div>
+<p>Equivalent manual pattern: Part A4 with <code>collect_reflex_context</code>.</p>
+<h3 id="b4-appstate-django-auth-selfrequest-optional-modelcrudview">B4. <code>AppState</code> — Django auth, <code>self.request</code>, optional <code>ModelCRUDView</code><a class="headerlink" href="#b4-appstate-django-auth-selfrequest-optional-modelcrudview" title="Permanent link">&para;</a></h3>
+<p><code>AppState</code> (<code>reflex_django.states</code> / <code>reflex_django.state</code>) extends <strong><code>DjangoUserState</code></strong> and is the <strong>recommended</strong> base when a state class needs Django auth, sessions, the bridged HTTP request, or declarative CRUD.</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Live request (handlers)</td>
+<td><strong><code>self.request</code></strong> (<code>DjangoStateRequest</code>: <strong><code>.user</code></strong>, <strong><code>.GET</code></strong>, <strong><code>.path</code></strong>, processors)</td>
+</tr>
+<tr>
+<td>Raw <code>HttpRequest</code></td>
+<td><strong><code>self.django_request</code></strong></td>
+</tr>
+<tr>
+<td>Live user (handlers)</td>
+<td><strong><code>self.user</code></strong> (same as <strong><code>self.request.user</code></strong>)</td>
+</tr>
+<tr>
+<td>Live session read/write</td>
+<td><strong><code>self.session["key"]</code></strong></td>
+</tr>
+<tr>
+<td>Login / logout</td>
+<td><code>await self.login(u, p)</code>, <code>await self.logout()</code></td>
+</tr>
+<tr>
+<td>Permissions</td>
+<td><code>await self.has_perm("app.action")</code>, <code>await self.has_group("admins")</code></td>
+</tr>
+<tr>
+<td>UI snapshot</td>
+<td><code>self.is_authenticated</code>, <code>self.username</code>, …</td>
+</tr>
+<tr>
+<td>CRUD assembly</td>
+<td>Add <code>ModelCRUDView</code> to bases</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Full guide with examples:</strong> <a href="../authentication/#accessing-the-django-request-on-appstate">Authentication — Accessing the Django request on AppState</a>.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">reflex</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rx</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django.state</span><span class="w"> </span><span class="kn">import</span> <span class="n">AppState</span><span class="p">,</span> <span class="n">ModelCRUDView</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">NotesState</span><span class="p">(</span><span class="n">AppState</span><span class="p">,</span> <span class="n">ModelCRUDView</span><span class="p">):</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="n">serializer</span> <span class="o">=</span> <span class="n">NoteSerializer</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">DashboardState</span><span class="p">(</span><span class="n">AppState</span><span class="p">):</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">show_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>            <span class="k">return</span> <span class="n">rx</span><span class="o">.</span><span class="n">redirect</span><span class="p">(</span><span class="s2">&quot;/login&quot;</span><span class="p">)</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">get_username</span><span class="p">()</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>    <span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">remember_view</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="p">[</span><span class="s2">&quot;dashboard_view&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mode</span>  <span class="c1"># persisted in Django session</span>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="k">def</span><span class="w"> </span><span class="nf">layout</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rx</span><span class="o">.</span><span class="n">Component</span><span class="p">:</span>
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a>    <span class="k">return</span> <span class="n">rx</span><span class="o">.</span><span class="n">cond</span><span class="p">(</span>
+</span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a>        <span class="n">DashboardState</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">,</span>
+</span><span id="__span-11-22"><a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="s2">&quot;Hello, &quot;</span><span class="p">,</span> <span class="n">DashboardState</span><span class="o">.</span><span class="n">username</span><span class="p">),</span>
+</span><span id="__span-11-23"><a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a>        <span class="n">rx</span><span class="o">.</span><span class="n">link</span><span class="p">(</span><span class="s2">&quot;Sign in&quot;</span><span class="p">,</span> <span class="n">href</span><span class="o">=</span><span class="s2">&quot;/login&quot;</span><span class="p">),</span>
+</span><span id="__span-11-24"><a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a>    <span class="p">)</span>
+</span></code></pre></div>
+<p><strong>Auto-sync:</strong> When <code>REFLEX_DJANGO_AUTH_AUTO_SYNC</code> is <code>True</code> (default), <code>DjangoEventBridge</code> calls <code>refresh_django_user_fields()</code> on each event for <code>AppState</code> instances—navbar <code>rx.cond</code> bindings stay aligned with login/logout without <code>on_load</code> on every route.</p>
+<p><strong>Hooks:</strong> Override <code>on_auth_failed</code> and <code>on_permission_denied</code> for branded errors or redirects.</p>
+<p>Full examples: <a href="../authentication/">Authentication</a>. Use plain <strong><code>rx.State</code></strong> only when that class never needs Django auth helpers.</p>
+<h3 id="b5-user_snapshot-vs-current_user">B5. <code>user_snapshot</code> vs <code>current_user</code><a class="headerlink" href="#b5-user_snapshot-vs-current_user" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>current_user()</code></td>
+<td>Live <code>User</code> during an event — <strong>authorize here</strong></td>
+</tr>
+<tr>
+<td><code>user_snapshot(user)</code></td>
+<td>JSON dict — display, logging, custom processors</td>
+</tr>
+</tbody>
+</table>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django</span><span class="w"> </span><span class="kn">import</span> <span class="n">current_user</span><span class="p">,</span> <span class="n">user_snapshot</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">user</span> <span class="o">=</span> <span class="n">current_user</span><span class="p">()</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="k">if</span> <span class="n">user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">banner</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Hello, </span><span class="si">{</span><span class="n">user_snapshot</span><span class="p">(</span><span class="n">user</span><span class="p">)[</span><span class="s1">&#39;username&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+</span></code></pre></div>
+<hr />
+<h2 id="part-c-mixins-and-declarative-crud-optional-layer">Part C — Mixins and declarative CRUD (optional layer)<a class="headerlink" href="#part-c-mixins-and-declarative-crud-optional-layer" title="Permanent link">&para;</a></h2>
+<p>On top of helper states, reflex-django can <strong>generate</strong> list/save/delete handlers, serializers, and form vars at class definition time (<code>AppStateMeta</code>).</p>
+<h3 id="recommended-modelstatem">Recommended: <code>ModelState[M]</code><a class="headerlink" href="#recommended-modelstatem" title="Permanent link">&para;</a></h3>
+<p>One base class per Django model—includes <strong><code>AppState</code></strong> (auth) and the full CRUD stack:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">reflex_django.state</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelState</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Product</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">ProductState</span><span class="p">(</span><span class="n">ModelState</span><span class="p">):</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">model</span> <span class="o">=</span> <span class="n">Product</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;price&quot;</span><span class="p">,</span> <span class="s2">&quot;is_active&quot;</span><span class="p">]</span>
+</span></code></pre></div>
+<p>Call stable handlers from the UI: <code>ProductState.refresh</code>, <code>ProductState.load(id)</code>, <code>ProductState.save</code>, <code>ProductState.delete(id)</code>. See <strong><a href="../reactive_model_state/">Reactive ModelState</a></strong> for full examples (pagination, filters, user scoping, forms, overrides).</p>
+<h3 id="explicit-appstate-modelcrudview">Explicit: <code>AppState</code> + <code>ModelCRUDView</code><a class="headerlink" href="#explicit-appstate-modelcrudview" title="Permanent link">&para;</a></h3>
+<p>Hand-written serializer, same hooks and dispatch pipeline; per-model var names (<code>notes</code>, <code>notes_error</code>) unless you override <code>Meta.list_var</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">NotesState</span><span class="p">(</span><span class="n">AppState</span><span class="p">,</span> <span class="n">ModelCRUDView</span><span class="p">):</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">NoteSerializer</span>
+</span></code></pre></div>
+<p>See <strong><a href="../model_state_and_crud_view/">ModelState and ModelCRUDView</a></strong> for a side-by-side comparison, full page examples, and migration between styles.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Types</th>
+<th>Doc</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Comparison + examples</td>
+<td><code>ModelState</code> vs <code>ModelCRUDView</code></td>
+<td><a href="../model_state_and_crud_view/">ModelState and ModelCRUDView</a></td>
+</tr>
+<tr>
+<td>Reactive ORM (preferred)</td>
+<td><code>ModelState[M]</code></td>
+<td><a href="../reactive_model_state/">Reactive ModelState</a></td>
+</tr>
+<tr>
+<td>Explicit serializer CRUD</td>
+<td><code>AppState</code> + <code>ModelCRUDView</code></td>
+<td><a href="../crud_with_mixins_and_states/">CRUD with mixins</a></td>
+</tr>
+<tr>
+<td>Mixin catalog</td>
+<td><code>ListMixin</code>, <code>DispatchMixin</code>, <code>UserScopedMixin</code>, …</td>
+<td><a href="../reflex_django_mixins/">reflex-django mixins</a></td>
+</tr>
+<tr>
+<td>Manual CRUD</td>
+<td>Plain <code>rx.State</code></td>
+<td><a href="../crud_without_mixins/">CRUD without mixins</a></td>
+</tr>
+</tbody>
+</table>
+<p>Both <code>ModelState</code> and <code>ModelCRUDView</code> require the <strong>event bridge</strong> for default <code>@login_required</code> and <code>self.request.user</code> in hooks.</p>
+<p><strong><code>from reflex_django import request</code> vs <code>self.request</code> on AppState:</strong> both read the same bridged <code>HttpRequest</code> for the current event. On <strong><code>AppState</code></strong>, prefer <strong><code>self.request.user</code></strong> and <strong><code>self.request.GET</code></strong> in handlers. The module <strong><code>request</code></strong> proxy is for plain <strong><code>rx.State</code></strong> classes. During <strong><code>ModelCRUDView.dispatch</code></strong>, <strong><code>bind_request_context()</code></strong> enriches <strong><code>self.request</code></strong> with context-processor keys—see <a href="../authentication/#accessing-the-django-request-on-appstate">Authentication</a>.</p>
+<hr />
+<h2 id="choosing-an-approach">Choosing an approach<a class="headerlink" href="#choosing-an-approach" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Simple counter / wizard</td>
+<td><code>rx.State</code> only</td>
+</tr>
+<tr>
+<td>Load/save Django rows with custom UX</td>
+<td><code>rx.State</code> + <code>current_user()</code> + serializer (Part A3)</td>
+</tr>
+<tr>
+<td>Show logged-in user in header</td>
+<td><code>AppState</code> / <code>DjangoUserState</code> (auto-sync) <strong>or</strong> <code>current_user()</code> in <code>on_load</code></td>
+</tr>
+<tr>
+<td>Expose <code>LANGUAGE_CODE</code> in UI</td>
+<td><code>DjangoI18nState</code> <strong>or</strong> manual <code>current_language()</code></td>
+</tr>
+<tr>
+<td>Template-like context dict in state</td>
+<td><code>DjangoContextState</code> <strong>or</strong> <code>collect_reflex_context</code></td>
+</tr>
+<tr>
+<td>Standard list + form + edit + delete</td>
+<td><code>ModelState[M]</code> (preferred) or <code>AppState</code> + <code>ModelCRUDView</code></td>
+</tr>
+<tr>
+<td>Generated login form state</td>
+<td><code>session_auth_mixin</code> (<a href="../authentication/">Authentication</a>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="multiple-state-classes-in-one-app">Multiple state classes in one app<a class="headerlink" href="#multiple-state-classes-in-one-app" title="Permanent link">&para;</a></h2>
+<p>Reflex allows several state classes. Typical layout:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Single AppState for nav + features (recommended)</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">SiteState</span><span class="p">(</span><span class="n">AppState</span><span class="p">):</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="k">pass</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="c1"># Or separate nav-only snapshot state</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">NavState</span><span class="p">(</span><span class="n">DjangoUserState</span><span class="p">):</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>    <span class="k">pass</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="c1"># Feature page uses plain state + ORM</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">TasksState</span><span class="p">(</span><span class="n">rx</span><span class="o">.</span><span class="n">State</span><span class="p">):</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    <span class="o">...</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="c1"># Admin CRUD uses ModelCRUDView</span>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="k">class</span><span class="w"> </span><span class="nc">NotesState</span><span class="p">(</span><span class="n">AppState</span><span class="p">,</span> <span class="n">ModelCRUDView</span><span class="p">):</span>
+</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>    <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">NoteSerializer</span>
+</span></code></pre></div>
+<p>Register <code>on_load</code> on each page for the states that page needs.</p>
+<hr />
+<h2 id="state-synchronization-model">State synchronization model<a class="headerlink" href="#state-synchronization-model" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+  subgraph server [Server event handler]
+    ORM[Django ORM]
+    CU[current_user]
+    Snap[user_snapshot / DjangoUserState]
+  end
+  subgraph client [Client rx.State vars]
+    UI[UI bindings]
+  end
+  ORM --&gt;|list of dicts| UI
+  CU --&gt;|authorize mutations| ORM
+  Snap --&gt;|display only| UI</code></pre>
+<ul>
+<li><strong>Source of truth:</strong> database + <code>current_user()</code> in handlers.  </li>
+<li><strong>Wire format:</strong> JSON-serializable scalars, lists, and dicts only.</li>
+</ul>
+<hr />
+<h2 id="event-handler-patterns">Event handler patterns<a class="headerlink" href="#event-handler-patterns" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nd">@rx</span><span class="o">.</span><span class="n">event</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">load_items</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    <span class="n">user</span> <span class="o">=</span> <span class="n">require_login_user</span><span class="p">()</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>    <span class="n">qs</span> <span class="o">=</span> <span class="n">Item</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">owner</span><span class="o">=</span><span class="n">user</span><span class="p">)</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ItemSerializer</span><span class="p">(</span><span class="n">qs</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">adata</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Prefer <strong><code>async def</code></strong> when using Django async ORM (<code>acreate</code>, <code>aget</code>, <code>.adata()</code>).</p>
+<hr />
+<h2 id="advanced-usage">Advanced usage<a class="headerlink" href="#advanced-usage" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Disable bridge for stateless demos: <code>install_event_bridge=False</code> — then <code>current_user()</code> is not populated.  </li>
+<li>Test handlers with <code>begin_event_request</code> / <code>end_event_request</code> — <a href="../testing/">Testing</a>.  </li>
+<li>Combine plain state with <code>DjangoUserState</code> on different pages.</li>
+</ul>
+<hr />
+<h2 id="performance-tips">Performance tips<a class="headerlink" href="#performance-tips" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not store model instances or querysets in state vars.  </li>
+<li>Reload lists after mutations; pass only <code>id</code> into events.  </li>
+<li>Use <code>DjangoUserState</code> only on layouts that need it—not on every CRUD state.</li>
+</ul>
+<hr />
+<h2 id="common-mistakes">Common mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Mistake</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thinking <code>AppState</code> is required for Django</td>
+<td>Use <code>rx.State</code> + <code>current_user()</code></td>
+</tr>
+<tr>
+<td>Using <code>DjangoUserState.is_authenticated</code> to allow deletes</td>
+<td>Call <code>require_login_user()</code> in the handler</td>
+</tr>
+<tr>
+<td>Putting <code>Decimal</code>, <code>datetime</code>, or models in state fields</td>
+<td>Serialize first</td>
+</tr>
+<tr>
+<td>Subclassing <code>DjangoUserState</code> and <code>ModelCRUDView</code> together</td>
+<td>Split into two state classes</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>current_user()</code> always anonymous</td>
+<td>Event bridge off or missing session cookie — <a href="../authentication/">Authentication</a></td>
+</tr>
+<tr>
+<td>Stale navbar after login</td>
+<td><code>await NavbarState.refresh_django_user_fields()</code> or <code>sync_from_django</code></td>
+</tr>
+<tr>
+<td><code>AppRegistryNotReady</code></td>
+<td>Ensure plugin in <code>rxconfig</code>; avoid importing models before Django setup</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../django_middleware_to_reflex/">Django middleware to Reflex</a> — what the bridge runs  </li>
+<li><a href="../django_context_to_reflex/">Django context to Reflex</a>  </li>
+<li><a href="../serializers/">Serializers</a>  </li>
+<li><a href="../crud_without_mixins/">CRUD without mixins</a>  </li>
+<li><a href="../reflex_django_mixins/">reflex-django mixins</a></li>
+</ul>
+<hr />
+<p><strong>Navigation:</strong> <a href="../django_context_to_reflex/">← Django context to Reflex</a> | <a href="../serializers/">Next: Serializers →</a></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.instant", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

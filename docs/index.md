@@ -1,6 +1,39 @@
-# reflex-django documentation
+<style>
+.md-content .md-typeset h1 { display: none; }
+</style>
 
-**reflex-django** is a [Reflex](https://reflex.dev) plugin that runs a **Django ASGI** application and your **Reflex** app in **one process** under `reflex run`. Django handles ORM, admin, sessions, and HTTP routes on configured path prefixes; Reflex handles the reactive UI and Socket.IO events.
+<p align="center">
+  <a href="https://github.com/mohannadirshedat/reflex-django">
+    <h1 align="center" style="border-bottom: none; font-size: 3.2rem; font-weight: 850; margin-bottom: 0px; background: linear-gradient(135deg, #3f51b5, #00b0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; font-family: 'Outfit', sans-serif;">reflex-django</h1>
+  </a>
+</p>
+<p align="center">
+    <em>Run a Django ASGI backend and Reflex app in one unified process. Easy to build, highly interactive.</em>
+</p>
+<p align="center">
+<a href="https://github.com/mohannadirshedat/reflex-django/actions">
+    <img src="https://github.com/mohannadirshedat/reflex-django/workflows/pytest/badge.svg" alt="Test Status">
+</a>
+<a href="https://pypi.org/project/reflex-django">
+    <img src="https://img.shields.io/pypi/v/reflex-django?color=%2334D058&label=pypi%20package" alt="PyPI package">
+</a>
+<a href="https://pypi.org/project/reflex-django">
+    <img src="https://img.shields.io/pypi/pyversions/reflex-django.svg" alt="Supported Python Versions">
+</a>
+<a href="https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg?color=blue" alt="License">
+</a>
+</p>
+
+---
+
+**Documentation**: [https://github.com/mohannadirshedat/reflex-django](https://github.com/mohannadirshedat/reflex-django)
+
+**Source Code**: [https://github.com/mohannadirshedat/reflex-django](https://github.com/mohannadirshedat/reflex-django)
+
+---
+
+**reflex-django** is a [Reflex](https://reflex.dev) plugin that runs a **Django ASGI** application and your **Reflex** app in **one process** under `reflex run`. Django handles the ORM, admin, sessions, and HTTP routes on configured path prefixes; Reflex handles the reactive UI and Socket.IO events.
 
 This documentation is written for **Python and Django developers** who want full-stack applications without maintaining separate dev servers for every local workflow.
 
@@ -11,10 +44,32 @@ This documentation is written for **Python and Django developers** who want full
 
 ## Choose your path
 
-| You are… | Start here |
-|----------|------------|
-| Starting a new project from scratch | [Quickstart](quickstart.md) |
-| Adding Reflex to an existing Django codebase | [Existing Django project](existing_django_project.md) |
+<div class="path-grid">
+  <a href="quickstart.md" class="path-card">
+    <h3>🚀 Starting from Scratch</h3>
+    <p>Initialize a new full-stack project combining the power of Django ORM and Reflex reactivity in minutes.</p>
+  </a>
+  <a href="existing_django_project.md" class="path-card">
+    <h3>🔌 Existing Django Codebase</h3>
+    <p>Seamlessly mount a modern Reflex frontend onto your existing Django enterprise application.</p>
+  </a>
+</div>
+
+---
+
+## Installation
+
+Install **reflex-django** via pip:
+
+<div class="termy">
+
+```console
+$ pip install reflex-django
+---> 100%
+Successfully installed reflex-django asgiref django reflex
+```
+
+</div>
 
 ---
 
