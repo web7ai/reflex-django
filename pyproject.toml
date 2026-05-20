@@ -1,6 +1,6 @@
 [project]
 name = "reflex-django"
-version = "0.2.7"
+version = "0.2.8"
 description = "Run a Django backend (Django ORM, Django Admin) alongside a Reflex app."
 license = "Apache-2.0"
 readme = "README.md"
@@ -40,10 +40,10 @@ classifiers = [
 reflex-django = "reflex_django.cli:main"
 
 [project.urls]
-homepage = "https://github.com/mohannadirshedat/reflex-django"
-documentation = "https://github.com/mohannadirshedat/reflex-django"
+homepage = "https://mohannadirshedat.github.io/reflex-django/"
+documentation = "https://mohannadirshedat.github.io/reflex-django/"
 repository = "https://github.com/mohannadirshedat/reflex-django"
-changelog = "https://github.com/mohannadirshedat/reflex-django"
+changelog = "https://github.com/mohannadirshedat/reflex-django/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reflex_django"]
