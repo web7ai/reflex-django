@@ -1,12 +1,34 @@
-# reflex-django
+<p align="center">
+  <a href="https://github.com/mohannadirshedat/reflex-django">
+    <img src="https://raw.githubusercontent.com/mohannadirshedat/reflex-django/main/logo.png" alt="reflex-django" width="200">
+  </a>
+</p>
 
-**Run Django and Reflex in one process — one command, zero glue.**
+<h1 align="center">reflex-django</h1>
+
+<p align="center">
+  <strong>Run Django and Reflex in one process — one command, zero glue.</strong>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/v/reflex-django?color=%2334D058&label=pypi" alt="PyPI"></a>
+  <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/pyversions/reflex-django.svg" alt="Python"></a>
+  <a href="https://mohannadirshedat.github.io/reflex-django/"><img src="https://img.shields.io/badge/docs-online-blue" alt="Docs"></a>
+  <a href="https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE"><img src="https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="https://mohannadirshedat.github.io/reflex-django/">📖 Full Documentation</a> ·
+  <a href="https://github.com/mohannadirshedat/reflex-django">GitHub</a> ·
+  <a href="https://pypi.org/project/reflex-django">PyPI</a>
+</p>
+
+---
 
 `reflex-django` is a [Reflex](https://reflex.dev) plugin that boots your **Django ASGI** app and your **Reflex** app side-by-side in a single process under `reflex run`. HTTP paths like `/admin`, `/api`, and `/static` go straight to Django. Everything else — the Reflex SPA and the live WebSocket event channel — stays on Reflex.
 
-📖 **[Full Documentation →](https://mohannadirshedat.github.io/reflex-django/)**
-
 ---
+
 
 ## Table of Contents
 

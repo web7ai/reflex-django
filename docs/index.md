@@ -4,6 +4,12 @@
 
 <p align="center">
   <a href="https://github.com/mohannadirshedat/reflex-django">
+    <img src="assets/logo.png" alt="reflex-django logo" width="220" style="border-radius: 16px; margin-bottom: 8px;">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/mohannadirshedat/reflex-django">
     <h1 align="center" style="border-bottom: none; font-size: 3.2rem; font-weight: 850; margin-bottom: 0px; background: linear-gradient(135deg, #3f51b5, #00b0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px; font-family: 'Outfit', sans-serif;">reflex-django</h1>
   </a>
 </p>
@@ -11,6 +17,7 @@
 <p align="center">
     <em>Unify the robust backend power of Django and the highly interactive, Python-first reactive UI of Reflex into a single process.</em>
 </p>
+
 
 <p align="center">
 <a href="https://pypi.org/project/reflex-django">

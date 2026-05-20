@@ -7,6 +7,8 @@ repo_name: mohannadirshedat/reflex-django
 
 theme:
   name: material
+  logo: assets/logo-icon.png
+  favicon: assets/logo-icon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -81,6 +83,9 @@ markdown_extensions:
 
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
 
 nav:
   - Welcome:
