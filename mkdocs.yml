@@ -1,4 +1,5 @@
 site_name: reflex-django
+site_url: https://mohannadirshedat.github.io/reflex-django/
 site_description: Run a Django backend (Django ORM, Django Admin) alongside a Reflex app in one process.
 site_author: Mohannad Irshedat
 repo_url: https://github.com/mohannadirshedat/reflex-django
