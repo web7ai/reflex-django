@@ -80,7 +80,9 @@ urlpatterns += [
 ]
 ```
 
-See [Configuration](configuration.md) for all `reflex_mount()` options.
+See [Configuration](configuration.md) for all `reflex_mount()` options. For pages and `AppState`, follow the [Quickstart](quickstart.md).
+
+`AsyncStreamingMiddleware` in `MIDDLEWARE` is required for clean ASGI streaming (admin, static). Details: [AsyncStreamingMiddleware](async_streaming_middleware.md).
 
 ---
 
@@ -121,4 +123,4 @@ Import models inside `@rx.event` handlers, not at the top of `views.py`, during 
 
 ---
 
-**Navigation:** [← Introduction](introduction.md) | [Configuration →](configuration.md)
+**Navigation:** [← Introduction](introduction.md) | [Quickstart →](quickstart.md) | [Configuration →](configuration.md)

@@ -78,6 +78,8 @@ python manage.py run_reflex
 | Install | [Installation](installation.md) |
 | **`reflex_mount()` & settings** | [Configuration](configuration.md) |
 | Tutorial | [Quickstart](quickstart.md) |
+| Pages & `@template` | [Pages in views.py](pages_in_views.md) |
+| ASGI streaming | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
 | Brownfield | [Existing Django project](existing_django_project.md) |
 | Folder layout | [Project structure](project_structure.md) |
 | URLs & `django_led_app` | [Django-led URL routing](django_urls.md) |
@@ -103,6 +105,7 @@ python manage.py run_reflex
 |:---|:---|
 | Set ports and app name | [Configuration](configuration.md) |
 | Put pages in Django apps | [Pages in views.py](pages_in_views.md) |
+| Fix admin streaming warnings | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
 | Understand `django_led_app` | [Django-led URL routing](django_urls.md) |
 | Use `request.user` in events | [Authentication](authentication.md) |
 | Run migrations | [CLI](cli.md) |

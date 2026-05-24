@@ -95,6 +95,8 @@ nav:
     - Configuration: configuration.md
   - Getting Started:
     - Quickstart: quickstart.md
+    - Pages in views.py: pages_in_views.md
+    - AsyncStreamingMiddleware: async_streaming_middleware.md
     - Existing Django Project: existing_django_project.md
     - Recommended Layout: project_structure.md
   - Core Architecture:

@@ -1,19 +1,12 @@
 # Quickstart
 
-This tutorial builds a **Django-first** Reflex app from scratch: Django owns settings and URLs; pages live in `myapp/views.py`; you run **`python manage.py run_reflex`**.
+A minimal **reflex-django** app in four steps: Django `settings.py`, `urls.py`, Reflex pages in `views.py`, and `AppState` for the logged-in user.
 
-Estimated time: ~15 minutes.
-
----
-
-## Prerequisites
-
-- Python **3.12+**
-- **[uv](https://docs.astral.sh/uv/)** (recommended) or pip
+**Time:** ~10 minutes · **Command:** `python manage.py run_reflex`
 
 ---
 
-## Step 1: Create the Django project
+## 1. Create the project
 
 ```bash
 mkdir myshop && cd myshop
@@ -23,26 +16,35 @@ uv run django-admin startproject config .
 uv run python manage.py startapp shop
 ```
 
-Layout:
-
 ```text
 myshop/
 ├── manage.py
 ├── config/
-│   ├── settings.py
-│   └── urls.py
+│   ├── settings.py    ← step 2
+│   └── urls.py        ← step 3
 └── shop/
-    ├── models.py
-    └── views.py      # Reflex pages go here
+    └── views.py       ← step 4 (pages + state)
 ```
 
 ---
 
-## Step 2: Configure Django
+## 2. `settings.py` — register Django + reflex-django
 
-`config/settings.py`:
+Only three things matter for a minimal setup:
+
+1. **`reflex_django` and your app** in `INSTALLED_APPS`
+2. **Session + auth middleware** (so `AppState` can see the user)
+3. **`AsyncStreamingMiddleware` last** (ASGI-safe admin/static streaming)
 
 ```python
+# config/settings.py
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+SECRET_KEY = "change-me-in-production"
+DEBUG = True
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -75,9 +77,16 @@ DATABASES = {
 }
 ```
 
-`config/urls.py`:
+Why `AsyncStreamingMiddleware`? See [AsyncStreamingMiddleware](async_streaming_middleware.md).
+
+---
+
+## 3. `urls.py` — wire Reflex with `reflex_mount()`
+
+Django routes come **first**. **`reflex_mount()` last.**
 
 ```python
+# config/urls.py
 from django.contrib import admin
 from django.urls import path
 
@@ -99,15 +108,21 @@ urlpatterns += [
 ]
 ```
 
-`reflex_mount()` does three things:
+| Argument | Meaning |
+|:---|:---|
+| `app_name="shop"` | Pages live in `shop/views.py` |
+| `django_prefix` | Paths Django owns (must match `path("admin/", ...)` above) |
+| `rx_config` | Reflex ports (and any other allowed `rx.Config` keys) |
 
-1. Registers Reflex config (ports, `app_name`, plugins)
-2. Enables `ReflexDjangoPlugin` automatically
-3. Appends a catch-all URL pattern so the SPA is served for non-Django paths
+You do **not** create `shop/shop.py`. Reflex loads the app from `reflex_django.django_led_app`.
 
 ---
 
-## Step 3: Add Reflex pages in `shop/views.py`
+## 4. `views.py` — pages and `AppState`
+
+### Pages with `@template`
+
+`@template` registers a route and wraps content in a simple layout:
 
 ```python
 # shop/views.py
@@ -117,15 +132,16 @@ from reflex_django.state import AppState
 
 
 class HomeState(AppState):
+    """Use AppState when you need Django session / user."""
+
     greeting: str = "Hello!"
 
     @rx.event
     async def on_load(self):
-        user = self.request.user
-        if user.is_authenticated:
-            self.greeting = f"Welcome, {user.get_username()}!"
+        if self.request.user.is_authenticated:
+            self.greeting = f"Hi, {self.request.user.get_username()}!"
         else:
-            self.greeting = "Hello, guest — try /admin/ to log in."
+            self.greeting = "Hello, guest — log in at /admin/"
 
 
 @template(route="/", title="Home")
@@ -134,94 +150,82 @@ def index() -> rx.Component:
         rx.vstack(
             rx.heading("My Shop"),
             rx.text(HomeState.greeting),
+            rx.link("About", href="/about"),
             spacing="4",
         ),
-        min_height="80vh",
+        min_height="70vh",
     )
 
 
 @template(route="/about", title="About")
 def about() -> rx.Component:
-    return rx.text("About page — defined in shop/views.py")
+    return rx.text("This page is shop/views.py — not a Django path().")
 ```
 
-No `shop/shop.py` file. reflex-django discovers `shop.views` via `INSTALLED_APPS` and loads the app through `reflex_django.django_led_app`.
+### How `AppState` works
+
+| In event handlers (`@rx.event`) | In the UI |
+|:---|:---|
+| `self.request.user` — Django user | `self.is_authenticated` |
+| `self.request.session` — read/write session | `self.username`, `self.email` |
+| `await self.has_perm("app.change_model")` | Auto-updated each event |
+
+Reflex events run over WebSocket. The **event bridge** (enabled automatically) builds a Django-like `request` on each event so you can use the same session as `/admin/`.
+
+```python
+@rx.event
+async def save_theme(self, value: str):
+    self.request.session["theme"] = value
+    await self.request.session.asave()
+```
 
 ---
 
-## Step 4: Migrate and run
+## 5. Run
 
 ```bash
 uv run python manage.py migrate
 uv run python manage.py run_reflex
 ```
 
-Open:
+| URL | What you see |
+|:---|:---|
+| http://localhost:3000/ | Home page |
+| http://localhost:3000/about | About page |
+| http://localhost:3000/admin/ | Django admin |
 
-- **http://localhost:3000/** — Reflex dev UI (home, about)
-- **http://localhost:3000/admin/** — Django admin (proxied through the dev stack)
-
-> **Do not** use `runserver` on port 8000 while `run_reflex` is active. The unified process must own the backend port so WebSockets (`/_event`) work.
-
----
-
-## Step 5: Create a superuser and test auth
+Optional — test login:
 
 ```bash
 uv run python manage.py createsuperuser
 ```
 
-1. Visit **http://localhost:3000/admin/** and log in.
-2. Return to **http://localhost:3000/** and refresh — the home page should show your username.
-
-The event bridge reads the same session cookie Django set at login.
+Log in at `/admin/`, then refresh `/` — `HomeState.greeting` should show your username.
 
 ---
 
-## What about `rxconfig.py`?
+## Cheat sheet
 
-You do **not** need to create `rxconfig.py` by hand. On first `run_reflex`, reflex-django may write a **minimal stub** so the Reflex CLI’s file checks pass. Live settings still come from `reflex_mount()`. The stub looks like:
-
-```python
-import reflex as rx
-
-config = rx.Config(
-    app_name='shop',
-    app_module_import='reflex_django.django_led_app',
-)
-```
-
-Treat it as documentation on disk, not the source of truth.
-
----
-
-## Common commands
-
-| Task | Command |
+| File | Responsibility |
 |:---|:---|
-| Dev server | `python manage.py run_reflex` |
-| Migrations | `python manage.py migrate` |
-| Superuser | `python manage.py createsuperuser` |
-| Shell | `python manage.py shell` |
+| `settings.py` | Django apps, middleware, database |
+| `urls.py` | `reflex_mount(...)` — Reflex ports + `app_name` |
+| `shop/views.py` | `@template` pages + `AppState` classes |
+| `manage.py run_reflex` | Dev server (Django + Reflex + WebSockets) |
 
-You can also use `uv run reflex django migrate` when the Reflex CLI is on your PATH; `manage.py` is the usual Django-first entry point.
+No hand-written `rxconfig.py` required. A stub may appear on first run; real config comes from `reflex_mount()`.
 
 ---
 
 ## Troubleshooting
 
-**Template picker / “Initializing …” on first run**
-
-reflex-django prepares `.web` and a stub `rxconfig.py` without running `reflex init`. If you still see prompts, ensure `reflex_django` is in `INSTALLED_APPS` and `reflex_mount()` is in `urls.py`, then restart `run_reflex`.
-
-**Guest user after admin login**
-
-Confirm `AuthenticationMiddleware` and `SessionMiddleware` are enabled. The event bridge is on by default via `ReflexDjangoPlugin`.
-
-**`ModuleNotFoundError: shop.shop`**
-
-Do not create `shop/shop.py`. Set `app_name="shop"` on `reflex_mount()` and use `reflex_django.django_led_app` (handled automatically).
+| Problem | Fix |
+|:---|:---|
+| Template picker on first run | Ensure `reflex_django` in `INSTALLED_APPS` and `reflex_mount()` in `urls.py`; restart `run_reflex` |
+| Guest after admin login | Keep `SessionMiddleware` + `AuthenticationMiddleware` |
+| `ModuleNotFoundError: shop.shop` | Do not add `shop/shop.py`; use `app_name="shop"` on `reflex_mount()` |
+| Admin warnings in console | Add `AsyncStreamingMiddleware` at end of `MIDDLEWARE` |
 
 ---
 
-**Navigation:** [← Configuration](configuration.md) | [Next: Existing Django Project →](existing_django_project.md)
+**Navigation:** [← Configuration](configuration.md) | [AsyncStreamingMiddleware →](async_streaming_middleware.md) | [Existing Django Project →](existing_django_project.md)

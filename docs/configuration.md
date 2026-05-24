@@ -130,7 +130,7 @@ In production, always set `DJANGO_SETTINGS_MODULE` explicitly.
 
 ## Middleware
 
-Add streaming middleware at the end of `MIDDLEWARE` when not using default settings:
+Add streaming middleware at the **end** of `MIDDLEWARE` when not using default settings:
 
 ```python
 MIDDLEWARE = [
@@ -138,6 +138,8 @@ MIDDLEWARE = [
     "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
 ]
 ```
+
+Why it matters under ASGI (`run_reflex`): [AsyncStreamingMiddleware](async_streaming_middleware.md).
 
 ---
 
