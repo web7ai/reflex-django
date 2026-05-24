@@ -29,6 +29,7 @@ def fake_django_app() -> Any:
 def _patch_get_asgi_application(monkeypatch: pytest.MonkeyPatch, app: Any) -> None:
     """Stub Django's ``get_asgi_application`` and ``configure_django``."""
     monkeypatch.setattr(asgi_module, "configure_django", lambda: "stub")
+    monkeypatch.setattr(asgi_module, "bootstrap_django_led_runtime", lambda: None)
     monkeypatch.setattr("django.core.asgi.get_asgi_application", lambda: app)
 
 
@@ -37,7 +38,10 @@ def test_build_django_asgi_wraps_with_static_handler_when_enabled(
 ) -> None:
     """``django.contrib.staticfiles`` in INSTALLED_APPS → wrap with handler."""
     _patch_get_asgi_application(monkeypatch, fake_django_app)
-    fake_settings = mock.Mock(INSTALLED_APPS=["django.contrib.staticfiles"])
+    fake_settings = mock.Mock(
+        INSTALLED_APPS=["django.contrib.staticfiles"],
+        REFLEX_DJANGO_PLUGIN={},
+    )
     monkeypatch.setattr("django.conf.settings", fake_settings)
 
     handler_class = mock.Mock(name="ASGIStaticFilesHandler")
@@ -57,7 +61,7 @@ def test_build_django_asgi_returns_bare_app_when_staticfiles_disabled(
 ) -> None:
     """Without staticfiles installed, return the raw ASGI app unwrapped."""
     _patch_get_asgi_application(monkeypatch, fake_django_app)
-    fake_settings = mock.Mock(INSTALLED_APPS=["django.contrib.auth"])
+    fake_settings = mock.Mock(INSTALLED_APPS=["django.contrib.auth"], REFLEX_DJANGO_PLUGIN={})
     monkeypatch.setattr("django.conf.settings", fake_settings)
 
     handler_class = mock.Mock(name="ASGIStaticFilesHandler")
@@ -86,7 +90,11 @@ def test_build_django_asgi_calls_configure_first(
         return fake_django_app
 
     monkeypatch.setattr("django.core.asgi.get_asgi_application", _get_asgi)
-    monkeypatch.setattr("django.conf.settings", mock.Mock(INSTALLED_APPS=[]))
+    monkeypatch.setattr(
+        "django.conf.settings",
+        mock.Mock(INSTALLED_APPS=[], REFLEX_DJANGO_PLUGIN={}),
+    )
+    monkeypatch.setattr(asgi_module, "bootstrap_django_led_runtime", lambda: None)
 
     asgi_module.build_django_asgi()
 

@@ -5,7 +5,91 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-24
+
+### Fixed
+
+- ``reflex_mount()`` no longer catches bare backend prefixes (e.g. ``/admin`` without a
+  trailing slash), so Django admin and ``APPEND_SLASH`` redirects work correctly.
+- Vite dev proxy rules are written to ``.web/vite.config.js`` in ``post_compile`` when
+  missing (fixes ``/admin`` 404 on the frontend port after ``reflex export``).
+- WebSocket proxy for ``/_event`` (``ws: true``) and ``env.json`` URLs rewritten to the
+  frontend port in ``django_led`` mode (fixes Socket.IO errors when the app runs on port 3000).
+- Vite proxy is re-applied automatically after every Reflex compile (compile was overwriting
+  ``vite.config.js`` and silenced ``from reflex import prerequisites`` prevented patching).
+
+### Added
+
+- **Django-led URL routing** (``REFLEX_DJANGO_URL_ROUTING = "django_led"``): backend prefixes
+  (admin, API, static) go to Django; all other HTTP paths go to Reflex (SPA catch-all).
+- :func:`reflex_django.urls.reflex_mount` catch-all urlpattern and
+  :class:`reflex_django.views.mount.ReflexMountView`.
+- ``reflex_mount(plugins=..., rx_config=..., django_plugin=...)`` registers Reflex
+  ``rx.Config`` from ``urls.py``; :class:`~reflex_django.ReflexDjangoPlugin` is always
+  appended automatically.
+
+### Removed
+
+- ``REFLEX_DJANGO_APP_FACTORY`` — use the built-in :func:`reflex_django.create_app` or
+  edit ``{APP_NAME}/{APP_NAME}.py`` for a custom ``rx.App``.
+- ``reflex_mount(admin_prefix=...)``, ``api_prefix=...``, and ``include_admin`` —
+  wire Django routes in ``urlpatterns`` and list prefixes in ``django_prefix``; optional
+  :func:`reflex_django.urls.admin_urlpatterns` for admin.
+- :mod:`reflex_django.app_factory` — built-in :func:`reflex_django.create_app` and
+  ``REFLEX_DJANGO_PAGE_PACKAGES`` for Django-first page registration.
+- Optional :func:`reflex_django.decorators.reflex_page` / ``reflex_template`` with
+  ``PAGE_REGISTRY``.
+- Documentation: [django_urls.md](docs/django_urls.md).
+
 ## [Unreleased]
+
+### Fixed
+
+- Django-first projects: bootstrap Reflex integration from :func:`configure_django` so
+  Granian/Uvicorn reload workers attach ``ReflexDjangoPlugin`` (fixes ``/admin`` 404 on
+  port 8000 when using ``python manage.py run_reflex``).
+
+### Changed
+
+- :func:`reflex_django.urls.reflex_mount` now registers admin routes and resolves
+  ``mount_prefix`` / ``django_prefix``; admin and API prefixes from settings like
+  :class:`reflex_django.ReflexDjangoPlugin` (kwargs → env → settings → defaults).
+  Returns a list of URL patterns; use ``urlpatterns = reflex_mount(...)`` or
+  ``*reflex_mount()`` before other routes.
+
+### Added
+
+- :func:`reflex_django.rxconfig_bridge.ensure_rxconfig_from_django` — load Reflex
+  ``Config`` from Django settings / ASGI (no ``rxconfig.py`` on disk by default).
+- Auto-discovery of ``@template`` / ``@page`` modules: imports ``{app}.views`` for
+  each project app in ``INSTALLED_APPS`` (no ``urls.py`` imports required).
+- Django-first mode uses :mod:`reflex_django.django_led_app` instead of writing
+  ``{APP_NAME}/{APP_NAME}.py`` (removed ``ensure_app_module_file`` materialization).
+- :mod:`reflex_django.prefixes` — shared prefix resolution for the plugin and
+  ``reflex_mount``.
+- Built-in :func:`reflex_django.template` layout decorator and ``from reflex_django import template, page``.
+- Built-in :func:`reflex_django.create_app` — no custom factory setting; pages default to ``{APP_NAME}.views`` auto-discovery.
+- Documentation: [pages_in_views.md](docs/pages_in_views.md).
+
+- **Dual-mode integration**: Reflex-first projects (``rxconfig.py`` + ``reflex run``) and
+  Django-first projects (``settings.py`` + ``python manage.py run_reflex``).
+- ``python manage.py run_reflex`` management command (requires ``reflex_django`` in
+  ``INSTALLED_APPS``).
+- Automatic ``DJANGO_SETTINGS_MODULE`` discovery from the nearest ``manage.py``.
+- Django-driven Reflex configuration via ``reflex_mount(app_name=..., rx_config={...})``
+  in ``urls.py`` (optional override of ``rxconfig.py`` in Django-first mode).
+- Auto-injection of ``ReflexDjangoPlugin`` when ``reflex_django`` is installed and
+  Django-first mode is detected.
+- Auto-materialization of a minimal ``rxconfig.py`` stub in Django-first mode when
+  the file is missing (Reflex's CLI requires it on disk).
+
+### Changed
+
+- ``ReflexDjangoPlugin(settings_module=...)`` is deprecated; use ``manage.py`` or
+  ``DJANGO_SETTINGS_MODULE`` instead.
+- Plugin path prefixes can be set in Django settings
+  (``REFLEX_DJANGO_API_PREFIX``, ``REFLEX_DJANGO_ADMIN_PREFIX``,
+  ``REFLEX_DJANGO_EXTRA_PREFIXES``).
 
 ### Fixed
 

@@ -37,8 +37,10 @@ def configure_django(settings_module: str | None = None) -> str:
        it (typical for production deployments where the user owns
        ``manage.py`` / ``asgi.py``). ``settings_module`` is ignored in this
        case.
-    2. Else, if ``settings_module`` is provided by the caller, use it.
-    3. Else, fall back to :mod:`reflex_django.default_settings`.
+    2. Else, discover from the nearest ``manage.py`` via
+       :func:`reflex_django.project.discover_settings_module`.
+    3. Else, if ``settings_module`` is provided by the caller, use it.
+    4. Else, fall back to :mod:`reflex_django.default_settings`.
 
     Args:
         settings_module: Optional dotted path to a Django settings module.
@@ -50,8 +52,11 @@ def configure_django(settings_module: str | None = None) -> str:
 
     with _SETUP_LOCK:
         if not _settings_already_set():
+            from reflex_django.project import discover_settings_module
+
+            discovered = discover_settings_module()
             os.environ["DJANGO_SETTINGS_MODULE"] = (
-                settings_module or _DEFAULT_SETTINGS_MODULE
+                discovered or settings_module or _DEFAULT_SETTINGS_MODULE
             )
 
         active = os.environ["DJANGO_SETTINGS_MODULE"]
@@ -79,7 +84,25 @@ def configure_django(settings_module: str | None = None) -> str:
 
         django.setup()
         _SETUP_DONE = True
+        _bootstrap_reflex_integration_for_django_mode()
         return active
+
+
+def _bootstrap_reflex_integration_for_django_mode() -> None:
+    """Ensure Reflex config/plugins load in Granian/Uvicorn worker processes.
+
+    ``manage.py run_reflex`` calls :func:`~reflex_django.integration.install_reflex_django_integration`
+    in the parent process, but Granian reload workers re-import the app module with a
+    fresh interpreter and only run :func:`configure_django` (via ``create_app``). Without
+    this hook, ``ReflexDjangoPlugin.post_compile`` never runs and ``/admin`` is handled by
+    Reflex (404) instead of Django.
+    """
+    try:
+        from reflex_django.integration import install_reflex_django_integration
+
+        install_reflex_django_integration()
+    except Exception:
+        pass
 
 
 def is_configured() -> bool:

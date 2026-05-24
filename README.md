@@ -25,7 +25,7 @@
 
 ---
 
-`reflex-django` is a [Reflex](https://reflex.dev) plugin that boots your **Django ASGI** app and your **Reflex** app side-by-side in a single process under `reflex run`. HTTP paths like `/admin`, `/api`, and `/static` go straight to Django. Everything else — the Reflex SPA and the live WebSocket event channel — stays on Reflex.
+`reflex-django` is a **Django-first** bridge to [Reflex](https://reflex.dev): configure Reflex in **`urls.py`** via `reflex_mount()`, define pages in **`{app}/views.py`**, and run **`python manage.py run_reflex`**. Django serves `/admin`, `/api`, and static paths; Reflex serves the SPA and WebSocket events — one ASGI process.
 
 ---
 
@@ -33,14 +33,14 @@
 ## Table of Contents
 
 1. [Why reflex-django?](#why-reflex-django)
-2. [Quick Install](#quick-install)
-3. [Django Settings Configuration](#django-settings-configuration)
-4. [Wire it into rxconfig.py](#wire-it-into-rxconfigpy)
-5. [Accessing the Logged-In User with AppState](#accessing-the-logged-in-user-with-appstate)
-6. [Simple CRUD Without Mixins](#simple-crud-without-mixins)
-7. [Architecture Overview](#architecture-overview)
+2. [Quick start](#quick-start)
+3. [Configure with `reflex_mount()`](#configure-with-reflex_mount)
+4. [Pages in `views.py`](#pages-in-viewspy)
+5. [Accessing the logged-in user with AppState](#accessing-the-logged-in-user-with-appstate)
+6. [Simple CRUD without mixins](#simple-crud-without-mixins)
+7. [Architecture overview](#architecture-overview)
 8. [Commands](#commands)
-9. [What's Next?](#whats-next)
+9. [Documentation](#documentation)
 
 ---
 
@@ -62,28 +62,24 @@ You get Django's full ORM, Admin, auth, and migrations — plus Reflex's reactiv
 
 ---
 
-## Quick Install
+## Quick start
 
 ```bash
-# 1. Create a project and add dependencies
-uv init
-uv add reflex reflex-django
-
-# 2. Scaffold the Reflex frontend
-uv run reflex init frontend
-
-# 3. Create a Django project
-uv run django-admin startproject backend .
-
-# 4. Run!
-uv run reflex run
+uv init && uv add django reflex reflex-django
+uv run django-admin startproject config .
+uv run python manage.py startapp shop
+# Add reflex_mount() to config/urls.py and pages to shop/views.py (see docs)
+uv run python manage.py migrate
+uv run python manage.py run_reflex
 ```
+
+Full tutorial: [Quickstart](https://mohannadirshedat.github.io/reflex-django/quickstart/).
 
 ---
 
-## Django Settings Configuration
+## Django settings
 
-Open `backend/settings.py` and make sure the following are configured. These are the **minimum settings** needed for `reflex-django` to work correctly.
+Open `config/settings.py` and configure the minimum required settings.
 
 ```python
 # backend/settings.py
@@ -138,36 +134,48 @@ REFLEX_DJANGO_AUTH = {
 }
 ```
 
-> **Tip:** Run migrations after updating `INSTALLED_APPS`:
-> ```bash
-> uv run reflex django migrate
-> ```
+> **Tip:** `python manage.py migrate` after updating `INSTALLED_APPS`.
 
 ---
 
-## Wire it into rxconfig.py
+## Configure with `reflex_mount()`
 
-Tell Reflex where your Django settings live by passing `settings_module` to `ReflexDjangoPlugin`:
+Reflex ports, app name, and URL prefixes are set in **`urls.py`** (not `settings.py`):
 
 ```python
-# rxconfig.py
-import reflex as rx
-from reflex_django import ReflexDjangoPlugin
+# config/urls.py
+from django.contrib import admin
+from django.urls import path
+from reflex_django.urls import reflex_mount
 
-config = rx.Config(
-    app_name="frontend",
-    plugins=[
-        ReflexDjangoPlugin(
-            settings_module="backend.settings",
-            # Route these HTTP paths to Django:
-            admin_prefix="/admin",       # Django Admin (default)
-            backend_prefix="/api",       # Your REST/HTTP views (optional)
-        ),
-    ],
-)
+urlpatterns = [path("admin/", admin.site.urls)]
+
+urlpatterns += [
+    reflex_mount(
+        app_name="shop",
+        django_prefix=("/admin", "/api"),
+        rx_config={"frontend_port": 3000, "backend_port": 8000},
+    ),
+]
 ```
 
-That's it. `reflex run` now boots both frameworks together.
+`ReflexDjangoPlugin` is enabled automatically. Reflex loads the app from `reflex_django.django_led_app` — you do **not** create `shop/shop.py`.
+
+---
+
+## Pages in `views.py`
+
+```python
+# shop/views.py
+import reflex as rx
+from reflex_django import template
+
+@template(route="/", title="Home")
+def index() -> rx.Component:
+    return rx.text("Hello from shop/views.py")
+```
+
+See [Pages in views.py](https://mohannadirshedat.github.io/reflex-django/pages_in_views/).
 
 ---
 
@@ -489,37 +497,28 @@ Browser
 
 ### The three things the plugin does
 
-1. **Plugin bootstrap** — Sets `DJANGO_SETTINGS_MODULE` and calls `django.setup()` before any models are imported.
-2. **HTTP path dispatcher** — Routes matching path prefixes (`/admin`, `/api`, etc.) to Django ASGI; everything else stays on Reflex.
-3. **Per-event bridge** — On every WebSocket event, rebuilds a synthetic `HttpRequest`, loads the session, and resolves `request.user`.
+1. **`reflex_mount()`** — Registers Reflex config when `urls.py` loads; `get_config()` reads mount data.
+2. **`django_led_app`** — Builds `rx.App`, imports `{app}/views.py`, applies `@template` pages.
+3. **HTTP dispatcher** — `django_prefix` paths → Django; SPA + WebSockets → Reflex.
+4. **Event bridge** — Synthetic `HttpRequest` per WebSocket event with session and `request.user`.
 
 ---
 
 ## Commands
 
-Use `reflex django` (or the standalone `reflex-django`) to run Django management commands with the same settings Reflex uses at runtime:
-
 ```bash
-# Database migrations
-uv run reflex django migrate
-uv run reflex django makemigrations
-
-# Admin user
-uv run reflex django createsuperuser
-
-# Interactive shell
-uv run reflex django shell
-
-# Static files
-uv run reflex django collectstatic
-
-# Any other management command
-uv run reflex django <command> [options]
+python manage.py run_reflex       # unified dev server (preferred)
+python manage.py migrate
+python manage.py createsuperuser
 ```
+
+Configure Reflex in **`urls.py`** via `reflex_mount()` — see [configuration](docs/configuration.md).
+
+Optional: `uv run reflex django migrate` when using the Reflex CLI entry point.
 
 ---
 
-## What's Next?
+## Documentation
 
 | Topic | Link |
 |-------|------|

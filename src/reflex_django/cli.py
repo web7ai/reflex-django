@@ -16,6 +16,7 @@ from typing import ClassVar
 import click
 
 from reflex_django.conf import configure_django
+from reflex_django.integration import install_reflex_django_integration
 
 
 def _load_rxconfig() -> None:
@@ -46,6 +47,7 @@ def _execute(argv: list[str], prog_name: str) -> None:
         argv: Arguments to forward (e.g. ``["migrate", "--fake-initial"]``).
         prog_name: Name to display in Django help text and error output.
     """
+    install_reflex_django_integration()
     _load_rxconfig()
     configure_django()
     from django.core.management import execute_from_command_line

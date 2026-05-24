@@ -8,29 +8,28 @@ This document details the single-process ASGI dispatch model, the event bridge p
 
 ## The Three Architecture Pillars
 
-The integration relies on three core phases to manage your application lifecycle:
-
 ```mermaid
 flowchart LR
     subgraph pillar1["Pillar 1: Bootstrapping"]
-        A["rxconfig.py loads"] --> B["ReflexDjangoPlugin initializes"]
-        B --> C["configure_django() executes"]
+        A["urls.py imports reflex_mount"] --> B["register_mount_rx_config"]
+        B --> C["configure_django + patch get_config"]
+        C --> D["django_led_app loads pages"]
     end
     
     subgraph pillar2["Pillar 2: HTTP Dispatcher"]
-        D["ASGI Server starts"] --> E["make_dispatcher() builds router"]
-        E --> F["API Transformer matches path prefixes"]
+        E["ASGI Server"] --> F["make_dispatcher"]
+        F --> G["django_prefix → Django; else → Reflex"]
     end
     
     subgraph pillar3["Pillar 3: Event Bridge"]
-        G["WebSocket event arrives"] --> H["DjangoEventBridge intercepts"]
-        H --> I["Synthetic HttpRequest loaded with Auth"]
+        H["WebSocket /_event"] --> I["DjangoEventBridge"]
+        I --> J["self.request.user in State"]
     end
 ```
 
-1. **Plugin Bootstrap (Initialization)**: When you invoke `reflex run` or `reflex django`, the Reflex compiler evaluates `rxconfig.py` first. The plugin instantly captures this call, sets the `DJANGO_SETTINGS_MODULE` environment variable, and runs `django.setup()`. This ensures all models and app configurations are fully ready *before* any frontend state definitions are imported.
-2. **HTTP Dispatch Bridge (Routing)**: The outer ASGI server runs a path-prefix dispatcher. Requests matching your configured prefixes (like `/admin`, `/api`, or `/static`) are routed directly to Django ASGI, while all other paths are routed to Reflex.
-3. **Event Bridge (Authentication Context)**: Client-side reactive events are delivered to Reflex over a persistent WebSocket connection. The `DjangoEventBridge` interceptor builds a mock `HttpRequest` out of the socket headers and session cookies, allowing you to access Django authentication context variables inside reactive events.
+1. **Bootstrap**: Importing `ROOT_URLCONF` runs `reflex_mount()`, which registers Reflex `rx.Config`. `install_reflex_django_integration()` patches `get_config()`, calls `configure_django()`, imports `{app}.views`, and builds `rx.App` via `reflex_django.django_led_app`.
+2. **HTTP dispatcher**: `make_dispatcher()` routes paths in `django_prefix` to Django ASGI; everything else (except Reflex reserved paths) goes to the Reflex SPA.
+3. **Event bridge**: `DjangoEventBridge` builds a synthetic `HttpRequest` per WebSocket event so session and `request.user` match Django.
 
 ---
 
@@ -93,7 +92,7 @@ Check Connection Scope (scope["type"])
          ├──► Matches admin_prefix (e.g., /admin)  ─────────┐
          ├──► Matches backend_prefix (e.g., /api)  ─────────┼─► Routed to Django ASGI
          ├──► Matches STATIC_URL (e.g., /static)   ─────────┤   (Full Django Middleware runs)
-         ├──► Matches custom extra_prefixes        ─────────┘
+         ├──► Matches custom django_prefix         ─────────┘
          │
          └──► Default (No Prefix Matches)  ─────────────────► Routed to Reflex ASGI
                                                               (SPA page, dynamic views)

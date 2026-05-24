@@ -24,7 +24,10 @@ from typing import TYPE_CHECKING, Any
 from reflex_django.asgi import build_django_asgi, make_dispatcher
 from reflex_django.cli import django_cli
 from reflex_django.conf import configure_django
+from reflex_django.app_factory import create_app
+from reflex_django.decorators import reflex_page as page
 from reflex_django.plugin import ReflexDjangoPlugin
+from reflex_django.ui.template import template
 
 if TYPE_CHECKING:
     from reflex_django.admin import register as register_admin
@@ -104,6 +107,7 @@ __all__ = [
     "builtin_user_context",
     "collect_reflex_context",
     "configure_django",
+    "create_app",
     "current_language",
     "current_request",
     "current_session",
@@ -112,7 +116,9 @@ __all__ = [
     "get_auth_settings",
     "end_event_request",
     "make_dispatcher",
+    "page",
     "register_admin",
+    "template",
     "login_required",
     "permission_required",
     "request",

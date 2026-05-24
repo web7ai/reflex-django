@@ -1,139 +1,174 @@
 # Configuration
 
-This guide provides a comprehensive reference for all configuration options available in **reflex-django**. It covers arguments for the `ReflexDjangoPlugin` initialization and custom `REFLEX_DJANGO_*` Django settings.
+reflex-django is **Django-first**. Reflex settings are registered through **`reflex_mount()`** in your root `urls.py`. Django settings control pages, auth, and optional overrides.
 
 ---
 
-## The `ReflexDjangoPlugin`
-
-The plugin is registered inside your Reflex configuration file (`rxconfig.py`). It accepts several parameters that control how requests are dispatched and how backend resources are wired.
+## Primary configuration: `reflex_mount()`
 
 ```python
-# rxconfig.py
-from reflex_django import ReflexDjangoPlugin
+# project/urls.py
+from django.contrib import admin
+from django.urls import include, path
+from reflex_django.urls import reflex_mount
 
-config = rx.Config(
-    app_name="frontend",
-    plugins=[
-        ReflexDjangoPlugin(
-            settings_module="backend.settings",
-            backend_prefix="/api",
-            admin_prefix="/admin",
-            extra_prefixes=("/webhooks", "/docs"),
-            install_event_bridge=True,
-            install_auth_pages=False,
-        )
-    ]
-)
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/", include("myapp.api_urls")),
+]
+
+urlpatterns += [
+    reflex_mount(
+        app_name="myapp",
+        mount_prefix="/",
+        django_prefix=("/admin", "/api"),
+        plugins=[MyAnalyticsPlugin()],
+        rx_config={
+            "frontend_port": 3000,
+            "backend_port": 8000,
+            "db_url": "sqlite:///db.sqlite3",
+        },
+        django_plugin={
+            "install_event_bridge": True,
+        },
+    ),
+]
 ```
 
-### Parameter Reference
+### `reflex_mount()` parameters
 
-| Parameter | Type | Default | Description |
-|:---|:---|:---|:---|
-| **`settings_module`** | `str` | `None` | Dotted path to your Django settings file (e.g., `"backend.settings"`). Used to set the `DJANGO_SETTINGS_MODULE` environment variable and trigger Django's setup routine. |
-| **`backend_prefix`** | `str` | `""` | The HTTP path prefix reserved for your custom Django routes (like APIs or standard views). When specified, sets the `REFLEX_DJANGO_API_PREFIX` env variable. |
-| **`admin_prefix`** | `str` | `"/admin"` | The prefix under which the standard Django Admin panel is served. Sets the `REFLEX_DJANGO_ADMIN_PREFIX` env variable. |
-| **`extra_prefixes`** | `tuple[str]` | `()` | A tuple of extra path prefixes that should be forwarded directly to the Django ASGI handler instead of Reflex (e.g., webhooks, OAuth callbacks, etc.). |
-| **`install_event_bridge`** | `bool` | `True` | Automatically installs the `DjangoEventBridge` middleware. This middleware binds session and `request.user` details to active WebSocket event states. |
-| **`install_auth_pages`** | `bool` | `False` | Automatically triggers `reflex_django.auth.autoload()`. Typically, you should leave this as `False` and explicitly call `add_auth_pages(app)` in your app file for better control. |
+| Parameter | Default | Description |
+|:---|:---|:---|
+| **`app_name`** | Project folder name (`manage.py` parent, `-` → `_`) | Django/Reflex app label; pages live in `{app_name}/views.py` |
+| **`mount_prefix`** | `"/"` | URL prefix for the SPA catch-all |
+| **`django_prefix`** | `()` | Path prefixes owned by Django (`/admin`, `/api`, …). Must match real `path()` entries **above** `reflex_mount` |
+| **`plugins`** | `()` | Extra Reflex plugins. **`ReflexDjangoPlugin` is added automatically** — do not pass it here |
+| **`rx_config`** | `{}` | Allowed `rx.Config` keys: ports, `db_url`, `cors_allowed_origins`, etc. |
+| **`django_plugin`** | `{}` | Keyword args merged into `ReflexDjangoPlugin` (also merged with `REFLEX_DJANGO_PLUGIN` in settings) |
 
----
+### Allowed `rx_config` keys
 
-## Django Settings (`REFLEX_DJANGO_*`)
-
-You can declare these variables directly inside your custom Django `settings.py` file to control the integration's behavior.
-
-| Setting | Type | Default | Description |
-|:---|:---|:---|:---|
-| **`REFLEX_DJANGO_AUTO_SETTINGS`** | `bool` | `True` (default settings) | Set this to `False` in your production settings file to suppress automated configuration fallback warnings. |
-| **`REFLEX_DJANGO_ADMIN_PREFIX`** | `str` | `"/admin"` | The mount point of the Django Admin panel. Synced with the plugin's environment variable. |
-| **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** | `tuple[str]` | `()` | A list of dotted paths to callables (`(request) -> dict`) that generate context data. Merged results are exposed on `self.request` for active events. Returns must be **JSON-serializable**. |
-| **`REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS`** | `bool` | `True` | If `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty, this parses your template engine configuration (`TEMPLATES`) and executes their context processors (applying sanitization). |
-| **`REFLEX_DJANGO_LOGIN_URL`** | `str` | `"/login"` | The default URL to redirect anonymous users to when they hit handlers wrapped with `@login_required`. |
-| **`REFLEX_DJANGO_AUTH`** | `dict` | *See Authentication* | Configures standard credentials, custom messaging, and routes for pre-built authentication page views. |
-| **`REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS`** | `bool` | `False` | Includes group membership names in the JSON user snapshot (triggers a database query). |
-| **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** | `bool` | `True` | Automatically refreshes all active `AppState` snapshot variables on every WebSocket event. |
-| **`REFLEX_DJANGO_I18N_EVENT_BRIDGE`** | `bool` | `True` | Runs language code negotiation based on standard request headers during active WebSocket event pipelines. |
+Ports, database URL, CORS, log level, state manager mode, and other keys listed in `reflex_django.rxconfig_bridge.ALLOWED_RX_CONFIG_KEYS`. You cannot set `plugins` inside `rx_config` — use the `plugins=` argument on `reflex_mount()`.
 
 ---
 
-## Configuration Resolution Order
+## `app_name` vs `app_module_import`
 
-When you start your server or run management commands, `reflex-django` boots Django using a structured resolution order:
+| Concept | Value | Purpose |
+|:---|:---|:---|
+| **`app_name`** | e.g. `"demo"` | Label for your Django app; drives page discovery (`demo/views.py`) |
+| **`app_module_import`** | `reflex_django.django_led_app` (automatic) | Where Reflex imports `app` |
+
+Reflex normally loads `from demo.demo import app`. reflex-django sets `app_module_import` so Reflex uses the built-in factory instead. You never maintain `demo/demo.py`.
+
+---
+
+## Django settings (`REFLEX_DJANGO_*`)
+
+| Setting | Default | Description |
+|:---|:---|:---|
+| **`REFLEX_DJANGO_URL_ROUTING`** | `"django_led"` | `"django_led"` (Django prefixes + SPA catch-all) or `"reflex_led"` |
+| **`REFLEX_DJANGO_USE_RXCONFIG_FILE`** | `False` | When `True`, merge an on-disk `rxconfig.py` into runtime config |
+| **`REFLEX_DJANGO_MATERIALIZE_RXCONFIG`** | `False` | When `True`, write/update stub `rxconfig.py` on demand |
+| **`REFLEX_DJANGO_PLUGIN`** | `{}` | Extra `ReflexDjangoPlugin` keyword arguments |
+| **`REFLEX_DJANGO_AUTO_PLUGIN`** | `True` | Deprecated; plugin is always enabled |
+| **`REFLEX_DJANGO_PAGE_PACKAGES`** | `[]` | Explicit page modules; non-empty disables auto-discovery |
+| **`REFLEX_DJANGO_AUTO_DISCOVER_PAGES`** | `True` | Import `{app}.views` for each `INSTALLED_APPS` entry |
+| **`REFLEX_DJANGO_PAGE_APPS`** | `None` | Allowlist of app labels to scan |
+| **`REFLEX_DJANGO_PAGE_MODULE`** | `"views"` | Submodule to import per app |
+| **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** | `()` | Extra context callables for Reflex events (JSON-serializable) |
+| **`REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS`** | `True` | Use Django template context processors when the list above is empty |
+| **`REFLEX_DJANGO_LOGIN_URL`** | `"/login"` | Redirect for `@login_required` |
+| **`REFLEX_DJANGO_AUTH`** | *(see [Authentication](authentication.md))* | Built-in auth pages configuration |
+| **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** | `True` | Refresh `AppState` user snapshot on each event |
+| **`REFLEX_DJANGO_I18N_EVENT_BRIDGE`** | `True` | Language negotiation on WebSocket events |
+
+`REFLEX_DJANGO_APP_NAME` and `REFLEX_DJANGO_RX_CONFIG` are **removed** — use `reflex_mount(app_name=..., rx_config={...})` instead.
+
+---
+
+## `rxconfig.py` on disk
+
+| Situation | Behavior |
+|:---|:---|
+| No file | Config built only from `reflex_mount()` |
+| Auto stub (reflex-django marker in file) | Updated to match `app_name` + `django_led_app`; **not** used as live config unless `REFLEX_DJANGO_USE_RXCONFIG_FILE=True` |
+| Your own full `rxconfig.py` | Set `REFLEX_DJANGO_USE_RXCONFIG_FILE=True` to merge it |
+
+`run_reflex` creates or refreshes the stub when missing so Reflex’s CLI layout checks pass.
+
+---
+
+## `ReflexDjangoPlugin`
+
+Registered automatically by reflex-django. You rarely instantiate it yourself. When you pass `django_plugin={...}` on `reflex_mount()`, those kwargs are merged with `REFLEX_DJANGO_PLUGIN`.
+
+| Parameter | Default | Description |
+|:---|:---|:---|
+| **`settings_module`** | *(deprecated)* | Use `manage.py` / `DJANGO_SETTINGS_MODULE` |
+| **`backend_prefix`** | `""` | Legacy; prefer `django_prefix` on `reflex_mount()` |
+| **`admin_prefix`** | `"/admin"` | Legacy admin prefix hint |
+| **`django_prefix`** | `()` | Merged from `reflex_mount(django_prefix=...)` |
+| **`install_event_bridge`** | `True` | Session/user bridge for WebSocket events |
+| **`install_auth_pages`** | `False` | Auto-register auth pages (prefer explicit `add_auth_pages`) |
+
+---
+
+## Django settings module resolution
 
 ```text
-[1] Is the environment variable DJANGO_SETTINGS_MODULE already set?
-    ├── YES --> Initialize Django using that path (Plugin settings_module parameter is IGNORED).
-    └── NO  --> [2] Is the settings_module parameter defined in ReflexDjangoPlugin?
-                ├── YES --> Set DJANGO_SETTINGS_MODULE to this value and boot.
-                └── NO  --> [3] Fall back to the built-in development settings module.
+[1] DJANGO_SETTINGS_MODULE already set (manage.py, env, deployment)?
+    └── YES → use it
+[2] Parse nearest manage.py
+    └── found → use it
+[3] reflex_django.default_settings (dev fallback only)
 ```
 
-> [!TIP]
-> **Docker & Production Best Practice:** In production containers or systemd units, always set the environment variable `DJANGO_SETTINGS_MODULE` explicitly to avoid differences between your runtime environments.
+In production, always set `DJANGO_SETTINGS_MODULE` explicitly.
 
 ---
 
-## Async Streaming Middleware
+## Middleware
 
-If you are using Django to serve streaming responses (such as standard admin static files or media downloads), the ASGI server might emit warnings regarding synchronous operations. 
-
-To solve this, `reflex-django` includes a custom middleware class: **`AsyncStreamingMiddleware`**.
-
-### For Hand-Rolled Settings
-If you do not import `reflex_django.default_settings.MIDDLEWARE` in your settings, add this class manually at the end of your middleware stack:
+Add streaming middleware at the end of `MIDDLEWARE` when not using default settings:
 
 ```python
-# settings.py
-
 MIDDLEWARE = [
-    # ... Standard Django Middlewares
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    
-    # Custom reflex-django streaming middleware
+    # ...
     "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
 ]
 ```
 
 ---
 
-## Public API Imports
-
-You can import all major components directly from the package root:
+## Minimal `settings.py` checklist
 
 ```python
-from reflex_django import (
-    ReflexDjangoPlugin,
-    configure_django,
-    current_user,
-    current_request,
-    AppState,
-    ModelState,
-    Model,
-    ReflexDjangoModelSerializer,
-    add_auth_pages,
-    login_required,
-)
+INSTALLED_APPS = [..., "reflex_django", "myapp"]
+ROOT_URLCONF = "config.urls"   # must import reflex_mount()
+# Session + auth middleware (standard stack)
+```
+
+```python
+# config/urls.py — reflex_mount last
+urlpatterns += [reflex_mount(app_name="myapp", rx_config={...})]
 ```
 
 ---
 
-## Common Pitfalls
+## Common pitfalls
 
-### Mount Mismatches
-* **Problem:** You set `backend_prefix="/api"` in `rxconfig.py`, but your Django URL patterns define routes under `/v1/`.
-* **Fix:** Ensure the prefix declared in your plugin matches the root paths mapped inside your main `urls.py` file:
-  ```python
-  # urls.py
-  urlpatterns = [
-      path("api/products/", products_view),  # /api matches backend_prefix
-  ]
-  ```
+**Prefix mismatch**
 
-### Circular Imports on Startup
-* **Problem:** Importing database models inside your page declaration files triggers `AppRegistryNotReady`.
-* **Fix:** Move model imports inside your state's event handlers or helper functions so they are evaluated after the Django configuration has successfully executed.
+`django_prefix=("/api",)` must match `path("api/", ...)` in the same `urls.py`. The ASGI dispatcher and catch-all regex both use this list.
+
+**Circular imports**
+
+Import Django models inside `@rx.event` methods, not at module top level in `views.py`, if you hit `AppRegistryNotReady`.
+
+**Wrong app module**
+
+Never point `app_name` at a non-existent package expecting `app_name/app_name.py`. Use `app_name` for the Django app with `views.py`; the loader is always `django_led_app`.
 
 ---
 

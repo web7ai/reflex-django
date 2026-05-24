@@ -45,7 +45,7 @@ Do these in order:
    )
    ```
 
-6. Align **`ROOT_URLCONF`** (and `urlpatterns`) with plugin prefixes: `backend_prefix`, `admin_prefix` (default `"/admin"`), and `extra_prefixes`. Mismatched prefixes are a frequent bug.
+6. Align **`ROOT_URLCONF`** (and `urlpatterns`) with plugin prefixes: `backend_prefix`, `admin_prefix` (default `"/admin"`), and `django_prefix`. Mismatched prefixes are a frequent bug.
 7. Run: `uv run reflex run`.
 
 ---
@@ -143,7 +143,7 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 | `settings_module` | Dotted path (e.g. `"backend.settings"`). Sets `DJANGO_SETTINGS_MODULE` via `setdefault` and runs `configure_django`. |
 | `backend_prefix` | Optional prefix for **your** Django HTTP routes (e.g. `"/api"`). Exported to env as `REFLEX_DJANGO_API_PREFIX` when non-empty. |
 | `admin_prefix` | Django admin mount (default `"/admin"`). Sets `REFLEX_DJANGO_ADMIN_PREFIX`. |
-| `extra_prefixes` | Additional path prefixes forwarded to Django. |
+| `django_prefix` | Additional path prefixes forwarded to Django. |
 | `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
 | `install_auth_pages` | Default `False`. When `True`, attempts `reflex_django.auth.autoload()` (prefer explicit `add_auth_pages(app)` in the app module). |
 
@@ -158,7 +158,7 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 | Setting | Meaning |
 |---------|---------|
 | `REFLEX_DJANGO_AUTO_SETTINGS` | `True` in bundled defaults; plugin **warns** that you should use your own settings + stable `SECRET_KEY` for production. |
-| `REFLEX_DJANGO_ADMIN_PREFIX` | Admin URL prefix; kept in sync with plugin env (`default_settings`, `urls.py`). |
+| `reflex_mount(admin_prefix=...)` | Admin URL prefix in ``urls.py`` (default ``/admin``); exported to env for workers. |
 | `REFLEX_DJANGO_CONTEXT_PROCESSORS` | Non-empty tuple of dotted callables `(request) -> dict` or async; used **exclusively** by `collect_reflex_context`. You must return **JSON-serializable** dicts. |
 | `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | When `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty and this is `True`, run `TEMPLATES[*].OPTIONS["context_processors"]` with sanitization (see `reflex_context.py`). |
 | `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `login_required` on event handlers when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |

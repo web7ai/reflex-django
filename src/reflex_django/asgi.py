@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
 from reflex_django.conf import configure_django
+from reflex_django.routing import UrlRoutingMode
 
 ASGIScope = MutableMapping[str, Any]
 ASGIMessage = MutableMapping[str, Any]
@@ -41,11 +42,30 @@ RESERVED_REFLEX_PREFIXES: tuple[str, ...] = (
 )
 
 
+def bootstrap_django_led_runtime() -> None:
+    """Load Reflex config, pages, and app factory for django_led mode (idempotent).
+
+    Called from :func:`build_django_asgi` so Django settings supply Reflex config
+    (no ``rxconfig.py`` on disk) and ``@template`` pages register without ``demo/demo.py``.
+    """
+    from reflex_django.routing import UrlRoutingMode, resolve_url_routing
+
+    if resolve_url_routing() != UrlRoutingMode.DJANGO_LED:
+        return
+
+    from reflex_django.app_factory import ensure_django_led_app_ready
+    from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+
+    ensure_rxconfig_from_django()
+    ensure_django_led_app_ready()
+
+
 def build_django_asgi() -> ASGIApp:
     """Return the Django ASGI application with staticfiles wrapping.
 
-    Calls :func:`configure_django` first so the caller does not need to manage
-    Django bootstrapping. When ``django.contrib.staticfiles`` is in
+    Calls :func:`configure_django` and :func:`bootstrap_django_led_runtime` first so
+    the caller does not need to manage Django bootstrapping. When
+    ``django.contrib.staticfiles`` is in
     ``INSTALLED_APPS``, wraps the app with
     :class:`django.contrib.staticfiles.handlers.ASGIStaticFilesHandler`, which
     serves files under ``STATIC_URL`` while ``DEBUG=True`` (admin CSS/JS,
@@ -62,6 +82,7 @@ def build_django_asgi() -> ASGIApp:
         The Django ASGI callable, optionally wrapped to serve static files.
     """
     configure_django()
+    bootstrap_django_led_runtime()
 
     from django.conf import settings
     from django.core.asgi import get_asgi_application
@@ -136,6 +157,14 @@ def _is_reserved_reflex_subpath(path: str, prefix: str) -> bool:
     return False
 
 
+def _is_reserved_reflex_path(path: str) -> bool:
+    """Return True when *path* targets a Reflex-internal endpoint."""
+    for reserved in RESERVED_REFLEX_PREFIXES:
+        if path == reserved or path.startswith(reserved + "/"):
+            return True
+    return False
+
+
 def _should_route_to_django(scope: ASGIScope, path: str, prefixes: tuple[str, ...]) -> bool:
     """Decide whether an ASGI scope should be forwarded to Django."""
     scope_type = scope.get("type")
@@ -186,6 +215,7 @@ def make_dispatcher(
     django_asgi: ASGIApp,
     *,
     backend_prefixes: tuple[str, ...],
+    routing_mode: UrlRoutingMode = UrlRoutingMode.REFLEX_LED,
 ) -> Callable[[ASGIApp], ASGIApp]:
     """Build an ``api_transformer`` that routes by URL path prefix.
 
@@ -194,6 +224,10 @@ def make_dispatcher(
         backend_prefixes: Path prefixes (e.g. ``("/api", "/admin")``) that
             should be served by Django. Prefixes that collide with Reflex's
             reserved endpoints raise :class:`ValueError`.
+        routing_mode: :attr:`UrlRoutingMode.REFLEX_LED` (default) or
+            :attr:`UrlRoutingMode.DJANGO_LED`. Both route ``backend_prefixes``
+            to Django and other paths to Reflex; ``django_led`` additionally
+            guarantees Reflex reserved paths never hit Django.
 
     Returns:
         A function ``transformer(reflex_asgi) -> ASGIApp`` that returns a
@@ -224,6 +258,17 @@ def make_dispatcher(
                 return
 
             path = scope.get("path", "")
+
+            if routing_mode == UrlRoutingMode.DJANGO_LED:
+                if _is_reserved_reflex_path(path):
+                    await reflex_asgi(scope, receive, send)
+                    return
+                if _should_route_to_django(scope, path, normalized):
+                    await django_asgi(scope, receive, send)
+                    return
+                await reflex_asgi(scope, receive, send)
+                return
+
             if _should_route_to_django(scope, path, normalized):
                 await django_asgi(scope, receive, send)
                 return
@@ -231,7 +276,9 @@ def make_dispatcher(
             await reflex_asgi(scope, receive, send)
 
         dispatch.backend_prefixes = normalized  # pyright: ignore[reportFunctionMemberAccess]
+        dispatch.routing_mode = routing_mode  # pyright: ignore[reportFunctionMemberAccess]
         return dispatch
 
     transformer.backend_prefixes = normalized  # pyright: ignore[reportFunctionMemberAccess]
+    transformer.routing_mode = routing_mode  # pyright: ignore[reportFunctionMemberAccess]
     return transformer

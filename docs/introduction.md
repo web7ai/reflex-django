@@ -1,100 +1,133 @@
 # Introduction
 
-Modern web development often forces developers to make a tough choice. You either build a traditional server-rendered application (like Django templates) which is incredibly secure and robust but feels static, or you build a decoupled Single Page Application (SPA) using a frontend framework (like React or Vue) which is highly dynamic but requires you to manage separate servers, configure complex CORS policies, duplicate authentication logic, and maintain a full web API.
+**reflex-django** connects [Django](https://www.djangoproject.com/) and [Reflex](https://reflex.dev) in a **single ASGI process**. You keep Django for the ORM, admin, sessions, migrations, and HTTP APIs. Reflex provides the reactive UI and WebSocket event channel. One dev command — `python manage.py run_reflex` — runs both.
 
-**reflex-django** is a first-class bridge designed to eliminate this compromise. It connects **Reflex** (a Python-first framework for building reactive user interfaces) with **Django** (the industry-standard batteries-included Python web framework) into a **single, unified ASGI process** that you manage using a single command line: `reflex run`.
+This package is **Django-first**: configuration lives in Django (`settings.py`, `urls.py`), not in a hand-maintained `rxconfig.py`. Reflex settings are declared on `reflex_mount()` in your root URLconf.
 
 ---
 
-## The Core Concept
+## The problem it solves
 
-Under the hood, `reflex-django` mounts the two frameworks side-by-side using an outermost ASGI path dispatcher. Django handles your database models (ORM), administrative dashboard, sessions, migrations, and static HTTP routes, while Reflex manages the dynamic user interface, WebSockets, and state-driven client events.
+Reflex sends UI updates over **WebSockets** (`/_event`), not through Django’s normal HTTP middleware stack. Without a bridge, `request.user`, sessions, and locale from Django are unavailable inside `@rx.event` handlers.
+
+**reflex-django** provides:
+
+1. **Unified ASGI routing** — Paths like `/admin`, `/api`, and `/static` go to Django; the SPA and WebSockets go to Reflex.
+2. **Event bridge** — On each WebSocket event, a synthetic `HttpRequest` is built from cookies and headers so `self.request.user` works in Reflex state.
+3. **Django-first project layout** — Pages in `{app}/views.py`, config in `reflex_mount()`, no `{app}/{app}.py` boilerplate.
+
+---
+
+## How the pieces fit together
 
 ```text
-               +-----------------------------------------+
-               |          Single ASGI Process            |
-               |                                         |
-               |              ASGI Dispatcher            |
-               |                     |                   |
-        +------+------+       +------+------+            |
-        |             |       |             |            |
-  Django Routes  Static Assets|       WebSocket Events   |
-  (e.g., /admin, /api)        |       (e.g., /_event)    |
-        |                     |             |            |
-        v                     v             v            |
-  Django Core            Static Handler  Reflex Engine   |
-  (ORM, Sessions)                             |          |
-        |                                     |          |
-        +---------> Event Bridge <------------+          |
-               (Syncs request.user and session)          |
-+--------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────┐
+│                    Single ASGI process                       │
+│                                                              │
+│   Browser HTTP  ──►  Path dispatcher                         │
+│                         ├─ /admin, /api, …  ──►  Django      │
+│                         └─ everything else  ──►  Reflex SPA  │
+│                                                              │
+│   Browser WS    ──►  Reflex /_event  ──►  DjangoEventBridge  │
+│                                              (session + user)  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## What reflex-django Is (and Is Not)
-
-To write clean and performant applications, it is essential to understand the boundaries of the framework:
-
-### What It Is:
-1. **A Unified Bootstrapper**: When Reflex loads `rxconfig.py`, the plugin calls `configure_django()` immediately. This ensures that Django is fully initialized and its applications, settings, and models are completely loaded before your Reflex code attempts to import them.
-2. **An HTTP Path-Prefix Dispatcher**: When web requests arrive at your ASGI server, `reflex-django` intercepts them. Selected paths (like `/admin`, `/api`, and `/static`) are seamlessly routed to Django's ASGI handler. All other requests are directed to the Reflex engine.
-3. **A State and Event Bridge**: On every reactive event sent from the browser to Reflex over WebSockets, the **`DjangoEventBridge`** middleware builds a lightweight, synthetic `HttpRequest` representing the active socket session. This makes the Django user object (`request.user`), active session variables, and query parameters safely accessible from your `@rx.event` handlers.
-
-### What It Is Not:
-* **A Merged URL Router**: Reflex pages and `/_event/...` endpoints are **not** standard Django views. You cannot map a Reflex component directly inside a Django `urls.py` file, nor can you return a Reflex component from a traditional Django view callable.
-* **A Full HTTP Middleware Runner for Socket.IO**: The Event Bridge does not run your entire Django `MIDDLEWARE` stack (such as CSRF protection or third-party security middleware) on every button click. It selectively loads session and authentication data to keep communication fast and lightweight.
-* **A Replacement for Server-Side Templates**: If you have legacy Django views or HTML templates, Django will still serve them exactly as before under your configured path prefixes. Reflex serves the SPA (Single Page Application) frontend.
+| Piece | Role |
+|:---|:---|
+| **`reflex_mount()`** | Registers Reflex `rx.Config` (ports, `app_name`, plugins) and adds the SPA catch-all URL pattern |
+| **`django_led_app`** | Built-in module Reflex imports for `app` (replaces `{app_name}/{app_name}.py`) |
+| **`{app}/views.py`** | Reflex pages via `@template` / `@page` — auto-discovered from `INSTALLED_APPS` |
+| **`ReflexDjangoPlugin`** | Wires Django ASGI, prefixes, and the event bridge (always enabled) |
 
 ---
 
-## Why Django Developers Choose This Stack
+## What this is (and is not)
 
-In a pure Reflex application, user interactions are sent to the server as asynchronous WebSocket events. Because these events occur outside Django's traditional HTTP request-response pipeline, standard patterns like accessing `request.user` or the Django session are unavailable. 
+### It is
 
-By installing **reflex-django**, you bridge this gap. You get the following major benefits:
+- A **Django project** with a Reflex frontend mounted as a catch-all SPA
+- **100% Python** for UI and backend (no separate React/Vue repo required)
+- **Shared sessions** — log in via `/admin` or Django auth; Reflex sees the same user on the next event
 
-* **Zero-CORS Development**: Because the frontend and backend share the same origin, you never have to deal with CORS errors, domain alignment, or token-refresh mechanisms during local development.
-* **Unified Session State**: If a user logs in via a standard Django login form or the Django admin panel, the WebSocket bridge immediately identifies them. Your Reflex components can dynamically display user-specific data or enforce group-level permissions.
-* **Production-Grade ORM**: You get access to the Django ORM, migration engine, and admin dashboard out of the box, with complete support for async operations (`acreate`, `adelete`, `asave`, etc.) directly inside your reactive state handlers.
+### It is not
 
----
-
-## Architectural Comparison
-
-| Feature | Django + React/Vue | Pure Django Templates | **reflex-django** |
-|:---|:---|:---|:---|
-| **Ecosystem Maturity** | Exceptionally high | High | **High** (Combines both) |
-| **Development Servers** | Two servers (CORS configuration required) | One server | **One server** (Unified dev environment) |
-| **Interactivity** | Extremely high | Medium (Requires Custom JS / HTMX) | **Extremely high** (State-driven reactive UI) |
-| **Authentication Logic** | Duplicated on front and back | Single-source | **Single-source** (Shares Django session store) |
-| **Language Requirements** | Python + JavaScript/TypeScript | Python + minimal JS | **100% Python** |
+- A way to register Reflex routes inside Django `urls.py` per page (client-side routing owns `/`, `/about`, …)
+- Full Django `MIDDLEWARE` on every button click (the event bridge loads session/auth selectively for speed)
+- A replacement for Django templates on existing server-rendered views (those keep working under your API/admin prefixes)
 
 ---
 
-## When to Use reflex-django
+## Configuration in one place: `reflex_mount()`
 
-> [!TIP]
-> **This stack is perfect when:**
->
-> * You love the simplicity and security of the Django ORM, migrations, and administrative panel, but want a highly interactive, modern, client-side reactive interface.
-> * You want to build full-stack web apps in **pure Python** without learning or maintaining a modern JavaScript build toolchain.
-> * You need a single-process deployment profile for local development, staging environments, or simple container deployments.
+All Reflex options that used to scatter across `rxconfig.py` and Django settings are passed here:
 
-> [!WARNING]
-> **You might want to skip it if:**
->
-> * You are building a static web page that only requires traditional server-rendered templates.
-> * Your architecture requires Reflex and Django to be hosted on entirely different cloud providers, communicating exclusively over standard token-based JSON APIs.
+```python
+# project/urls.py
+from reflex_django.urls import reflex_mount
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/", include("myapp.api_urls")),
+]
+urlpatterns += [
+    reflex_mount(
+        app_name="myapp",           # optional; default = project folder name
+        django_prefix=("/admin", "/api"),
+        rx_config={
+            "frontend_port": 3000,
+            "backend_port": 8000,
+        },
+    ),
+]
+```
+
+Importing `urls.py` at startup registers this config. `manage.py run_reflex` and Granian workers read the same values.
 
 ---
 
-## Next Steps
+## The `django_led_app` module
 
-Now that you understand the core philosophy, let's get you set up:
+Classic Reflex expects `demo/demo.py` with `app = rx.App()`. In reflex-django you use a **Django app label** (e.g. `demo`) for pages in `demo/views.py`, but Reflex loads the app instance from:
 
-* For a new project from scratch: Explore the [Installation](installation.md) guide and the [Quickstart](quickstart.md) tutorial.
-* For an existing project: Check out the [Existing Django Project](existing_django_project.md) integration guide.
+```text
+reflex_django.django_led_app:app
+```
+
+That module lazily:
+
+1. Imports page modules from `INSTALLED_APPS` (`demo/views.py`, …)
+2. Creates `rx.App()` via the built-in factory
+3. Registers routes from `@template` / `@page` decorators
+
+You do **not** create `demo/demo.py`. See [Django-led URL routing](django_urls.md).
+
+---
+
+## When to use reflex-django
+
+**Good fit:**
+
+- Brownfield Django apps adding a modern SPA
+- Teams that want Django’s ORM/admin with Reflex’s reactive UI
+- Single-origin dev and simple deployments (one process, one port pair)
+
+**Less ideal:**
+
+- Static sites with only Django templates
+- Architectures that require Reflex and Django on completely separate hosts with token-only APIs
+
+---
+
+## Next steps
+
+| Goal | Guide |
+|:---|:---|
+| New project in 15 minutes | [Quickstart](quickstart.md) |
+| Add Reflex to existing Django | [Existing Django project](existing_django_project.md) |
+| `reflex_mount` and URL ownership | [Django-led URL routing](django_urls.md) |
+| All settings | [Configuration](configuration.md) |
+| Pages in `views.py` | [Pages in views.py](pages_in_views.md) |
 
 ---
 

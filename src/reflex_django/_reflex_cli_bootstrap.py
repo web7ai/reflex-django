@@ -39,6 +39,12 @@ def _attach() -> None:
     from reflex_django.cli import register_django_cli_group_if_needed
 
     register_django_cli_group_if_needed(_rr.cli)
+    try:
+        from reflex_django.integration import install_reflex_django_integration
+
+        install_reflex_django_integration()
+    except Exception:
+        pass
     _ATTACHED = True
 
 

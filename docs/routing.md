@@ -1,64 +1,57 @@
 # Routing & URL Dispatching
 
-When building applications with **reflex-django**, you are working with a dual-routing system: the **Reflex Frontend Router** (which handles interactive SPA page loads in the browser) and the **Django Backend Router** (which handles traditional HTTP views, API endpoints, static assets, and the administration panel).
+reflex-django uses two routing layers:
 
-This guide explains how paths are routed, how prefixes are matched, and how to avoid routing conflicts.
+1. **Django `urls.py`** — explicit HTTP routes (`/admin`, `/api`, …)
+2. **Reflex client router** — SPA routes from `@template(route=...)` in `{app}/views.py`
+
+The ASGI dispatcher sends traffic by **path prefix**. Configure prefixes on **`reflex_mount()`**.
+
+See [Django-led URL routing](django_urls.md) for the full mental model.
 
 ---
 
-## 1. Reflex Frontend Pages
+## 1. Reflex SPA routes (client-side)
 
-Reflex pages represent interactive frontend views. You register them directly on the `rx.App` instance using standard page decorators or manual registration:
+Define routes in Django app `views.py`:
 
 ```python
-# frontend/frontend.py
+# shop/views.py
 import reflex as rx
-from frontend.states.notes import NotesState
+from reflex_django import template
 
+@template(route="/notes", title="My Notes")
 def notes_page() -> rx.Component:
-    return rx.vstack(
-        rx.heading("My Private Notes"),
-        # UI components bind to NotesState variables
-    )
-
-app = rx.App()
-
-# Registering a page route
-app.add_page(
-    notes_page,
-    route="/notes",
-    on_load=NotesState.refresh,  # Refreshes the database data on mount
-    title="My Notes",
-)
+    return rx.heading("My Private Notes")
 ```
 
-### Routing Rules for Reflex Pages:
-* **Base Path**: The `route` parameter specifies the path served to the client browser.
-* **No Pre-fixing**: Reflex page routes are **not** automatically prefixed by Django. A route registered as `/notes` is served directly at `http://localhost:3000/notes`.
-* **State Loading**: The `on_load` argument binds a state handler (often a `refresh` method from your `ModelState` or `ModelCRUDView` class) to load model data asynchronously when the browser mounts the view.
+### Rules
+
+* **`route`** is the browser path (e.g. `/notes` → `http://localhost:3000/notes`).
+* **Do not** add matching `path("notes/", ...)` in Django — the catch-all serves the SPA.
+* Use `on_load` on `@template` / `@page` or state handlers for data loading.
 
 ---
 
-## 2. Django Backend HTTP Routes
+## 2. Django HTTP routes
 
-Traditional HTTP routes (like Django Rest Framework endpoints, webhook receivers, or custom views) are registered in your backend's main `urls.py` file.
-
-First, configure your path prefixes in `rxconfig.py`:
+Register APIs and admin in `urls.py` **before** `reflex_mount()`:
 
 ```python
-# rxconfig.py
-from reflex_django import ReflexDjangoPlugin
+# config/urls.py
+from reflex_django.urls import reflex_mount
 
-config = rx.Config(
-    app_name="frontend",
-    plugins=[
-        ReflexDjangoPlugin(
-            settings_module="backend.settings",
-            backend_prefix="/api",  # Matches custom HTTP API urls
-            admin_prefix="/admin",  # Matches Django Admin mount point
-        ),
-    ],
-)
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/", include("shop.api_urls")),
+]
+
+urlpatterns += [
+    reflex_mount(
+        django_prefix=("/admin", "/api"),
+        rx_config={"frontend_port": 3000},
+    ),
+]
 ```
 
 Then, map the exact corresponding routes in your `backend/urls.py` file:

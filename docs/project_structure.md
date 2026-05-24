@@ -1,108 +1,122 @@
-# Project Structure
+# Project structure
 
-When combining **Reflex** and **Django** into a single monorepo repository, keeping your code organized is essential to prevent dependency cycles and compilation errors. This guide details the recommended structural organization for full-stack apps.
+Recommended layout for a **Django-first** reflex-django application: one repo, one `manage.py`, pages beside Django apps, configuration in `urls.py`.
 
 ---
 
-## The Monorepo Layout
-
-Below is the standard, production-ready directory tree for a unified `reflex-django` application.
+## Standard layout
 
 ```text
-myproject/                         # Git repository root
-├── manage.py                      # Django command line management utility
-├── rxconfig.py                    # Reflex configuration & Django plugin bootstrapper
-├── pyproject.toml                 # Package dependencies (uv or poetry)
+myproject/                         # Git root (parent of manage.py)
+├── manage.py
+├── pyproject.toml
+├── rxconfig.py                    # optional auto stub (not source of truth)
+├── db.sqlite3
 │
-├── config/                        # Main Django configuration package
-│   ├── __init__.py
-│   ├── settings.py                # Database, auth, and REFLEX_DJANGO_* settings
-│   └── urls.py                    # Root URL pattern dispatcher (/admin, /api)
+├── config/                        # Django project package
+│   ├── settings.py                # INSTALLED_APPS, MIDDLEWARE, REFLEX_DJANGO_*
+│   ├── urls.py                    # reflex_mount() — last urlpatterns entry
+│   ├── asgi.py
+│   └── wsgi.py
 │
-├── shop/                          # A standard Django application app
+├── shop/                          # Django app (domain + Reflex pages)
 │   ├── migrations/
-│   ├── __init__.py
-│   ├── models.py                  # Database models (domain-specific data)
-│   ├── views.py                   # Traditional HTTP API views
-│   └── serializers.py             # Reflex-safe model serializers
+│   ├── models.py
+│   ├── views.py                   # @template pages (/, /about, …)
+│   ├── serializers.py             # optional ReflexDjangoModelSerializer
+│   └── admin.py
 │
-└── frontend/                      # Reflex app package (matches rxconfig app_name)
-    ├── __init__.py
-    ├── frontend.py                # Main router (adds pages and wraps auth)
-    ├── layout/                    # Layout templates (navbar, sidebars, headers)
-    ├── components/                # Reusable presentation widgets
-    └── states/                    # Reactive states (subclassing AppState/ModelState)
+├── blog/                          # another app — blog/views.py auto-imported
+│   └── views.py
+│
+└── .web/                          # Reflex frontend (generated; gitignore)
 ```
 
 ---
 
-## Key Directory Roles
+## What goes where
 
-By dividing the frontend UI code and the backend database code into separate packages, you establish a clean separation of concerns:
-
-| Layer | Directory | Responsibility |
-|:---|:---|:---|
-| **Django Core** | `config/` | Contains the global settings, database backends, URL patterns, and configurations. |
-| **Django Domain** | `shop/` | Contains models, migrations, standard views, test suites, and backend utility methods. |
-| **Reflex Entry** | `frontend/frontend.py` | Configures the main `rx.App` instance, defines page routes, and wires global page-load event hooks. |
-| **Reflex Layout** | `frontend/layout/` | Contains headers, navbars, responsive shells, and menus shared across different pages. |
-| **Reflex Presentation** | `frontend/components/` | Custom UI elements (e.g., product cards, confirmation modals, error alerts) that don't maintain global state. |
-| **Reflex Logic** | `frontend/states/` | Houses event handlers, state variables, permissions check routines, and ORM access methods. |
+| Location | Purpose |
+|:---|:---|
+| **`config/settings.py`** | Django apps, database, `REFLEX_DJANGO_*` overrides |
+| **`config/urls.py`** | Django routes + **`reflex_mount(...)`** |
+| **`{app}/models.py`** | Django ORM — unchanged |
+| **`{app}/views.py`** | Reflex page functions (`@template`, `@page`) |
+| **`{app}/serializers.py`** | Model → JSON helpers for state |
+| **No `{app}/{app}.py`** | App instance loaded via `reflex_django.django_led_app` |
 
 ---
 
-## File Responsibilities in a Unified Process
-
-To keep your code clean, stick to these core file responsibilities:
+## Configuration flow
 
 ```text
-+-------------------+      Starts      +------------------------+
-|    rxconfig.py    | -------------->  | configure_django()     |
-| (Reflex Config)   |                  | (Initializes Backend)  |
-+-------------------+                  +------------------------+
-         |                                          |
-         v                                          v
-+-------------------+                  +------------------------+
-| frontend/         |                  | shop/models.py         |
-| (Pages & States)  | <=============== | (Database ORM Models)  |
-+-------------------+     Queries      +------------------------+
+  urls.py
+    └── reflex_mount(app_name="shop", rx_config={...})
+            └── register_mount_rx_config()
+                    └── merged at runtime by get_config()
+
+  shop/views.py
+    └── @template(route="/")  →  registers page on import
+
+  django_led_app.app
+    └── ensure_django_led_app_ready()
+            ├── import shop.views, blog.views, ...
+            ├── rx.App()
+            └── apply decorated pages
 ```
 
-* **`rxconfig.py`**: Initializes the `ReflexDjangoPlugin`. It acts as the gateway that boots Django before the first line of Reflex frontend code is evaluated.
-* **`frontend/frontend.py`**: Imports individual page modules and registers them using `app.add_page(index)`.
-* **`shop/models.py`**: Defines your database schemas. These should remain completely standard Django models, keeping your domain logic separate from Reflex UI logic.
-* **`frontend/states/*.py`**: Implements reactive states. You should import Django models inside state files, query them asynchronously, and map results to JSON-safe dictionaries using custom serializers.
+---
+
+## `app_name` naming
+
+| Source | Example |
+|:---|:---|
+| `reflex_mount(app_name="shop")` | Explicit |
+| `rx_config={"app_name": "shop"}` | Alternative |
+| Default | Folder containing `manage.py` (`my-project` → `my_project`) |
+
+The label must match a Django app in `INSTALLED_APPS` that contains your pages (usually in `views.py`).
 
 ---
 
-## Where to Place Serializers
+## Optional: separate UI package
 
-Model serialization bridges the gap between database models and reactive states. 
+Some teams prefer a dedicated package:
 
-We recommend placing your **`ReflexDjangoModelSerializer`** classes in a dedicated `serializers.py` file inside each Django application folder (e.g., `shop/serializers.py`). 
+```text
+frontend/
+  views.py       # or pages/home.py
+```
 
-This keeps serialization rules close to the database schema, while your frontend states in `frontend/states/` can easily import them.
-
----
-
-## Static Files Flow
-
-Handling static assets (images, stylesheets, user uploads) is managed dynamically depending on your active runtime environment:
-
-| Mode | Static Engine | Path |
-|:---|:---|:---|
-| **Development** | Vite Development Proxy + `ASGIStaticFilesHandler` | Served dynamically on the same origin. No build compilation required. |
-| **Production** | Shared Outermost ASGI Path Dispatcher | Compiled via `reflex django collectstatic` into `STATIC_ROOT` and served directly from the dispatcher path. |
+Set `REFLEX_DJANGO_PAGE_PACKAGES = ["frontend.views"]` or import submodules from `shop/views.py`. Auto-discovery defaults to `{app_label}.views` per installed app.
 
 ---
 
-## Next Steps
+## Generated / ignored paths
 
-Now that you are familiar with the recommended Monorepo directory structure:
-
-* Understand how the dispatcher intercepts incoming traffic: Read the [Architecture Overview](architecture.md).
-* Configure your project settings: Review the [Configuration Reference](configuration.md).
+| Path | Notes |
+|:---|:---|
+| **`.web/`** | Reflex/Vite frontend; recreated by compile/run |
+| **`.reflex/`** | Reflex user dir (may be global on your machine) |
+| **`rxconfig.py` stub** | Layout check for Reflex CLI; syncs `app_name` + `django_led_app` |
 
 ---
 
-**Navigation:** [← Existing Django Project](existing_django_project.md) | [Next: Architecture →](architecture.md)
+## Static files
+
+| Environment | Mechanism |
+|:---|:---|
+| **Development** | `ASGIStaticFilesHandler` when `staticfiles` in `INSTALLED_APPS`; Vite dev server on `frontend_port` |
+| **Production** | `collectstatic` + same ASGI dispatcher; see [Deployment](deployment.md) |
+
+---
+
+## Next steps
+
+- [Django-led URL routing](django_urls.md) — `reflex_mount` details
+- [Pages in views.py](pages_in_views.md) — decorators and discovery
+- [Architecture](architecture.md) — runtime topology
+
+---
+
+**Navigation:** [← Existing Django project](existing_django_project.md) | [Architecture →](architecture.md)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import warnings
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from reflex_base.plugins.base import Plugin
@@ -12,6 +14,8 @@ from reflex_base.utils import console
 
 from reflex_django.asgi import build_django_asgi, make_dispatcher
 from reflex_django.conf import configure_django
+from reflex_django.prefixes import export_prefix_env, resolve_prefixes
+from reflex_django.routing import UrlRoutingMode, resolve_url_routing
 
 if TYPE_CHECKING:
     from reflex.app import App
@@ -40,18 +44,15 @@ class ReflexDjangoPlugin(Plugin):
 
     Attributes:
         settings_module: Optional dotted path to a Django settings module.
-            When ``None`` (the default), the plugin uses
-            ``reflex_django.default_settings`` unless ``DJANGO_SETTINGS_MODULE``
-            is already set in the environment. When you pass a value here, it is
-            applied via ``setdefault`` before :func:`reflex_django.conf.configure_django`
-            runs in :meth:`__post_init__` (so gettext and other Django imports in
-            your Reflex module work at compile time).
+            **Deprecated** — use ``manage.py`` / ``DJANGO_SETTINGS_MODULE`` or
+            manage.py discovery instead.
         backend_prefix: Optional path prefix forwarded to Django for your own
             HTTP routes (e.g. ``"/api"`` when ``ROOT_URLCONF`` includes
             ``path("api/", ...)``). Defaults to ``""`` (no extra prefix).
-        admin_prefix: Path prefix for Django Admin. Defaults to ``"/admin"``.
-        extra_prefixes: Additional path prefixes that should be routed to
-            Django (e.g. ``("/billing",)``).
+            List in ``django_prefix`` on :func:`reflex_django.urls.reflex_mount` too.
+        admin_prefix: Path prefix for Django Admin (``rxconfig.py`` / plugin only).
+            Defaults to ``"/admin"``.
+        django_prefix: Path prefixes routed to Django (e.g. ``("/billing", "/api")``).
         install_event_bridge: Whether to register :class:`DjangoEventBridge`
             as a Reflex event middleware. When ``True`` (the default), Reflex
             Socket.IO events see ``current_user()``, ``current_session()`` etc.
@@ -65,113 +66,99 @@ class ReflexDjangoPlugin(Plugin):
     settings_module: str | None = None
     backend_prefix: str = ""
     admin_prefix: str = "/admin"
-    extra_prefixes: tuple[str, ...] = ()
+    django_prefix: tuple[str, ...] = ()
     install_event_bridge: bool = True
     install_auth_pages: bool = False
 
     def __post_init__(self) -> None:
-        """Export Django env vars and run :func:`configure_django` when the plugin is built.
-
-        ``rxconfig.py`` is imported (and ``Config`` is constructed) before Reflex
-        calls :func:`~reflex.utils.prerequisites.get_app`, which imports the
-        user's ``<app>.<app>`` module. Calling :func:`configure_django` here lets
-        that module use Django APIs such as :func:`django.utils.translation.gettext`
-        at import time (including Reflex compile) without a manual bootstrap
-        block in application code.
-        """
+        """Export Django env vars and run :func:`configure_django` when the plugin is built."""
         if self.settings_module is not None:
-            os.environ.setdefault("DJANGO_SETTINGS_MODULE", self.settings_module)
-        bp = (self.backend_prefix or "").strip()
-        if bp:
-            os.environ.setdefault("REFLEX_DJANGO_API_PREFIX", bp)
-        os.environ.setdefault("REFLEX_DJANGO_ADMIN_PREFIX", self.admin_prefix)
+            warnings.warn(
+                "ReflexDjangoPlugin(settings_module=...) is deprecated. "
+                "Set DJANGO_SETTINGS_MODULE via manage.py or environment instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+                os.environ["DJANGO_SETTINGS_MODULE"] = self.settings_module
+
+        self._export_prefix_env()
         configure_django(self.settings_module)
 
+    def _prefix_config(self):
+        prefixes: list[str] = list(self.django_prefix)
+        if self.backend_prefix:
+            prefixes.append(self.backend_prefix)
+        if self.admin_prefix:
+            prefixes.append(self.admin_prefix)
+        return resolve_prefixes(
+            django_prefix=tuple(dict.fromkeys(prefixes)),
+        )
+
+    def _export_prefix_env(self) -> None:
+        export_prefix_env(self._prefix_config())
+
     def _all_prefixes(self) -> tuple[str, ...]:
-        parts: list[str] = []
-        bp = (self.backend_prefix or "").strip()
-        if bp:
-            parts.append(bp)
-        parts.append(self.admin_prefix)
-        return (*parts, *self._static_prefixes(), *self.extra_prefixes)
-
-    @staticmethod
-    def _static_prefixes() -> tuple[str, ...]:
-        """Return ``STATIC_URL`` as a prefix tuple when staticfiles is enabled.
-
-        ``configure_django`` must have run before this is called so
-        :mod:`django.conf.settings` is populated. Returns an empty tuple when
-        the user disables staticfiles (no ``django.contrib.staticfiles`` in
-        ``INSTALLED_APPS``) or sets ``STATIC_URL`` to a fully-qualified URL
-        (e.g., a CDN — those are served externally, not by Django).
-        """
-        try:
-            from django.conf import settings
-        except Exception:
-            return ()
-
-        if "django.contrib.staticfiles" not in getattr(settings, "INSTALLED_APPS", ()):
-            return ()
-
-        url = getattr(settings, "STATIC_URL", None)
-        if not isinstance(url, str) or not url:
-            return ()
-        # Skip absolute URLs (CDN-hosted statics) — only forward path prefixes.
-        if "://" in url:
-            return ()
-        return (url,)
+        return self._prefix_config().backend_prefixes_for_asgi()
 
     def pre_compile(self, **context: Any) -> None:
         """Inject Vite dev-server proxy rules for Django path prefixes."""
         from reflex_base import constants
         from reflex_base.config import get_config
 
-        from reflex_django.vite_proxy import inject_vite_dev_proxy
+        from reflex_django.vite_proxy import (
+            _PROXY_PLUGIN_FILENAME,
+            patch_vite_config,
+            render_proxy_plugin_js,
+        )
 
         prefixes = self._all_prefixes()
         if not prefixes:
             return
 
         target = get_config().api_url.rstrip("/")
+
+        def _save_proxy_plugin() -> tuple[str, str]:
+            return (
+                _PROXY_PLUGIN_FILENAME,
+                render_proxy_plugin_js(target=target, prefixes=prefixes),
+            )
+
+        context["add_save_task"](_save_proxy_plugin)
         context["add_modify_task"](
             constants.ReactRouter.VITE_CONFIG_FILE,
-            lambda content: inject_vite_dev_proxy(
+            lambda content: patch_vite_config(
                 content, target=target, prefixes=prefixes
             ),
         )
 
     def post_compile(self, **context: Any) -> None:
-        """Attach the Django dispatcher to ``app.api_transformer``.
-
-        Runs after :meth:`reflex.app.App._compile` and before
-        :meth:`reflex.app.App.__call__` builds the final ASGI app, which is
-        when ``api_transformer`` is consulted.
-
-        Args:
-            context: Plugin context provided by the Reflex compiler. Expects
-                ``context["app"]`` to be the active :class:`reflex.app.App`.
-
-        Raises:
-            RuntimeError: If the Reflex app instance is missing from the
-                plugin context.
-        """
+        """Attach the Django dispatcher to ``app.api_transformer``."""
         app: App | None = context.get("app")
         if app is None:
             msg = "ReflexDjangoPlugin requires the Reflex App in post_compile context."
             raise RuntimeError(msg)
 
         self._configure(app)
+        self._ensure_vite_dev_proxy_on_disk()
+
+    def _ensure_vite_dev_proxy_on_disk(self) -> None:
+        """Write Vite ``server.proxy`` rules when missing from ``.web/vite.config.js``."""
+        try:
+            from reflex_django.vite_proxy import ensure_vite_django_dev_proxy_from_config
+
+            ensure_vite_django_dev_proxy_from_config()
+        except Exception as exc:
+            console.warn(
+                "reflex-django could not patch .web/vite.config.js for Django "
+                f"path proxies: {exc}. Use http://localhost:<backend_port>/admin "
+                "or re-run `python manage.py run_reflex`."
+            )
 
     def _configure(self, app: App) -> None:
-        # Path prefixes and DJANGO_SETTINGS_MODULE were already exported in
-        # __post_init__; redo the setdefaults here so direct callers (tests,
-        # custom plugin runners that bypass dataclass init) still get them.
         if self.settings_module is not None:
             os.environ.setdefault("DJANGO_SETTINGS_MODULE", self.settings_module)
-        bp = (self.backend_prefix or "").strip()
-        if bp:
-            os.environ.setdefault("REFLEX_DJANGO_API_PREFIX", bp)
-        os.environ.setdefault("REFLEX_DJANGO_ADMIN_PREFIX", self.admin_prefix)
+        self._export_prefix_env()
 
         active_settings = configure_django(self.settings_module)
 
@@ -181,6 +168,7 @@ class ReflexDjangoPlugin(Plugin):
         transformer = make_dispatcher(
             django_asgi,
             backend_prefixes=self._all_prefixes(),
+            routing_mode=resolve_url_routing(),
         )
 
         existing = _as_sequence(app.api_transformer)

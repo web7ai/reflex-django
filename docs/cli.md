@@ -1,147 +1,96 @@
-# Command Line Interface (CLI)
+# Command Line Interface
 
-Running a unified backend means managing both Reflex web states and Django database structures. Rather than forcing you to jump between separate configuration contexts, `reflex-django` exposes a unified Command Line Interface. 
-
-This enables you to run any native Django management command (such as migrations, superuser registration, or database shells) using the exact same environment and settings module as `reflex run`.
+Django-first projects use **`manage.py`** for Django commands and **`run_reflex`** for the unified dev server. The Reflex CLI remains available for optional workflows.
 
 ---
 
-## 1. The Two CLI Entry Points
-
-`reflex-django` provides two equivalent entry points to interact with your unified backend:
-
-```text
-               1. Integrated Reflex CLI (pth bootstrap)
-                  $ uv run reflex django <subcommand>
-                                  │
-                                  ▼
-               2. Standalone Console Script (Direct)
-                  $ uv run reflex-django <subcommand>
-```
-
-### Entry Point A: The Integrated Reflex CLI
-The package automatically integrates itself directly into Reflex's native command-line interface using a custom `.pth` bootstrapper. This is the recommended style as it keeps all commands under the single, unified `reflex` keyword:
+## Primary commands (Django-first)
 
 ```bash
-uv run reflex django <subcommand>
+# Unified Reflex + Django dev server (use this for full-stack dev)
+python manage.py run_reflex
+
+# Standard Django — unchanged
+python manage.py migrate
+python manage.py makemigrations
+python manage.py createsuperuser
+python manage.py shell
+python manage.py collectstatic
 ```
 
-### Entry Point B: The Standalone CLI Script
-If you prefer direct console calls, the package registers a standalone script in `pyproject.toml` under the `[project.scripts]` block. This acts as a direct alias:
+`run_reflex` calls the same stack as `reflex run`: one ASGI process, Django prefixes + Reflex SPA + WebSockets.
+
+### `run_reflex` options
+
+Forwarded to `reflex run`:
 
 ```bash
-uv run reflex-django <subcommand>
+python manage.py run_reflex --frontend-port 3000 --backend-port 8000
+python manage.py run_reflex --env prod
+python manage.py run_reflex --backend-only
+python manage.py run_reflex --frontend-only
 ```
 
-Both entry points execute the exact same loader: they locate `rxconfig.py`, initialize your environment variables, boot Django asynchronously, and forward your subcommands straight to Django's native execution pipeline.
+Configure defaults in `reflex_mount(rx_config={...})` instead of duplicating ports in multiple files.
 
 ---
 
-## 2. Common Operations Guide
+## Optional: Reflex CLI wrappers
 
-Here is a catalog of the most common management tasks and how to execute them within your unified project structure.
-
-### Database Migrations
-Always use these commands to generate and execute migrations so that your schema changes target the exact database configuration resolved in your `rxconfig`:
+When the Reflex CLI is installed, these also work:
 
 ```bash
-# Generate database schema migration scripts
-uv run reflex django makemigrations
-
-# Apply migrations to your database
 uv run reflex django migrate
-
-# Review the SQL statements that will be executed for a migration
-uv run reflex django sqlmigrate shop 0001
-```
-
-### Creating Administration Accounts
-Spawn interactive prompts to register superusers who can access the standard Django Admin panel:
-
-```bash
 uv run reflex django createsuperuser
+uv run reflex-django migrate          # standalone script alias
 ```
 
-### Running Interactive Python Shells
-Launch a pre-configured interactive Python shell with the unified Reflex-Django environment and database connections fully booted:
+They load Django the same way: discover `manage.py`, run `configure_django()`, forward to Django’s management utility.
 
-```bash
-uv run reflex django shell
-```
-
-### Collecting Static Files
-Compile and collect Django's admin and model assets into your configured static directory prior to production deployments:
-
-```bash
-uv run reflex django collectstatic --noinput
-```
+For day-to-day Django-first work, prefer **`python manage.py <command>`**.
 
 ---
 
-## 3. How Settings & Bootstrapping Work
+## What `run_reflex` bootstraps
 
-To guarantee that your migrations target the same database as your live server, the CLI boots using a precise three-stage initialization sequence:
-
-```text
-    Stage 1: Config Parsing
-    Locates and imports rxconfig.py using Reflex's native config loaders.
-              │
-              ▼
-    Stage 2: Environment Resolution
-    Plugin sets the DJANGO_SETTINGS_MODULE and resolves system path variables.
-              │
-              ▼
-    Stage 3: Django Bootstrapping
-    Invokes configure_django() which executes django.setup() in the active thread.
-              │
-              ▼
-    Stage 4: Command Execution
-    Forwards terminal arguments directly to Django's execution parser.
-```
-
-1. **Config Parsing**: The script invokes `_load_rxconfig()`, which utilizes `reflex_base.config.get_config()` to load the active configuration parameters.
-2. **Environment Resolution**: The `ReflexDjangoPlugin` registers your configured backend settings, setting `DJANGO_SETTINGS_MODULE` (defaulting to your custom configuration or falling back to the default package settings).
-3. **Django Bootstrapping**: `configure_django()` is triggered, running `django.setup()` to initialize models, apps, and database connections.
-4. **Command Execution**: The script hands off argument parsing to Django's `execute_from_command_line` pipeline, ensuring native support for flags, plans, and custom parameters.
+1. `install_reflex_django_integration()` — patches `get_config()` from `reflex_mount()` data
+2. `ensure_reflex_cli_layout()` — stub `rxconfig.py`, `.web`, Reflex user dir (no template picker)
+3. `ensure_django_led_app_ready()` — imports pages, builds `rx.App()`
+4. Starts Reflex dev processes (frontend + backend)
 
 ---
 
-## 4. Advanced Operations & Parameter Forwarding
-
-Because both entry points are direct passthroughs, you can append any standard Django flags, names, or optional parameters:
-
-### Migration Dry Runs
-Examine what migrations will be executed without modifying your database:
+## Database workflow
 
 ```bash
-uv run reflex django migrate --plan
+python manage.py makemigrations
+python manage.py migrate
+python manage.py sqlmigrate myapp 0001
 ```
 
-### Targeted Schema Generation
-Generate migrations targeting a specific app with a custom description:
-
-```bash
-uv run reflex django makemigrations catalog --name add_discount_field
-```
-
-### Running Specific Management Commands
-If you register custom Django management commands (inside `<app_name>/management/commands/`), you can execute them directly:
-
-```bash
-uv run reflex django my_custom_command --flag-active
-```
+Use the same database settings as the rest of your Django project — `reflex_mount(rx_config={"db_url": ...})` only affects Reflex’s config object when you mirror DB settings there.
 
 ---
 
-## 5. Troubleshooting CLI Issues
+## Static files (production)
 
-| Symptom | Cause | Solution |
-|:---|:---|:---|
-| `ModuleNotFoundError: No module named 'rxconfig'` | The command was executed from outside your project root directory. | Ensure your terminal is in the folder containing `rxconfig.py` before running commands. |
-| Migrations target the wrong database. | The CLI is reading from default settings rather than your active project settings. | Verify that `DJANGO_SETTINGS_MODULE` is correctly set in your environment or defined in your `rxconfig` plugin options. |
-| Custom app models are not being discovered. | The Django app containing the models is missing from your configuration. | Ensure the app is registered within the `INSTALLED_APPS` block of your settings file. |
-| `CommandError: You must set settings.ALLOWED_HOSTS` | Production settings are being loaded without host configurations. | Configure environment variables to pass production settings or specify hosts in your active settings file. |
+```bash
+python manage.py collectstatic --noinput
+```
+
+Serve via your ASGI entry point with `django.contrib.staticfiles` in `INSTALLED_APPS`. See [Deployment](deployment.md).
 
 ---
 
-**Navigation:** [← Forms & Validation](forms_and_validation.md) | [Next: Testing Guide →](testing.md)
+## Do not use for full-stack dev
+
+| Command | Issue |
+|:---|:---|
+| `python manage.py runserver` on backend port | WebSockets (`/_event`) won’t use the unified Reflex dispatcher |
+| `reflex init` on brownfield projects | Scaffolds a separate Reflex app layout you don’t need |
+
+Use **`run_reflex`** after `reflex_mount()` is configured.
+
+---
+
+**Navigation:** [← Best practices](best_practices.md) | [Testing →](testing.md)

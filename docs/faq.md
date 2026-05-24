@@ -117,10 +117,12 @@ class MyState(AppState):
 
 ## 5. Development & Operations
 
-### Why should I use `reflex django` instead of `python manage.py`?
-Running `python manage.py` directly does not load your Reflex configurations. 
+### Should I use `manage.py` or `reflex django`?
+**Django-first projects:** use `python manage.py` for migrations and `python manage.py run_reflex` for the dev server. Settings come from `manage.py` automatically.
 
-Calling **`reflex django <subcommand>`** instructs the CLI to boot Reflex first, load `rxconfig.py`, resolve environment variables, and then trigger Django. This guarantees that your migrations and database commands target the exact same database settings used during runtime.
+**Dev server:** use `python manage.py run_reflex`. Configure ports and `app_name` on `reflex_mount()` in `urls.py`.
+
+Both paths resolve `DJANGO_SETTINGS_MODULE` from the environment, `manage.py` discovery, or your plugin configuration.
 
 ---
 

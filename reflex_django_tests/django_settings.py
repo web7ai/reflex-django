@@ -60,4 +60,3 @@ LANGUAGES = [
     ("de", "German"),
 ]
 
-REFLEX_DJANGO_ADMIN_PREFIX = "/admin"

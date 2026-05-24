@@ -169,13 +169,13 @@ It is important not to confuse the two distinct serializer interfaces used in th
 
 ## Advanced Routing: Exposing Webhooks
 
-If you are integrating third-party webhooks (like Stripe checkout events), these endpoints must bypass CSRF verification and handle raw POST payloads. Add them to `extra_prefixes` in `rxconfig.py` to route them directly to Django ASGI:
+If you are integrating third-party webhooks (like Stripe checkout events), these endpoints must bypass CSRF verification and handle raw POST payloads. Add them to `django_prefix` in `rxconfig.py` to route them directly to Django ASGI:
 
 ```python
 # rxconfig.py
 ReflexDjangoPlugin(
     settings_module="backend.settings",
-    extra_prefixes=("/webhooks",),
+    django_prefix=("/webhooks",),
 )
 ```
 

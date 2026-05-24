@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Awaitable, Callable, MutableMapping, Sequence
 from typing import Any
 from unittest import mock
 
 import pytest
 from reflex_django.plugin import ReflexDjangoPlugin, _as_sequence
+
+
+@pytest.fixture(autouse=True)
+def _clear_prefix_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate prefix resolution from prior tests' environment exports."""
+    monkeypatch.delenv("REFLEX_DJANGO_API_PREFIX", raising=False)
+    monkeypatch.delenv("REFLEX_DJANGO_ADMIN_PREFIX", raising=False)
 
 
 class _StubApp:
@@ -129,7 +137,7 @@ def test_pre_compile_registers_vite_proxy_modify_task(
 
     plugin = ReflexDjangoPlugin(
         backend_prefix="/api",
-        extra_prefixes=("/billing",),
+        django_prefix=("/billing",),
         install_event_bridge=False,
     )
     plugin.pre_compile(
@@ -142,15 +150,16 @@ def test_pre_compile_registers_vite_proxy_modify_task(
     assert len(modify_tasks) == 1
     assert modify_tasks[0][0] == "vite.config.js"
     patched = modify_tasks[0][1](  # type: ignore[operator]
-        "export default defineConfig({ server: { port: 1, }, });"
+        "export default defineConfig({ plugins: [reactRouter()], server: { port: 1, }, });"
     )
     assert "reflex-django-proxy" in patched
+    assert "reflexDjangoProxyPlugin()" in patched
     assert '"/api":' in patched
     assert '"/admin":' in patched
     assert '"/billing":' in patched
 
 
-def test_post_compile_extra_prefixes_propagate(
+def test_post_compile_django_prefix_propagate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_django_build(monkeypatch)
@@ -161,7 +170,7 @@ def test_post_compile_extra_prefixes_propagate(
 
     app = _StubApp()
     plugin = ReflexDjangoPlugin(
-        extra_prefixes=("/billing", "/auth"),
+        django_prefix=("/billing", "/auth"),
         install_event_bridge=False,
     )
 
@@ -169,9 +178,9 @@ def test_post_compile_extra_prefixes_propagate(
 
     transformer = app.api_transformer[0]
     assert transformer.backend_prefixes == (  # pyright: ignore[reportFunctionMemberAccess]
-        "/admin",
         "/billing",
         "/auth",
+        "/admin",
     )
 
 

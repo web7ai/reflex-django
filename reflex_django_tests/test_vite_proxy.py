@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reflex_django.vite_proxy import inject_vite_dev_proxy
+from reflex_django.vite_proxy import inject_vite_dev_proxy, patch_vite_config
 
 _SAMPLE_VITE_CONFIG = """export default defineConfig((config) => ({
   server: {
@@ -17,7 +17,7 @@ _SAMPLE_VITE_CONFIG = """export default defineConfig((config) => ({
 
 
 def test_inject_vite_dev_proxy_adds_entries() -> None:
-    result = inject_vite_dev_proxy(
+    result = patch_vite_config(
         _SAMPLE_VITE_CONFIG,
         target="http://localhost:8000",
         prefixes=("/api", "/admin", "/billing"),
@@ -27,6 +27,8 @@ def test_inject_vite_dev_proxy_adds_entries() -> None:
     assert '"/api":' in result
     assert '"/admin":' in result
     assert '"/billing":' in result
+    assert '"/_event":' in result
+    assert "ws: true" in result
     assert "changeOrigin: true" in result
 
 

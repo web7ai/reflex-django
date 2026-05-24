@@ -108,8 +108,16 @@ def _db_config_from_url(url: str) -> dict[str, object]:
 # Marker for the plugin so it can warn users running with the bundled defaults.
 REFLEX_DJANGO_AUTO_SETTINGS = True
 
-# Path prefix used by reflex_django.urls (kept in sync with the plugin).
-REFLEX_DJANGO_ADMIN_PREFIX = os.environ.get("REFLEX_DJANGO_ADMIN_PREFIX", "/admin")
+# ASGI routing: "reflex_led" (default) or "django_led" (SPA catch-all).
+REFLEX_DJANGO_URL_ROUTING = os.environ.get("REFLEX_DJANGO_URL_ROUTING", "auto")
+
+# Catch-all mount prefix for :func:`reflex_django.urls.reflex_mount`.
+REFLEX_DJANGO_MOUNT_PREFIX = os.environ.get("REFLEX_DJANGO_MOUNT_PREFIX", "/")
+
+# Django-led: "package.module:create_app" returning rx.App (optional).
+
+# Django-led: dotted modules to import so @rx.page / decorators register.
+# REFLEX_DJANGO_PAGE_PACKAGES: list[str] = ["myapp.pages"]
 
 # Reflex-side context (JSON-serializable dicts only). See reflex_django.reflex_context.
 REFLEX_DJANGO_CONTEXT_PROCESSORS: tuple[str, ...] = ()
