@@ -8,6 +8,6 @@ own ``rxconfig.py`` instead.
 import reflex as rx
 
 config = rx.Config(
-    app_name='reflex_django',
+    app_name='demo',
     app_module_import='reflex_django.django_led_app',
 )

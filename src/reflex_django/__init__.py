@@ -25,7 +25,7 @@ from reflex_django.asgi import build_django_asgi, make_dispatcher
 from reflex_django.cli import django_cli
 from reflex_django.conf import configure_django
 from reflex_django.app_factory import create_app
-from reflex_django.decorators import reflex_page as page
+from reflex_django.decorators import page
 from reflex_django.plugin import ReflexDjangoPlugin
 from reflex_django.ui.template import template
 

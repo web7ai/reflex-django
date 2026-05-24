@@ -11,14 +11,14 @@ PAGE_REGISTRY: list[PageRegistration] = []
 
 @dataclass
 class PageRegistration:
-    """Metadata for a page registered via :func:`reflex_page`."""
+    """Metadata for a page registered via :func:`page`."""
 
     render_fn: Callable[..., Any]
     route: str | None = None
     kwargs: dict[str, Any] = field(default_factory=dict)
 
 
-def reflex_page(
+def page(
     route: str | None = None,
     **kwargs: Any,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -51,6 +51,10 @@ def reflex_page(
     return decorator
 
 
+# Backward compatibility (removed in a future release).
+reflex_page = page
+
+
 def reflex_template(
     template_fn: Callable[[Callable[..., Any]], Callable[..., Any]],
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -59,7 +63,7 @@ def reflex_template(
     Example::
 
         @reflex_template(template)
-        @reflex_page(route="/")
+        @page(route="/")
         def index():
             return rx.text("Hello")
 
@@ -80,3 +84,13 @@ def reflex_template(
 def clear_page_registry() -> None:
     """Clear :data:`PAGE_REGISTRY` (tests only)."""
     PAGE_REGISTRY.clear()
+
+
+__all__ = [
+    "PAGE_REGISTRY",
+    "PageRegistration",
+    "clear_page_registry",
+    "page",
+    "reflex_page",
+    "reflex_template",
+]

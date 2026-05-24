@@ -62,7 +62,7 @@ Optional overrides:
 
 ## Built-in `@template`
 
-`reflex_django.template` wraps your content in a centered container and registers the route via `@rx.page`. For pages without a layout, use `from reflex_django import page` instead (alias for `reflex_page`).
+`reflex_django.template` wraps your content in a centered container and registers the route via `@rx.page`. For pages without a layout, use `from reflex_django.decorators import page` or `from reflex_django import page`.
 
 ```python
 from reflex_django import page

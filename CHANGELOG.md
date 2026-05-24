@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   :func:`reflex_django.urls.admin_urlpatterns` for admin.
 - :mod:`reflex_django.app_factory` — built-in :func:`reflex_django.create_app` and
   ``REFLEX_DJANGO_PAGE_PACKAGES`` for Django-first page registration.
-- Optional :func:`reflex_django.decorators.reflex_page` / ``reflex_template`` with
+- Optional :func:`reflex_django.decorators.page` (``reflex_page`` alias) / ``reflex_template`` with
   ``PAGE_REGISTRY``.
 - Documentation: [django_urls.md](docs/django_urls.md).
 
