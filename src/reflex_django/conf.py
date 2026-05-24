@@ -101,8 +101,13 @@ def _bootstrap_reflex_integration_for_django_mode() -> None:
         from reflex_django.integration import install_reflex_django_integration
 
         install_reflex_django_integration()
-    except Exception:
-        pass
+    except Exception as ex:
+        import warnings
+
+        warnings.warn(
+            f"reflex-django integration bootstrap failed: {ex!r}",
+            stacklevel=2,
+        )
 
 
 def is_configured() -> bool:

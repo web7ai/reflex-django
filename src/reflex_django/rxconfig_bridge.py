@@ -257,23 +257,42 @@ def apply_django_rx_config(config: Config) -> Config:
     return merged
 
 
-def ensure_rxconfig_file(*, for_cli: bool = False) -> Path | None:
-    """Create or refresh the minimal ``rxconfig.py`` stub for Django-first mode.
+def remove_django_first_rxconfig_stub() -> bool:
+    """Delete an auto-generated stub ``rxconfig.py`` (Django-first uses ``reflex_mount``).
 
-    Reflex's CLI checks that ``rxconfig.py`` exists before loading config. The stub
-    uses ``app_name`` from ``reflex_mount()`` and ``app_module_import`` pointing at
-    :data:`reflex_django.django_led_app`.
+    Only removes files that contain the reflex-django stub marker. User-owned
+    ``rxconfig.py`` files are never touched.
+
+    Returns:
+        ``True`` if a stub file was deleted.
+    """
+    if getattr(_django_settings(), "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False):
+        return False
+    target = rxconfig_path()
+    if target is None or not is_django_first_rxconfig_stub(target):
+        return False
+    target.unlink()
+    return True
+
+
+def ensure_rxconfig_file(*, for_cli: bool = False) -> Path | None:
+    """Materialize ``rxconfig.py`` on disk when explicitly requested.
+
+    ``run_reflex`` does **not** call this with ``for_cli=True`` anymore; config is
+    registered in memory via :func:`install_rxconfig_module`. This function only runs
+    when ``REFLEX_DJANGO_MATERIALIZE_RXCONFIG`` is ``True`` (or legacy
+    ``for_cli=True`` with materialize enabled).
 
     Args:
-        for_cli: When ``True``, write or update the stub for ``run_reflex`` /
-            ``reflex run`` bootstrap.
+        for_cli: Ignored unless ``REFLEX_DJANGO_MATERIALIZE_RXCONFIG`` is ``True``.
 
     Returns:
         Path to ``rxconfig.py`` when written or updated, else ``None``.
 
     """
+    del for_cli
     settings = _django_settings()
-    if not for_cli and not getattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False):
+    if not getattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False):
         return None
 
     from reflex_django.app_factory import django_led_app_module_import

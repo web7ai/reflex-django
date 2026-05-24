@@ -99,8 +99,23 @@ class AuthBridgeMixin:
         """Bridged Django request + context processors for the current event."""
         from reflex_django.context import current_request, get_request_reflex_context
         from reflex_django.state.request import DjangoStateRequest
+        from reflex_django.state.request_binding import REQUEST_WRAPPER_ATTR
+
+        try:
+            cached = object.__getattribute__(self, REQUEST_WRAPPER_ATTR)
+        except AttributeError:
+            cached = None
+        if cached is not None:
+            return cached
 
         http = current_request()
+        if http is None:
+            msg = (
+                "No Django request is bound to this Reflex event. "
+                "Use self.request only inside @rx.event handlers (e.g. on_load), "
+                "not in class-level defaults or UI rendering."
+            )
+            raise RuntimeError(msg)
         return DjangoStateRequest(http, get_request_reflex_context(http))
 
     @property

@@ -36,6 +36,9 @@ def page(
     import reflex as rx
 
     def decorator(render_fn: Callable[..., Any]) -> Callable[..., Any]:
+        from reflex_django.app_factory import migrate_decorated_pages_app_name
+        from reflex_django.mount_config import ensure_mount_config_loaded, resolve_app_name
+
         page_kwargs = dict(kwargs)
         if route is not None:
             page_kwargs["route"] = route
@@ -46,7 +49,10 @@ def page(
                 kwargs=page_kwargs,
             )
         )
-        return rx.page(**page_kwargs)(render_fn)
+        ensure_mount_config_loaded()
+        wrapped = rx.page(**page_kwargs)(render_fn)
+        migrate_decorated_pages_app_name(resolve_app_name())
+        return wrapped
 
     return decorator
 

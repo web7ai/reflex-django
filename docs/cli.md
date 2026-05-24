@@ -54,7 +54,7 @@ For day-to-day Django-first work, prefer **`python manage.py <command>`**.
 ## What `run_reflex` bootstraps
 
 1. `install_reflex_django_integration()` — patches `get_config()` from `reflex_mount()` data
-2. `ensure_reflex_cli_layout()` — stub `rxconfig.py`, `.web`, Reflex user dir (no template picker)
+2. `ensure_reflex_cli_layout()` — in-memory `rxconfig`, `.web`, Reflex user dir (no template picker)
 3. `ensure_django_led_app_ready()` — imports pages, builds `rx.App()`
 4. Starts Reflex dev processes (frontend + backend)
 

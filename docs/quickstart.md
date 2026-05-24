@@ -144,7 +144,7 @@ class HomeState(AppState):
             self.greeting = "Hello, guest — log in at /admin/"
 
 
-@template(route="/", title="Home")
+@template(route="/", title="Home", on_load=HomeState.on_load)
 def index() -> rx.Component:
     return rx.center(
         rx.vstack(
@@ -236,7 +236,7 @@ Log in at `/admin/`, then refresh `/` — `HomeState.greeting` should show your 
 | `shop/views.py` | `@template` pages + `AppState` classes |
 | `manage.py run_reflex` | Dev server (Django + Reflex + WebSockets) |
 
-No hand-written `rxconfig.py` required. A stub may appear on first run; real config comes from `reflex_mount()`.
+No `rxconfig.py` required — `run_reflex` loads config from `reflex_mount()` in memory only.
 
 ---
 

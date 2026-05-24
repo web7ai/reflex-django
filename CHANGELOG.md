@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - 2026-05-24
 
+### Changed
+
+- ``python manage.py run_reflex`` no longer writes ``rxconfig.py``; Reflex config is loaded
+  from ``reflex_mount()`` via an in-memory ``rxconfig`` module. Auto-generated stubs are
+  removed on startup unless ``REFLEX_DJANGO_MATERIALIZE_RXCONFIG=True``.
+
 ### Fixed
 
+- Blank page / ``dispatch is not a function``: pages registered under
+  ``DECORATED_PAGES[""]`` before ``app_name`` was set are migrated to the
+  ``reflex_mount()`` app name before compile; post-compile now warns when
+  ``.web/utils/context.js`` dispatchers are missing backend substates; duplicate
+  ``views.py`` imports are skipped to avoid page redefinition noise.
+- Page ``on_load`` handlers not firing: ``reflex_mount()`` now imports page modules
+  immediately; ``sync_page_load_events()`` copies ``on_load`` from decorated pages
+  onto the live app; ``@template`` passes ``on_load`` as a handler list.
+- ``self.request`` in page substates (e.g. ``HomeState.on_load``): the event bridge now
+  binds the synthetic Django request on the handler substate during ``preprocess`` and
+  again in the patched ``process_event`` (with a fallback bridge when middleware did not
+  run); integration patches are re-applied on every bootstrap; router_data without a
+  session cookie is accepted for anonymous users.
 - ``reflex_mount()`` no longer catches bare backend prefixes (e.g. ``/admin`` without a
   trailing slash), so Django admin and ``APPEND_SLASH`` redirects work correctly.
 - Vite dev proxy rules are written to ``.web/vite.config.js`` in ``post_compile`` when

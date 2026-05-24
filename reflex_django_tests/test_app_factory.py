@@ -87,6 +87,18 @@ def test_ensure_django_led_app_ready_does_not_materialize_app_module(
     assert not (tmp_path / "demo" / "demo.py").is_file()
 
 
+def test_ensure_django_led_app_ready_installs_event_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reflex_django.app_factory import ensure_django_led_app_ready
+    from reflex_django.middleware import DjangoEventBridge
+    from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+
+    ensure_rxconfig_from_django()
+    app = ensure_django_led_app_ready()
+    assert any(isinstance(m, DjangoEventBridge) for m in app._middlewares)
+
+
 def test_create_app_is_exported_from_package() -> None:
     from reflex_django import create_app as exported
 

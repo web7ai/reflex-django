@@ -4,15 +4,21 @@ from __future__ import annotations
 
 
 def ensure_reflex_cli_layout() -> None:
-    """Ensure ``rxconfig.py``, ``.reflex``, and ``.web`` exist for ``reflex run``.
+    """Prepare Reflex CLI layout for Django-first projects (no ``rxconfig.py`` on disk).
 
-    Django-first apps define pages in Django ``views.py`` and configure Reflex via
-    ``reflex_mount()`` — they must not run :func:`reflex.reflex._init`, which scaffolds
-    a blank app and prompts for templates.
+    Live ``rx.Config`` comes from ``reflex_mount()`` via an in-memory ``rxconfig``
+    module. Creates ``.reflex`` / ``.web`` when missing; does not run
+    :func:`reflex.reflex._init` or write ``rxconfig.py``.
     """
-    from reflex_django.rxconfig_bridge import ensure_rxconfig_file
+    from reflex_django.mount_config import ensure_mount_config_loaded
+    from reflex_django.rxconfig_bridge import (
+        ensure_rxconfig_from_django,
+        remove_django_first_rxconfig_stub,
+    )
 
-    ensure_rxconfig_file(for_cli=True)
+    ensure_mount_config_loaded()
+    ensure_rxconfig_from_django()
+    remove_django_first_rxconfig_stub()
 
     try:
         from reflex.utils import prerequisites

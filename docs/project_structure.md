@@ -10,7 +10,7 @@ Recommended layout for a **Django-first** reflex-django application: one repo, o
 myproject/                         # Git root (parent of manage.py)
 ├── manage.py
 ├── pyproject.toml
-├── rxconfig.py                    # optional auto stub (not source of truth)
+├── rxconfig.py                    # optional (not created by run_reflex; use reflex_mount)
 ├── db.sqlite3
 │
 ├── config/                        # Django project package
@@ -98,7 +98,7 @@ Set `REFLEX_DJANGO_PAGE_PACKAGES = ["frontend.views"]` or import submodules from
 |:---|:---|
 | **`.web/`** | Reflex/Vite frontend; recreated by compile/run |
 | **`.reflex/`** | Reflex user dir (may be global on your machine) |
-| **`rxconfig.py` stub** | Layout check for Reflex CLI; syncs `app_name` + `django_led_app` |
+| **`rxconfig.py`** | Optional; only if you set `REFLEX_DJANGO_MATERIALIZE_RXCONFIG=True` |
 
 ---
 

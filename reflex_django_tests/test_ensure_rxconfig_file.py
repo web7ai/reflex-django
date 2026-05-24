@@ -88,7 +88,11 @@ def test_ensure_rxconfig_file_updates_stale_stub(
     )
     assert is_django_first_rxconfig_stub(tmp_path / "rxconfig.py")
 
-    updated = ensure_rxconfig_file(for_cli=True)
-    assert updated is not None
+    assert ensure_rxconfig_file(for_cli=True) is None
     text = (tmp_path / "rxconfig.py").read_text(encoding="utf-8")
-    assert "app_name='demo'" in text or 'app_name="demo"' in text
+    assert "app_name='wrong'" in text
+
+    from reflex_django.rxconfig_bridge import remove_django_first_rxconfig_stub
+
+    assert remove_django_first_rxconfig_stub() is True
+    assert not (tmp_path / "rxconfig.py").is_file()

@@ -141,6 +141,13 @@ class ReflexDjangoPlugin(Plugin):
 
         self._configure(app)
         self._ensure_vite_dev_proxy_on_disk()
+        self._warn_if_frontend_dispatchers_out_of_sync()
+
+    def _warn_if_frontend_dispatchers_out_of_sync(self) -> None:
+        """Detect stale ``.web/utils/context.js`` after page/state registration changes."""
+        from reflex_django.compile_validate import warn_if_frontend_dispatchers_out_of_sync
+
+        warn_if_frontend_dispatchers_out_of_sync()
 
     def _ensure_vite_dev_proxy_on_disk(self) -> None:
         """Write Vite ``server.proxy`` rules when missing from ``.web/vite.config.js``."""
@@ -156,6 +163,9 @@ class ReflexDjangoPlugin(Plugin):
             )
 
     def _configure(self, app: App) -> None:
+        if getattr(app, "_reflex_django_plugin_configured", False):
+            return
+
         if self.settings_module is not None:
             os.environ.setdefault("DJANGO_SETTINGS_MODULE", self.settings_module)
         self._export_prefix_env()
@@ -164,7 +174,9 @@ class ReflexDjangoPlugin(Plugin):
 
         self._warn_if_using_auto_settings(active_settings)
 
-        django_asgi = build_django_asgi()
+        from reflex_django.asgi import django_asgi_application
+
+        django_asgi = django_asgi_application()
         transformer = make_dispatcher(
             django_asgi,
             backend_prefixes=self._all_prefixes(),
@@ -179,7 +191,10 @@ class ReflexDjangoPlugin(Plugin):
             from reflex_django.upload_patch import apply_upload_router_data_patch
 
             apply_upload_router_data_patch()
-            app.add_middleware(DjangoEventBridge())
+            if not any(
+                isinstance(m, DjangoEventBridge) for m in getattr(app, "_middlewares", ())
+            ):
+                app.add_middleware(DjangoEventBridge())
 
         if self.install_auth_pages:
             try:
@@ -191,6 +206,12 @@ class ReflexDjangoPlugin(Plugin):
                     "reflex-django install_auth_pages=True but autoload failed: "
                     f"{exc}. Call add_auth_pages(app) in your app module instead."
                 )
+
+        from reflex_django.app_factory import sync_page_load_events
+
+        sync_page_load_events(app)
+
+        app._reflex_django_plugin_configured = True  # type: ignore[attr-defined]
 
     @staticmethod
     def _warn_if_using_auto_settings(settings_module: str) -> None:
@@ -208,3 +229,18 @@ class ReflexDjangoPlugin(Plugin):
                 "own settings module (with a stable SECRET_KEY) before "
                 "deploying to production."
             )
+
+
+def apply_reflex_plugins_to_app(app: App) -> None:
+    """Run ``post_compile`` for every plugin on *app* (idempotent for reflex-django).
+
+    Django-first apps load via :mod:`reflex_django.django_led_app` before Reflex
+    calls :meth:`reflex.app.App.__call__`. Without this, :class:`DjangoEventBridge`
+    is never registered and ``self.request`` stays empty in event handlers.
+    """
+    from reflex_base.config import get_config
+
+    for plugin in get_config().plugins or ():
+        post_compile = getattr(plugin, "post_compile", None)
+        if callable(post_compile):
+            post_compile(app=app)

@@ -92,11 +92,11 @@ Reflex normally loads `from demo.demo import app`. reflex-django sets `app_modul
 
 | Situation | Behavior |
 |:---|:---|
-| No file | Config built only from `reflex_mount()` |
-| Auto stub (reflex-django marker in file) | Updated to match `app_name` + `django_led_app`; **not** used as live config unless `REFLEX_DJANGO_USE_RXCONFIG_FILE=True` |
+| No file | Config built only from `reflex_mount()` (default for `run_reflex`) |
+| Auto stub (reflex-django marker in file) | Removed on `run_reflex` unless `REFLEX_DJANGO_MATERIALIZE_RXCONFIG=True`; live config always from `reflex_mount()` |
 | Your own full `rxconfig.py` | Set `REFLEX_DJANGO_USE_RXCONFIG_FILE=True` to merge it |
 
-`run_reflex` creates or refreshes the stub when missing so Reflex’s CLI layout checks pass.
+`run_reflex` registers config in memory (`sys.modules['rxconfig']`) and does **not** create `rxconfig.py` by default.
 
 ---
 

@@ -79,8 +79,22 @@ def _router_data_from_starlette_request(request: Request) -> dict[str, Any]:
     }
 
 
+def _router_data_is_usable(router_data: dict[str, Any]) -> bool:
+    """Return whether *router_data* has enough fields to synthesize a request."""
+    if not router_data:
+        return False
+    headers = router_data.get("headers")
+    if isinstance(headers, dict) and headers:
+        return True
+    return bool(
+        router_data.get("pathname")
+        or router_data.get("ip")
+        or router_data.get("query")
+    )
+
+
 def _router_data_from_state_chain(state: Any) -> dict[str, Any]:
-    """Return the nearest ``router_data`` with a session cookie on the state tree.
+    """Return the nearest non-empty ``router_data`` on the state tree.
 
     Upload handlers often run on substates (e.g. ``ProfileState``); cookies live
     on the root state's ``router_data`` and are visible via inheritance in handlers
@@ -111,7 +125,7 @@ def _router_data_from_state_chain(state: Any) -> dict[str, Any]:
         if isinstance(node, Mock):
             break
         raw = getattr(node, "router_data", None)
-        if isinstance(raw, dict) and (raw.get("headers") or {}).get("cookie"):
+        if isinstance(raw, dict) and _router_data_is_usable(raw):
             return raw
         parent = getattr(node, "parent_state", None)
         if parent is None or isinstance(parent, Mock):
@@ -150,14 +164,17 @@ def _resolve_router_data(event: Event, state: BaseState | None) -> dict[str, Any
     """
     raw_event_rd = getattr(event, "router_data", None)
     event_rd: dict[str, Any] = raw_event_rd if isinstance(raw_event_rd, dict) else {}
-    if (event_rd.get("headers") or {}).get("cookie"):
+    if _router_data_is_usable(event_rd) and (event_rd.get("headers") or {}).get("cookie"):
         return event_rd
 
     state_rd = _router_data_from_state_chain(state)
-    if (state_rd.get("headers") or {}).get("cookie"):
+    if _router_data_is_usable(state_rd):
         return _merge_router_data_with_state_cookie(state_rd, event_rd)
 
-    return event_rd
+    if _router_data_is_usable(event_rd):
+        return event_rd
+
+    return state_rd
 
 
 def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
@@ -314,6 +331,62 @@ async def _attach_user(request: HttpRequest) -> None:
         request.user = AnonymousUser()  # pyright: ignore[reportAttributeAccessIssue]
 
 
+async def bridge_request_for_state(
+    state: Any,
+    event: Event | None = None,
+) -> HttpRequest | None:
+    """Build a synthetic Django request from *event* and/or *state* ``router_data``.
+
+    Used when middleware ``preprocess`` did not run but a handler still needs
+    ``self.request`` (fallback from the patched ``process_event`` hook).
+    """
+    try:
+        if event is not None:
+            request = _build_request_from_event(event, state)
+        else:
+            router_data = _router_data_from_state_chain(state)
+            if not router_data:
+                return None
+            request = _build_request_from_router_data(router_data)
+        _attach_session(request)
+        _activate_i18n_for_request(request)
+        try:
+            await _attach_user(request)
+        except Exception:
+            from django.contrib.auth.models import AnonymousUser
+
+            request.user = AnonymousUser()  # pyright: ignore[reportAttributeAccessIssue]
+        try:
+            await _attach_reflex_context(request)
+        except Exception:
+            pass
+        return request
+    except Exception:
+        return None
+
+
+async def bind_django_request_for_handler_state(
+    handler_state: Any,
+    *,
+    event: Event | None = None,
+) -> None:
+    """Ensure *handler_state* can use ``self.request`` in the current event."""
+    from reflex_django.context import begin_event_request, current_request
+    from reflex_django.state.request_binding import bind_request_on_state
+
+    http = current_request()
+    if http is None:
+        root = handler_state
+        try:
+            root = handler_state._get_root_state()  # noqa: SLF001
+        except (AttributeError, TypeError):
+            pass
+        http = await bridge_request_for_state(root, event)
+        if http is not None:
+            begin_event_request(http)
+    bind_request_on_state(handler_state, http)
+
+
 async def _attach_reflex_context(request: HttpRequest) -> None:
     """Run configured context processors and cache JSON-safe output on ``request``.
 
@@ -372,20 +445,30 @@ class DjangoEventBridge(Middleware):
             Always ``None`` — the bridge never short-circuits the event.
         """
         end_event_request()
-        try:
-            request = _build_request_from_event(event, state)
-            _attach_session(request)
-            _activate_i18n_for_request(request)
-            await _attach_user(request)
-            await _attach_reflex_context(request)
-        except Exception:
+        request = await bridge_request_for_state(state, event)
+        if request is None:
+            from reflex_base.utils import console
+
+            console.warn(
+                "reflex-django event bridge could not build Django request for this event"
+            )
             return None
 
         begin_event_request(request)
         from reflex.state import BaseState as _BaseState
         from reflex_django.state.auth_bridge import maybe_sync_app_state_auth
+        from reflex_django.state.request_binding import (
+            bind_request_on_state,
+            bind_request_on_state_tree,
+        )
 
         if isinstance(state, _BaseState):
+            bind_request_on_state_tree(state, request)
+            try:
+                handler_state = await state.get_state(event.state_cls)
+                bind_request_on_state(handler_state, request)
+            except Exception:
+                pass
             user = getattr(request, "user", None)
             if getattr(user, "is_authenticated", False):
                 sk = getattr(request.session, "session_key", None) or ""

@@ -12,6 +12,7 @@ _SKIP_PAGE_APP_LABELS = frozenset({"reflex_django"})
 _CONTRIB_APP_PREFIX = "django."
 
 _APP_INSTANCE: Any | None = None
+_IMPORTED_VIEW_MODULES: set[str] = set()
 
 _DJANGO_LED_APP_MODULE = "reflex_django.django_led_app"
 
@@ -161,16 +162,124 @@ def resolve_page_packages() -> list[str]:
     return discover_page_modules()
 
 
+def migrate_decorated_pages_app_name(app_name: str | None = None) -> str:
+    """Move pages registered under the wrong ``DECORATED_PAGES`` key to *app_name*.
+
+    ``@page`` / ``@template`` call :func:`reflex.page`, which buckets decorators
+    by :func:`reflex_base.config.get_config`.app_name at import time. In
+    Django-first projects that name is often still ``""`` when ``urls.py`` imports
+    ``views.py``, so pages land in ``DECORATED_PAGES[""]`` while compile later
+    reads ``DECORATED_PAGES["demo"]`` — resulting in a blank UI and
+    ``dispatch is not a function`` frontend errors.
+    """
+    try:
+        from reflex.page import DECORATED_PAGES
+        from reflex_django.mount_config import resolve_app_name
+    except ImportError:
+        return app_name or ""
+
+    target = (app_name or resolve_app_name()).strip()
+    if not target:
+        return target
+
+    for key in list(DECORATED_PAGES.keys()):
+        if key == target:
+            continue
+        for entry in DECORATED_PAGES.pop(key, []):
+            DECORATED_PAGES[target].append(entry)
+
+    return target
+
+
+def apply_page_registry_to_app(app: Any) -> None:
+    """Register :data:`~reflex_django.decorators.PAGE_REGISTRY` pages on *app*."""
+    from reflex_django.decorators import PAGE_REGISTRY
+
+    for registration in PAGE_REGISTRY:
+        route = registration.route or registration.kwargs.get("route")
+        if route and route in getattr(app, "_unevaluated_pages", {}):
+            continue
+        app.add_page(registration.render_fn, **registration.kwargs)
+
+
+def sync_page_load_events(app: Any) -> None:
+    """Ensure ``app._load_events`` matches ``on_load`` from decorated pages.
+
+    Reflex stores page ``on_load`` handlers when :meth:`reflex.app.App.add_page`
+    runs during compile. In Django-first mode the app can be prepared before
+    compile or decorated pages can be registered after an early ``add_page``
+    pass; this syncs ``DECORATED_PAGES`` metadata onto the live app instance.
+    """
+    try:
+        from reflex.page import DECORATED_PAGES
+        from reflex.utils import format
+        from reflex_base.config import get_config
+    except ImportError:
+        return
+
+    from reflex_django.mount_config import resolve_app_name
+
+    app_name = migrate_decorated_pages_app_name(resolve_app_name())
+    try:
+        config_name = get_config().app_name
+        if config_name:
+            app_name = str(config_name)
+    except Exception:
+        pass
+    for _render, kwargs in DECORATED_PAGES.get(app_name, ()):
+        route = kwargs.get("route")
+        on_load = kwargs.get("on_load")
+        if not route or on_load is None:
+            continue
+        formatted = format.format_route(str(route))
+        handlers = on_load if isinstance(on_load, list) else [on_load]
+        if not app._load_events.get(formatted):
+            app._load_events[formatted] = list(handlers)
+
+
+def import_mount_app_views(app_name: str | None = None) -> list[str]:
+    """Import ``{app_name}.views`` during ``reflex_mount()`` without re-importing urls."""
+    from reflex_django.mount_config import resolve_app_name
+
+    name = (app_name or resolve_app_name()).strip()
+    if not name:
+        return []
+
+    module_name = _page_module_name(name, "views")
+    imported: list[str] = []
+    if _views_module_exists(module_name):
+        if module_name not in _IMPORTED_VIEW_MODULES:
+            importlib.import_module(module_name)
+            _IMPORTED_VIEW_MODULES.add(module_name)
+        imported.append(module_name)
+    migrate_decorated_pages_app_name(name)
+    return imported
+
+
 def import_page_packages() -> list[str]:
     """Import discovered page modules so ``@template`` / ``@page`` decorators run.
 
     Returns:
         Dotted module paths that were imported successfully.
     """
+    from reflex_django.mount_config import ensure_mount_config_loaded, resolve_app_name
+
+    ensure_mount_config_loaded()
+    try:
+        from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+
+        ensure_rxconfig_from_django()
+    except Exception:
+        pass
+
     imported: list[str] = []
     for dotted in resolve_page_packages():
+        if dotted in _IMPORTED_VIEW_MODULES:
+            continue
         importlib.import_module(dotted)
+        _IMPORTED_VIEW_MODULES.add(dotted)
         imported.append(dotted)
+    migrate_decorated_pages_app_name(resolve_app_name())
     return imported
 
 
@@ -207,8 +316,17 @@ def ensure_django_led_app_ready() -> Any:
     """
     import_page_packages()
     app = load_app_factory()
+    from reflex_django.integration import _ensure_runtime_event_patches
+    from reflex_django.mount_config import resolve_app_name
+    from reflex_django.plugin import apply_reflex_plugins_to_app
+
+    _ensure_runtime_event_patches()
+    apply_reflex_plugins_to_app(app)
     if hasattr(app, "_apply_decorated_pages"):
+        migrate_decorated_pages_app_name(resolve_app_name())
         app._apply_decorated_pages()
+        apply_page_registry_to_app(app)
+    sync_page_load_events(app)
     return app
 
 
@@ -216,6 +334,7 @@ def reset_app_factory_cache() -> None:
     """Clear cached app instance (tests only)."""
     global _APP_INSTANCE
     _APP_INSTANCE = None
+    _IMPORTED_VIEW_MODULES.clear()
     import reflex_django.django_led_app as django_led_app
 
     django_led_app._app = None

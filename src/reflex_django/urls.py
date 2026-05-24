@@ -146,6 +146,10 @@ def reflex_mount(
         django_prefix=django_prefix,
     )
 
+    from reflex_django.app_factory import import_mount_app_views
+
+    import_mount_app_views(app_name or merged_rx.get("app_name"))
+
     config = resolve_prefixes(
         mount_prefix=mount_prefix,
         django_prefix=django_prefix,

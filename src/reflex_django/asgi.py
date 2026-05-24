@@ -60,6 +60,27 @@ def bootstrap_django_led_runtime() -> None:
     ensure_django_led_app_ready()
 
 
+def django_asgi_application() -> ASGIApp:
+    """Return the Django ASGI callable (with optional staticfiles handler).
+
+    Does not bootstrap the Reflex app factory — safe to call from
+    :meth:`reflex_django.plugin.ReflexDjangoPlugin._configure` without recursion.
+    """
+    configure_django()
+
+    from django.conf import settings
+    from django.core.asgi import get_asgi_application
+
+    app = get_asgi_application()
+
+    if "django.contrib.staticfiles" in getattr(settings, "INSTALLED_APPS", ()):
+        from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
+
+        return ASGIStaticFilesHandler(app)
+
+    return app
+
+
 def build_django_asgi() -> ASGIApp:
     """Return the Django ASGI application with staticfiles wrapping.
 
@@ -83,18 +104,7 @@ def build_django_asgi() -> ASGIApp:
     """
     configure_django()
     bootstrap_django_led_runtime()
-
-    from django.conf import settings
-    from django.core.asgi import get_asgi_application
-
-    app = get_asgi_application()
-
-    if "django.contrib.staticfiles" in getattr(settings, "INSTALLED_APPS", ()):
-        from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
-
-        return ASGIStaticFilesHandler(app)
-
-    return app
+    return django_asgi_application()
 
 
 def _normalize_prefix(prefix: str) -> str:

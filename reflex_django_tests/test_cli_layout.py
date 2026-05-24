@@ -38,4 +38,8 @@ def test_needs_reinit_false_after_bootstrap(
     from reflex.utils import prerequisites
 
     assert prerequisites.needs_reinit() is False
-    assert (tmp_path / "rxconfig.py").is_file()
+    assert not (tmp_path / "rxconfig.py").is_file()
+    import sys
+
+    assert "rxconfig" in sys.modules
+    assert getattr(sys.modules["rxconfig"], "config", None) is not None

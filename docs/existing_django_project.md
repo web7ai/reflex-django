@@ -10,7 +10,7 @@ Add a Reflex SPA to a **brownfield** Django codebase without replacing models, m
 |:---|:---|
 | `manage.py`, models, migrations, admin | **Keep** |
 | Existing `/api/`, webhooks, templates | **Keep** — list prefixes in `django_prefix` |
-| `rxconfig.py` | **Optional** — auto stub may appear; config lives in `reflex_mount()` |
+| `rxconfig.py` | **Not required** — config lives in `reflex_mount()` |
 | Reflex pages | **Add** in `{app}/views.py` with `@template` |
 | `demo/demo.py` | **Do not add** — use `django_led_app` |
 
@@ -176,9 +176,9 @@ Your mobile or JS clients can keep calling `/api/`. The Reflex UI is an addition
 
 Only one process should bind the Reflex backend port (default 8000). Use `run_reflex`, not `runserver`, for full-stack dev.
 
-**Stale `rxconfig.py`**
+**Leftover `rxconfig.py`**
 
-If a stub has the wrong `app_name`, delete it or run `run_reflex` again — stubs with the reflex-django marker are refreshed automatically.
+`run_reflex` does not create `rxconfig.py`. If an old auto-generated stub remains, delete it — config comes from `reflex_mount()` only.
 
 ---
 

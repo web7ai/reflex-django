@@ -35,9 +35,15 @@ def template(
     Example::
 
         from reflex_django import template
+        from reflex_django.states import AppState
         import reflex as rx
 
-        @template(route="/", title="Home")
+        class HomeState(AppState):
+            @rx.event
+            async def on_load(self):
+                ...
+
+        @template(route="/", title="Home", on_load=HomeState.on_load)
         def index() -> rx.Component:
             return rx.text("Hello")
 
@@ -54,13 +60,18 @@ def template(
         A decorator for the page render function.
     """
     all_meta = [*_DEFAULT_META, *(meta or [])]
+    load_handlers = (
+        None
+        if on_load is None
+        else (on_load if isinstance(on_load, list) else [on_load])
+    )
 
     def decorator(page_content: Callable[[], rx.Component]) -> Callable[[], rx.Component]:
         @page(
             route=route,
             title=title,
             description=description,
-            on_load=on_load,
+            on_load=load_handlers,
             meta=all_meta,
             **page_kwargs,
         )
