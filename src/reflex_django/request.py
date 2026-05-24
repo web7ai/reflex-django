@@ -11,6 +11,10 @@ has bound the synthetic :class:`django.http.HttpRequest`::
             ...
         page = request.GET.get("page")
 
+Do **not** use ``request.user`` in **class-level** state defaults (for example
+``message: str = f"Hi {request.user}"``) — that runs at import time before
+Django is ready. Set values in ``@rx.event`` handlers (``on_load``) instead.
+
 Do **not** pass ``request.user`` (a Django model) into ``rx.text`` / components.
 For UI labels use :class:`~reflex_django.auth_state.DjangoUserState` /
 :class:`~reflex_django.states.AppState`` vars (``username``, ``is_authenticated``)

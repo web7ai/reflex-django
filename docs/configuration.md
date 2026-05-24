@@ -77,6 +77,7 @@ Reflex normally loads `from demo.demo import app`. reflex-django sets `app_modul
 | **`REFLEX_DJANGO_PAGE_APPS`** | `None` | Allowlist of app labels to scan |
 | **`REFLEX_DJANGO_PAGE_MODULE`** | `"views"` | Submodule to import per app |
 | **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** | `()` | Extra context callables for Reflex events (JSON-serializable) |
+| **`REFLEX_DJANGO_AUTO_LOAD_CONTEXT`** | `True` | Run context processors on every Reflex event (no manual `load_django_context()` in handlers) |
 | **`REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS`** | `True` | Use Django template context processors when the list above is empty |
 | **`REFLEX_DJANGO_LOGIN_URL`** | `"/login"` | Redirect for `@login_required` |
 | **`REFLEX_DJANGO_AUTH`** | *(see [Authentication](authentication.md))* | Built-in auth pages configuration |

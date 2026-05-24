@@ -45,11 +45,13 @@ class AppStateMeta(BaseStateMeta):
 class AppState(DjangoUserState, ABC, metaclass=AppStateMeta):
     """Base Reflex state with Django auth, session, and optional model CRUD.
 
-    **Handlers (server-side):** use :attr:`request`, :attr:`user`, and
-    :attr:`session` for the live Django objects bound by
-    :class:`~reflex_django.middleware.DjangoEventBridge` (for example
-    ``self.request.user`` in ``on_load``). Call :meth:`login`, :meth:`logout`,
-    :meth:`has_perm`, and :meth:`has_group` inside ``@rx.event`` handlers.
+    **Handlers (server-side):** use :attr:`request`, :attr:`user`, :attr:`session`,
+    and :attr:`django_context` for the live Django objects bound by
+    :class:`~reflex_django.middleware.DjangoEventBridge` on every event (for example
+    ``self.request.user`` in ``on_load``). Context processors run automatically
+    when ``REFLEX_DJANGO_AUTO_LOAD_CONTEXT`` is enabled (default). Call
+    :meth:`login`, :meth:`logout`, :meth:`has_perm`, and :meth:`has_group` inside
+    ``@rx.event`` handlers.
 
     **UI (reactive):** use ``is_authenticated``, ``username``, ``email``,
     ``group_names``, ``is_staff``, and ``is_superuser`` (Reflex vars). They are

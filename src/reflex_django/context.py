@@ -15,7 +15,7 @@ the synthetic request for the current Reflex event, not a template render.
 from __future__ import annotations
 
 import contextvars
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
@@ -23,9 +23,61 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
 
+REFLEX_DJANGO_CONTEXT_ATTR = "_reflex_django_context"
+
 _request_var: contextvars.ContextVar[HttpRequest | None] = contextvars.ContextVar(
     "reflex_django.current_request", default=None
 )
+
+
+class _StandInAnonymousUser:
+    """Lightweight anonymous user before Django apps are ready or outside events."""
+
+    is_authenticated = False
+    is_staff = False
+    is_superuser = False
+    pk = None
+    email = ""
+    username = ""
+    first_name = ""
+    last_name = ""
+
+    def get_username(self) -> str:
+        return ""
+
+
+def _django_apps_ready() -> bool:
+    try:
+        from django.apps import apps
+
+        return bool(apps.ready)
+    except Exception:
+        return False
+
+
+def anonymous_user() -> Any:
+    """Return an anonymous user without touching the app registry when not ready."""
+    if not _django_apps_ready():
+        return _StandInAnonymousUser()
+    from django.contrib.auth.models import AnonymousUser
+
+    return AnonymousUser()
+
+
+def get_request_reflex_context(request: HttpRequest | None) -> dict[str, Any]:
+    """Return context-processor output cached on ``request``, if any."""
+    if request is None:
+        return {}
+    raw = getattr(request, REFLEX_DJANGO_CONTEXT_ATTR, None)
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def set_request_reflex_context(
+    request: HttpRequest,
+    context: dict[str, Any],
+) -> None:
+    """Cache merged context-processor output on the synthetic request."""
+    setattr(request, REFLEX_DJANGO_CONTEXT_ATTR, dict(context))
 
 _reset_token_var: contextvars.ContextVar[
     contextvars.Token[HttpRequest | None] | None
@@ -97,18 +149,19 @@ def current_request() -> HttpRequest | None:
 def current_user() -> AbstractBaseUser | AnonymousUser:
     """Return the authenticated user for the active Reflex event.
 
-    Falls back to :class:`django.contrib.auth.models.AnonymousUser` when no
-    request is bound or no user is present on the request.
+    Falls back to an anonymous user when no request is bound or no user is on
+    the request. Before :func:`django.apps.apps` is ready (for example during
+    ``views.py`` import), returns :class:`_StandInAnonymousUser` instead of
+    importing Django auth models.
 
     Returns:
         The Django user object.
     """
-    from django.contrib.auth.models import AnonymousUser
-
     request = current_request()
     if request is None:
-        return AnonymousUser()
-    return getattr(request, "user", None) or AnonymousUser()
+        return anonymous_user()
+    user = getattr(request, "user", None)
+    return user if user is not None else anonymous_user()
 
 
 def current_session() -> SessionBase | None:
@@ -149,12 +202,16 @@ def current_language() -> str:
 
 
 __all__ = [
+    "REFLEX_DJANGO_CONTEXT_ATTR",
+    "anonymous_user",
     "begin_event_request",
     "current_language",
     "current_request",
     "current_session",
     "current_user",
     "end_event_request",
+    "get_request_reflex_context",
     "reset_current_request",
     "set_current_request",
+    "set_request_reflex_context",
 ]

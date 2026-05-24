@@ -270,7 +270,7 @@ class DjangoContextState(rx.State):
 
     @rx.event
     async def load_django_context(self) -> None:
-        """Populate :attr:`django_context` from configured processors."""
+        """Re-populate :attr:`django_context` (optional; auto-loaded each event by default)."""
         import json
 
         merged = await collect_reflex_context(current_request())

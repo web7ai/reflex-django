@@ -9,9 +9,9 @@ if TYPE_CHECKING:
 
 
 def _anonymous_user() -> Any:
-    from django.contrib.auth.models import AnonymousUser
+    from reflex_django.context import anonymous_user
 
-    return AnonymousUser()
+    return anonymous_user()
 
 
 class DjangoStateRequest:

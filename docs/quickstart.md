@@ -169,8 +169,31 @@ def about() -> rx.Component:
 | `self.request.user` — Django user | `self.is_authenticated` |
 | `self.request.session` — read/write session | `self.username`, `self.email` |
 | `await self.has_perm("app.change_model")` | Auto-updated each event |
+| `self.django_context` / `self.request` — context processor keys | Copy into reactive vars in `on_load` if the UI needs them |
 
-Reflex events run over WebSocket. The **event bridge** (enabled automatically) builds a Django-like `request` on each event so you can use the same session as `/admin/`.
+Reflex events run over WebSocket. The **event bridge** builds a Django-like `request` on each event and **loads context processors automatically** (default). You do **not** need `await self.load_django_context()` unless you want a mid-handler refresh.
+
+**Do not** read `request.user` in class-level defaults (import time crashes with `AppRegistryNotReady`):
+
+```python
+# Wrong — runs when views.py is imported
+message: str = f"Hi {request.user}"
+
+# Right — runs when the page loads
+@rx.event
+async def on_load(self):
+    if self.request.user.is_authenticated:
+        self.message = f"Hi, {self.request.user.get_username()}"
+```
+
+Defaults in reflex-django (override in `settings.py` if needed):
+
+```python
+REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True
+REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS = True
+```
+
+Then use processor keys on `self.request` (e.g. `self.request.LANGUAGE_CODE`) or `self.django_context["key"]` inside any `@rx.event` handler.
 
 ```python
 @rx.event
@@ -223,8 +246,10 @@ No hand-written `rxconfig.py` required. A stub may appear on first run; real con
 |:---|:---|
 | Template picker on first run | Ensure `reflex_django` in `INSTALLED_APPS` and `reflex_mount()` in `urls.py`; restart `run_reflex` |
 | Guest after admin login | Keep `SessionMiddleware` + `AuthenticationMiddleware` |
+| `AppRegistryNotReady` on startup | Do not use `request.user` in class-level state defaults; use `@rx.event` / `on_load` |
 | `ModuleNotFoundError: shop.shop` | Do not add `shop/shop.py`; use `app_name="shop"` on `reflex_mount()` |
 | Admin warnings in console | Add `AsyncStreamingMiddleware` at end of `MIDDLEWARE` |
+| Context processors empty | Ensure `REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True` and template or explicit processors are configured |
 
 ---
 
