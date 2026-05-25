@@ -17,11 +17,13 @@ falls back to delegating to Reflex's own CLI for backward compatibility.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
@@ -265,13 +267,34 @@ class Command(BaseCommand):
                 )
             )
 
+        reload_enabled = not options.get("no_reload") and not is_prod
+        # In from-build dev mode we MUST own the reload loop ourselves. If we
+        # delegated to uvicorn's ``--reload``, the child would re-import
+        # :mod:`reflex_django.asgi_entry` on every file change, which re-runs
+        # the reflex-django bootstrap inside a process that already has the
+        # SPA cached on disk. That often appears "stuck" (the bootstrap can
+        # deadlock on duplicate Reflex compiler patches) and — crucially —
+        # never re-exports the SPA, so the user sees the old bundle even
+        # after the reload succeeds. Running uvicorn as a subprocess with a
+        # parent-side :mod:`watchfiles` loop gives us a clean process restart
+        # AND a guaranteed re-export on every change.
+        use_parent_watch = from_build and reload_enabled and not backend_only
+
         try:
-            self._run_asgi_server(
-                host=backend_host,
-                port=backend_port,
-                loglevel=loglevel,
-                reload=not options.get("no_reload") and not is_prod,
-            )
+            if use_parent_watch:
+                self._run_with_watch_reload(
+                    host=backend_host,
+                    port=backend_port,
+                    loglevel=loglevel,
+                    skip_rebuild=skip_rebuild,
+                )
+            else:
+                self._run_asgi_server(
+                    host=backend_host,
+                    port=backend_port,
+                    loglevel=loglevel,
+                    reload=reload_enabled,
+                )
         finally:
             if vite_proc is not None and vite_proc.poll() is None:
                 self.stdout.write(
@@ -464,6 +487,238 @@ class Command(BaseCommand):
             "serve the ASGI app. Install with `pip install uvicorn[standard]` and "
             "re-run `python manage.py run_reflex`."
         )
+
+    # ------------------------------------------------------------------
+    # Parent-side watch loop (from-build dev)
+    # ------------------------------------------------------------------
+
+    def _run_with_watch_reload(
+        self,
+        *,
+        host: str,
+        port: int,
+        loglevel: str,
+        skip_rebuild: bool,
+    ) -> None:
+        """Run uvicorn as a subprocess and re-export + restart on file changes.
+
+        Why this exists instead of uvicorn's built-in ``--reload``:
+
+        * Uvicorn's reloader re-imports the ASGI app inside a child interpreter
+          on every change. For reflex-django this re-runs
+          :func:`~reflex_django.integration.install_reflex_django_integration`,
+          which monkey-patches Reflex's compiler/config modules. The second
+          application of those patches can race or deadlock, manifesting as a
+          "WatchFiles detected changes ... Reloading" line that never returns.
+        * Uvicorn's reloader has no hook for "rebuild the SPA before the next
+          child boots", so even when it succeeds the user sees the *old*
+          compiled bundle until they kill and re-run the command.
+
+        Owning the reload loop in the parent fixes both: each restart is a
+        brand-new uvicorn subprocess (no module-state leakage) and we re-run
+        :meth:`_auto_export_for_build_mode` between cycles so the served SPA
+        always reflects the latest source.
+        """
+        try:
+            from watchfiles import PythonFilter, watch
+        except ImportError:
+            self.stdout.write(
+                self.style.WARNING(
+                    "reflex-django: `watchfiles` is not installed — falling back "
+                    "to uvicorn's in-process reloader. Install `uvicorn[standard]` "
+                    "for the from-build watch+rebuild loop."
+                )
+            )
+            self._run_asgi_server(
+                host=host, port=port, loglevel=loglevel, reload=True
+            )
+            return
+
+        watch_root = self._resolve_watch_root()
+        watch_filter = self._build_watch_filter(PythonFilter)
+
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                f"reflex-django: from-build watch loop — Django watches "
+                f"{watch_root} for .py changes; every change triggers an "
+                "auto-export + clean uvicorn restart."
+            )
+        )
+
+        proc = self._spawn_uvicorn_subprocess(
+            host=host, port=port, loglevel=loglevel
+        )
+        try:
+            for changes in watch(
+                str(watch_root),
+                watch_filter=watch_filter,
+                debounce=800,
+                step=50,
+                yield_on_timeout=False,
+                raise_interrupt=False,
+            ):
+                if not changes:
+                    continue
+                changed_paths = sorted({path for _kind, path in changes})
+                preview = ", ".join(self._shorten(p, watch_root) for p in changed_paths[:3])
+                if len(changed_paths) > 3:
+                    preview += f" (+{len(changed_paths) - 3} more)"
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f"reflex-django: detected change in {preview} — "
+                        "stopping uvicorn, re-exporting SPA, restarting."
+                    )
+                )
+
+                self._stop_uvicorn_subprocess(proc)
+                if not skip_rebuild:
+                    self._auto_export_for_build_mode()
+                proc = self._spawn_uvicorn_subprocess(
+                    host=host, port=port, loglevel=loglevel
+                )
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self._stop_uvicorn_subprocess(proc)
+
+    def _resolve_watch_root(self) -> Path:
+        """Return the directory we should watch for source changes.
+
+        Prefers ``settings.BASE_DIR`` (the user's Django project root). Falls
+        back to the current working directory when that setting is missing
+        or unreadable.
+        """
+        try:
+            from django.conf import settings
+
+            base = getattr(settings, "BASE_DIR", None)
+            if base:
+                return Path(str(base)).resolve()
+        except Exception:  # noqa: BLE001
+            pass
+        return Path.cwd().resolve()
+
+    def _build_watch_filter(self, python_filter_cls: type):
+        """Return a watchfiles filter that ignores reflex-django build artefacts.
+
+        We subclass :class:`watchfiles.PythonFilter` so we still get the
+        sensible default of "Python files only, ignoring ``.git``, virtual
+        envs, ``__pycache__`` and friends", then add our own excludes for
+        directories the auto-export itself writes to (otherwise the export
+        would trigger another reload mid-build, looping forever).
+        """
+        try:
+            from django.conf import settings
+        except Exception:  # noqa: BLE001
+            settings = None  # type: ignore[assignment]
+
+        extra_excludes: list[str] = [
+            os.sep + ".web" + os.sep,
+            os.sep + "node_modules" + os.sep,
+            os.sep + "staticfiles" + os.sep,
+            os.sep + "static_collected" + os.sep,
+            os.sep + ".reflex" + os.sep,
+            os.sep + "dist" + os.sep,
+            os.sep + "build" + os.sep,
+        ]
+        if settings is not None:
+            static_root = getattr(settings, "STATIC_ROOT", None)
+            if static_root:
+                extra_excludes.append(
+                    os.path.normpath(str(static_root)) + os.sep
+                )
+
+        class _ReflexDjangoFilter(python_filter_cls):  # type: ignore[misc, valid-type]
+            def __call__(self, change, path: str) -> bool:  # noqa: D401, ANN001
+                norm = os.path.normpath(path)
+                for needle in extra_excludes:
+                    if needle in norm:
+                        return False
+                return super().__call__(change, path)
+
+        return _ReflexDjangoFilter()
+
+    @staticmethod
+    def _shorten(path: str, root: Path) -> str:
+        """Return ``path`` relative to ``root`` for readable log lines."""
+        try:
+            return str(Path(path).relative_to(root))
+        except ValueError:
+            return path
+
+    def _spawn_uvicorn_subprocess(
+        self,
+        *,
+        host: str,
+        port: int,
+        loglevel: str,
+    ) -> subprocess.Popen[bytes]:
+        """Spawn uvicorn in a fresh interpreter so we control its lifecycle.
+
+        Reload is intentionally OFF — the parent ``_run_with_watch_reload``
+        loop is the only reload mechanism. This avoids the deadlock /
+        stale-SPA problem documented above.
+        """
+        cmd = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "reflex_django.asgi_entry:application",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--log-level",
+            loglevel,
+            "--ws",
+            "auto",
+        ]
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"reflex-django: starting uvicorn subprocess at "
+                f"http://{host}:{port}/"
+            )
+        )
+        env = {
+            **os.environ,
+            # Make sure the child also takes the from-build code path even
+            # though it never actually hits ``_run_django_outer`` — this is
+            # just defensive; the ASGI app does not branch on the setting.
+            "REFLEX_DJANGO_SERVE_FROM_BUILD": os.environ.get(
+                "REFLEX_DJANGO_SERVE_FROM_BUILD", "1"
+            ),
+            "REFLEX_DJANGO_DEV_PROXY": "0",
+        }
+        return subprocess.Popen(cmd, env=env)
+
+    def _stop_uvicorn_subprocess(
+        self, proc: subprocess.Popen[bytes] | None
+    ) -> None:
+        """Gracefully terminate (then kill) the uvicorn subprocess."""
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if sys.platform == "win32":
+                proc.terminate()
+            else:
+                proc.send_signal(signal.SIGINT)
+            try:
+                proc.wait(timeout=10)
+                return
+            except subprocess.TimeoutExpired:
+                pass
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+                return
+            except subprocess.TimeoutExpired:
+                pass
+            proc.kill()
+            with contextlib.suppress(Exception):
+                proc.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            with contextlib.suppress(Exception):
+                proc.kill()
 
     def _run_uvicorn(
         self,

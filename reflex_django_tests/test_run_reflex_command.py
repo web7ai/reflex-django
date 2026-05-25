@@ -59,16 +59,22 @@ def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def _stub_asgi_server(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
-    """Replace ``_run_asgi_server`` with a no-op recorder.
+    """Replace ``_run_asgi_server`` and ``_run_with_watch_reload`` with no-ops.
 
-    We do not want the test to actually start uvicorn — only verify the
-    pre-serve orchestration (auto-export, env var flipping, Vite spawn
-    decisions).
+    We do not want the test to actually start uvicorn (which blocks forever)
+    or open a real :mod:`watchfiles` watcher (which also blocks). The fixture
+    returns the ``_run_asgi_server`` mock since most tests exercise the
+    non-reload code path; tests that need to assert on the watch loop should
+    patch ``_run_with_watch_reload`` separately.
     """
     server = mock.MagicMock()
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._run_asgi_server",
         server,
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_with_watch_reload",
+        mock.MagicMock(),
     )
     return server
 
@@ -291,6 +297,72 @@ def test_with_vite_opts_out_of_from_build(
 
     export_call.assert_not_called()
     vite_spawn.assert_called_once()
+
+
+def test_from_build_uses_parent_watch_reload(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+) -> None:
+    """``--from-build`` (with reload on) routes through ``_run_with_watch_reload``.
+
+    This is the bug-fix verification: uvicorn's in-process reloader is
+    disabled in from-build mode because re-importing the ASGI app re-runs
+    the reflex-django bootstrap and never re-exports the SPA. The parent
+    watch loop is the only mechanism that triggers an auto-export between
+    reloads.
+    """
+    asgi_server = mock.MagicMock()
+    watch_reload = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_asgi_server",
+        asgi_server,
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_with_watch_reload",
+        watch_reload,
+    )
+    monkeypatch.setattr(
+        "django.core.management.call_command", mock.MagicMock()
+    )
+
+    Command().handle(from_build=True)
+
+    watch_reload.assert_called_once()
+    asgi_server.assert_not_called()
+    # The watch loop receives the skip_rebuild flag so the per-restart
+    # re-export can be suppressed for fast Python-only iterations.
+    assert watch_reload.call_args.kwargs.get("skip_rebuild") is False
+
+
+def test_no_reload_in_from_build_uses_plain_asgi_server(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+) -> None:
+    """``--from-build --no-reload`` skips the watch loop entirely.
+
+    A one-shot rebuild + serve (no auto-restart) is what CI smoke tests
+    want, and what ``--env prod`` already does. ``--no-reload`` lets the
+    user opt into that same one-shot semantics in dev.
+    """
+    asgi_server = mock.MagicMock()
+    watch_reload = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_asgi_server",
+        asgi_server,
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_with_watch_reload",
+        watch_reload,
+    )
+    monkeypatch.setattr(
+        "django.core.management.call_command", mock.MagicMock()
+    )
+
+    Command().handle(from_build=True, no_reload=True)
+
+    watch_reload.assert_not_called()
+    asgi_server.assert_called_once()
+    assert asgi_server.call_args.kwargs.get("reload") is False
 
 
 def test_explicit_from_build_beats_with_vite(
