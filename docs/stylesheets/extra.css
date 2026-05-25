@@ -224,42 +224,388 @@ body, .md-typeset {
   border-bottom-color: currentColor;
 }
 
-/* ---------- Code ----------------------------------------------------------- */
+/* ==========================================================================
+   Code blocks — modern, dark, professional (FastAPI / Vercel / Linear style)
+   ========================================================================== */
 
+/* Inline code — soft pink chip in light mode, soft pink-tinted in dark. */
 .md-typeset code {
-  border-radius: 5px;
-  padding: 2px 6px;
-  font-size: 0.85em;
-  border: 1px solid var(--rd-border-soft);
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.86em;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #fff0f5 0%, #ffe4ee 100%);
+  color: var(--rd-pink-800);
+  border: 1px solid rgba(233, 30, 99, 0.16);
+  box-shadow: 0 1px 0 rgba(233, 30, 99, 0.04) inset;
+  word-break: break-word;
 }
 
-.md-typeset pre > code {
+[data-md-color-scheme="slate"] .md-typeset code {
+  background: rgba(244, 143, 177, 0.10);
+  color: #f8bbd0;
+  border-color: rgba(244, 143, 177, 0.25);
+  box-shadow: none;
+}
+
+/* Inline code inside headings and links inherits the surrounding color. */
+.md-typeset h1 code,
+.md-typeset h2 code,
+.md-typeset h3 code,
+.md-typeset h4 code,
+.md-typeset a code {
+  background: transparent;
   border: none;
-  border-radius: 0;
-  padding: 0;
+  padding: 0 4px;
+  color: inherit;
+  box-shadow: none;
 }
 
-.md-typeset pre {
-  border-radius: var(--rd-radius-md);
-  box-shadow: var(--rd-shadow-sm);
-  border: 1px solid var(--rd-border-soft);
-}
+/* ---------- Block code wrapper ------------------------------------------- */
 
-/* Slight glow on code blocks in light mode */
-[data-md-color-scheme="default"] .md-typeset .highlight {
+/* The wrapper Pygments+Material renders around every code block. Dark in both
+   schemes (the modern look). The 38px ::before stripe at the top is the
+   macOS-style window chrome. */
+.md-typeset .highlight,
+.md-typeset .highlighttable {
   position: relative;
+  margin: 1.6rem 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #1d1f27 0%, #16171c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 14px 40px -16px rgba(20, 14, 27, 0.45),
+    0 4px 14px -8px rgba(20, 14, 27, 0.25);
 }
 
-[data-md-color-scheme="default"] .md-typeset .highlight::before {
+/* Light mode: a touch of pink glow around the dark code block. */
+[data-md-color-scheme="default"] .md-typeset .highlight,
+[data-md-color-scheme="default"] .md-typeset .highlighttable {
+  box-shadow:
+    0 14px 40px -16px rgba(233, 30, 99, 0.18),
+    0 4px 14px -8px rgba(20, 14, 27, 0.18);
+}
+
+/* The window-chrome bar at the top of every block. */
+.md-typeset .highlight::before,
+.md-typeset .highlighttable::before {
+  content: "";
+  display: block;
+  height: 36px;
+  background: linear-gradient(180deg, #25272f 0%, #1c1e25 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Three macOS-style dots inside that bar. */
+.md-typeset .highlight::after,
+.md-typeset .highlighttable::after {
   content: "";
   position: absolute;
-  inset: -1px;
-  border-radius: var(--rd-radius-md);
-  pointer-events: none;
-  background: linear-gradient(135deg, rgba(248, 187, 208, 0.20), transparent 40%);
-  opacity: 0.6;
-  z-index: -1;
+  top: 12px;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow:
+    20px 0 0 #febc2e,
+    40px 0 0 #28c840,
+    0 0 0 0.5px rgba(0, 0, 0, 0.25),
+    20px 0 0 0.5px rgba(0, 0, 0, 0.25),
+    40px 0 0 0.5px rgba(0, 0, 0, 0.25);
 }
+
+/* ---------- The actual <pre><code> block --------------------------------- */
+
+.md-typeset .highlight pre,
+.md-typeset .highlighttable pre {
+  margin: 0 !important;
+  padding: 18px 20px 22px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.md-typeset .highlight pre > code,
+.md-typeset .highlighttable pre > code {
+  background: transparent !important;
+  color: #c0caf5 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace !important;
+  font-size: 0.81rem !important;
+  line-height: 1.7 !important;
+  font-weight: 450;
+  white-space: pre;
+}
+
+/* Hide vestigial Material backgrounds inside the wrapper. */
+.md-typeset .highlight > pre,
+.md-typeset .highlighttable > table {
+  background: transparent !important;
+}
+
+.md-typeset .highlighttable {
+  display: block;
+}
+
+.md-typeset .highlighttable .linenodiv {
+  background: transparent !important;
+  border: none !important;
+  padding: 18px 0 22px 16px !important;
+}
+
+.md-typeset .highlighttable .linenodiv pre {
+  color: rgba(255, 255, 255, 0.20) !important;
+  padding: 0 !important;
+  font-size: 0.78rem !important;
+  text-align: right;
+  user-select: none;
+}
+
+.md-typeset .highlighttable .linenodiv pre > span {
+  padding-right: 12px;
+}
+
+.md-typeset .highlighttable td.code {
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* Custom scrollbar for horizontally overflowing code. */
+.md-typeset .highlight pre::-webkit-scrollbar,
+.md-typeset .highlighttable pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.md-typeset .highlight pre::-webkit-scrollbar-track,
+.md-typeset .highlighttable pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.md-typeset .highlight pre::-webkit-scrollbar-thumb,
+.md-typeset .highlighttable pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+}
+
+.md-typeset .highlight pre::-webkit-scrollbar-thumb:hover,
+.md-typeset .highlighttable pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 143, 177, 0.45);
+}
+
+/* ---------- Highlighted "current line" / range --------------------------- */
+
+.md-typeset .highlight .hll {
+  background: rgba(244, 143, 177, 0.10);
+  border-left: 2px solid var(--rd-pink-400);
+  margin: 0 -20px;
+  padding-left: 18px;
+}
+
+/* ---------- Copy button -------------------------------------------------- */
+
+/* The copy button always sits on the dark code block (both light and dark
+   themes use dark blocks), so it always needs light-on-dark styling.
+   Material's default uses --md-default-fg-color--lighter, which resolves
+   to nearly-invisible black in light mode. We render the clipboard icon
+   directly on the button as a background-image (instead of fighting
+   Material's mask-image system) and hide their default ::after icon. */
+.md-typeset .highlight .md-clipboard.md-icon,
+.md-typeset .highlighttable .md-clipboard.md-icon,
+.md-typeset .highlight .md-clipboard,
+.md-typeset .highlighttable .md-clipboard,
+.md-typeset .md-clipboard.md-icon,
+.md-typeset .md-clipboard {
+  position: absolute !important;
+  top: 6px !important;
+  right: 8px !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 7px !important;
+  color: rgba(255, 255, 255, 0.90) !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'%3E%3C/path%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 16px 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.20) !important;
+  cursor: pointer !important;
+  transition:
+    background-color 0.15s var(--rd-ease),
+    border-color 0.15s var(--rd-ease),
+    transform 0.15s var(--rd-ease) !important;
+  z-index: 3 !important;
+  opacity: 1 !important;
+}
+
+/* Hide Material's default ::after icon — we render our own as a
+   background-image on the button itself. */
+.md-typeset .highlight .md-clipboard.md-icon::after,
+.md-typeset .highlighttable .md-clipboard.md-icon::after,
+.md-typeset .highlight .md-clipboard::after,
+.md-typeset .highlighttable .md-clipboard::after,
+.md-typeset .md-clipboard.md-icon::after,
+.md-typeset .md-clipboard::after {
+  content: none !important;
+  display: none !important;
+}
+
+.md-typeset .highlight .md-clipboard:hover,
+.md-typeset .highlighttable .md-clipboard:hover,
+.md-typeset .md-clipboard:hover {
+  background-color: rgba(244, 143, 177, 0.32) !important;
+  border-color: rgba(244, 143, 177, 0.60) !important;
+  transform: scale(1.06);
+}
+
+.md-typeset .highlight .md-clipboard:focus-visible,
+.md-typeset .highlighttable .md-clipboard:focus-visible,
+.md-typeset .md-clipboard:focus-visible {
+  outline: 2px solid var(--rd-pink-300) !important;
+  outline-offset: 2px;
+}
+
+/* Responsive: tighter padding on small screens. */
+@media screen and (max-width: 600px) {
+  .md-typeset .highlight pre,
+  .md-typeset .highlighttable pre {
+    padding: 16px 14px 18px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .md-typeset .highlight,
+  .md-typeset .highlighttable {
+    margin: 1.2rem -0.5rem;
+    border-radius: 10px;
+  }
+}
+
+/* ---------- Tabbed code blocks ------------------------------------------- */
+
+.md-typeset .tabbed-set {
+  margin: 1.4rem 0;
+}
+
+.md-typeset .tabbed-labels {
+  border-bottom: 1px solid var(--rd-border-soft);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.md-typeset .tabbed-labels > label {
+  padding: 0.6em 1em;
+  color: var(--rd-text-soft);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s var(--rd-ease), border-color 0.15s var(--rd-ease);
+}
+
+.md-typeset .tabbed-labels > label:hover {
+  color: var(--md-primary-fg-color);
+}
+
+.md-typeset .tabbed-set > input:checked + label {
+  color: var(--md-primary-fg-color);
+  border-bottom-color: var(--md-primary-fg-color);
+}
+
+/* ---------- Pygments syntax colors (Tokyo Night-inspired) ---------------- */
+
+/* Base text color is set on `code` above. */
+
+/* Comments */
+.md-typeset .highlight .c,
+.md-typeset .highlight .ch,
+.md-typeset .highlight .cm,
+.md-typeset .highlight .c1,
+.md-typeset .highlight .cs,
+.md-typeset .highlight .cp,
+.md-typeset .highlight .cpf { color: #6b7394; font-style: italic; }
+
+/* Keywords */
+.md-typeset .highlight .k,
+.md-typeset .highlight .kc,
+.md-typeset .highlight .kd,
+.md-typeset .highlight .kn,
+.md-typeset .highlight .kp,
+.md-typeset .highlight .kr,
+.md-typeset .highlight .kt { color: #bb9af7; }
+
+/* Strings */
+.md-typeset .highlight .s,
+.md-typeset .highlight .sa,
+.md-typeset .highlight .sb,
+.md-typeset .highlight .sc,
+.md-typeset .highlight .dl,
+.md-typeset .highlight .sd,
+.md-typeset .highlight .s2,
+.md-typeset .highlight .se,
+.md-typeset .highlight .sh,
+.md-typeset .highlight .si,
+.md-typeset .highlight .sx,
+.md-typeset .highlight .sr,
+.md-typeset .highlight .s1,
+.md-typeset .highlight .ss { color: #9ece6a; }
+
+/* Numbers */
+.md-typeset .highlight .m,
+.md-typeset .highlight .mb,
+.md-typeset .highlight .mf,
+.md-typeset .highlight .mh,
+.md-typeset .highlight .mi,
+.md-typeset .highlight .il,
+.md-typeset .highlight .mo { color: #ff9e64; }
+
+/* Operators and punctuation */
+.md-typeset .highlight .o,
+.md-typeset .highlight .ow { color: #89ddff; }
+.md-typeset .highlight .p   { color: #a9b1d6; }
+
+/* Identifiers and names */
+.md-typeset .highlight .n,
+.md-typeset .highlight .nv,
+.md-typeset .highlight .vc,
+.md-typeset .highlight .vg,
+.md-typeset .highlight .vi  { color: #c0caf5; }
+
+/* Class / type names */
+.md-typeset .highlight .nc,
+.md-typeset .highlight .ne  { color: #2ac3de; font-weight: 500; }
+
+/* Functions */
+.md-typeset .highlight .nf,
+.md-typeset .highlight .fm  { color: #7aa2f7; }
+
+/* Built-ins and self/cls (pink — matches our theme) */
+.md-typeset .highlight .nb,
+.md-typeset .highlight .bp  { color: #f7768e; font-style: italic; }
+
+/* Decorators */
+.md-typeset .highlight .nd  { color: #ff9e64; font-weight: 500; }
+
+/* HTML / XML tags & attributes */
+.md-typeset .highlight .nt  { color: #f7768e; }
+.md-typeset .highlight .na  { color: #bb9af7; }
+
+/* Errors */
+.md-typeset .highlight .err { color: #ff5370; background: transparent; }
+
+/* Generic diff & emphasis */
+.md-typeset .highlight .gi  { color: #9ece6a; background: rgba(158, 206, 106, 0.07); }
+.md-typeset .highlight .gd  { color: #ff5370; background: rgba(255, 83, 112, 0.07); }
+.md-typeset .highlight .gh  { color: #7aa2f7; font-weight: 600; }
+.md-typeset .highlight .ge  { font-style: italic; }
+.md-typeset .highlight .gs  { font-weight: 600; }
+.md-typeset .highlight .go  { color: #a9b1d6; }
+.md-typeset .highlight .gp  { color: #7aa2f7; font-weight: 600; }
+.md-typeset .highlight .gu  { color: #bb9af7; font-weight: 600; }
 
 /* ---------- Tables --------------------------------------------------------- */
 

@@ -44,34 +44,34 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  subgraph Client["Browser :8000"]
+  subgraph Client["Browser on port 8000"]
     BrowserHTTP["HTTP requests<br/>/, /admin, /api, /static, /_reflex"]
-    BrowserWS["WebSockets<br/>/_event (Socket.IO)"]
+    BrowserWS["WebSockets<br/>/_event Socket.IO"]
   end
 
-  subgraph Process["Single ASGI process — reflex_django.asgi_entry:application"]
+  subgraph Process["Single ASGI process - asgi_entry:application"]
     Outer["DjangoOuterDispatcher"]
 
     subgraph DjangoLayer["Django"]
       DjangoMW["settings.MIDDLEWARE chain"]
       DjangoViews["urls.py views"]
-      Mount["ReflexMountView<br/>(SPA catch-all)"]
+      Mount["ReflexMountView<br/>SPA catch-all"]
       DjangoORM[("ORM / DB")]
     end
 
-    subgraph ReflexLayer["Reflex (mounted under Django)"]
-      ReflexAPI["rx_app._api<br/>(Starlette + Socket.IO)"]
+    subgraph ReflexLayer["Reflex mounted under Django"]
+      ReflexAPI["rx_app._api<br/>Starlette + Socket.IO"]
       EventBridge["DjangoEventBridge"]
-      Handlers["@rx.event handlers<br/>(AppState subclasses)"]
+      Handlers["rx.event handlers<br/>AppState subclasses"]
     end
 
-    SPA[/"STATIC_ROOT/_reflex/<br/>compiled SPA bundle"/]
+    SPA["STATIC_ROOT/_reflex<br/>compiled SPA bundle"]
   end
 
   BrowserHTTP --> Outer
   BrowserWS --> Outer
 
-  Outer -->|reserved Reflex paths<br/>(HTTP + WebSocket)| ReflexAPI
+  Outer -->|reserved Reflex paths| ReflexAPI
   Outer -->|lifespan| ReflexAPI
   Outer -->|everything else| DjangoMW
 
