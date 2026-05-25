@@ -82,10 +82,7 @@ urlpatterns += [
     reflex_mount(
         app_name="shop",
         django_prefix=("/admin", "/api"),
-        rx_config={
-            "frontend_port": 3000,
-            "backend_port": 8000,
-        },
+        rx_config={"backend_port": 8000},
     ),
 ]
 ```
@@ -160,9 +157,10 @@ python manage.py shell
 |:---|:---|
 | `/api/*` | Django REST / views (unchanged) |
 | `/admin/*` | Django admin |
-| `/`, `/catalog`, … | Reflex SPA |
+| `/_event`, `/_upload`, `/_health` | Reflex inner ASGI (Socket.IO state channel + uploads) |
+| `/`, `/catalog`, … | Reflex SPA (served by `ReflexMountView` from `STATIC_ROOT/_reflex/`) |
 
-Your mobile or JS clients can keep calling `/api/`. The Reflex UI is an additional surface on the same origin.
+Your mobile or JS clients can keep calling `/api/`. The Reflex UI is an additional surface on the same origin and the same port.
 
 ---
 

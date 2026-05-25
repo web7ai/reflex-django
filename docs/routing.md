@@ -1,24 +1,25 @@
 # Routing & URL Dispatching
 
-reflex-django uses two routing layers:
+`reflex-django` runs Django as the **outer** ASGI app. Every incoming HTTP request and WebSocket scope first hits the **outer dispatcher**, which decides whether to forward it to Reflex's inner ASGI (Socket.IO event channel, upload endpoint, health probes) or to Django (`urls.py`, admin, your API, the SPA shell). Inside Django, your `urls.py` decides whether the path belongs to a Django view or falls through to the Reflex SPA catch-all.
 
-1. **Django `urls.py`** — explicit HTTP routes (`/admin`, `/api`, …)
-2. **Reflex client router** — SPA routes from `@template(route=...)` in `{app}/views.py`
+Two routing layers, in order:
 
-The ASGI dispatcher sends traffic by **path prefix**. Configure prefixes on **`reflex_mount()`**.
+1. **Outer ASGI dispatcher** — sends reserved Reflex paths to Reflex, everything else to Django.
+2. **Django `urls.py`** — your explicit HTTP routes (`/admin`, `/api`, …) + the SPA catch-all at the end.
 
-See [Django-led URL routing](django_urls.md) for the full mental model.
+The Reflex client router then handles SPA navigation entirely in the browser.
 
 ---
 
 ## 1. Reflex SPA routes (client-side)
 
-Define routes in Django app `views.py`:
+Define SPA pages with `@template` (or `@page`) in any Django app's `views.py`:
 
 ```python
 # shop/views.py
 import reflex as rx
 from reflex_django import template
+
 
 @template(route="/notes", title="My Notes")
 def notes_page() -> rx.Component:
@@ -27,18 +28,23 @@ def notes_page() -> rx.Component:
 
 ### Rules
 
-* **`route`** is the browser path (e.g. `/notes` → `http://localhost:3000/notes`).
-* **Do not** add matching `path("notes/", ...)` in Django — the catch-all serves the SPA.
-* Use `on_load` on `@template` / `@page` or state handlers for data loading.
+- `route` is the browser path. Visiting `http://localhost:8000/notes` shows this page.
+- **Do not** add a matching `path("notes/", ...)` to Django — the catch-all serves the SPA.
+- Use `on_load` on `@template` / `@page` (or state `@rx.event` handlers) for data loading.
+
+Pages from every entry in `INSTALLED_APPS` are auto-discovered. Restrict the scan with `REFLEX_DJANGO_PAGE_APPS = ["shop", "billing"]`.
 
 ---
 
 ## 2. Django HTTP routes
 
-Register APIs and admin in `urls.py` **before** `reflex_mount()`:
+Register your Django routes **before** `reflex_mount()` in the same `urls.py`. `reflex_mount()` installs the SPA catch-all at the bottom of `urlpatterns`.
 
 ```python
 # config/urls.py
+from django.contrib import admin
+from django.urls import include, path
+
 from reflex_django.urls import reflex_mount
 
 urlpatterns = [
@@ -48,85 +54,137 @@ urlpatterns = [
 
 urlpatterns += [
     reflex_mount(
+        app_name="shop",
         django_prefix=("/admin", "/api"),
-        rx_config={"frontend_port": 3000},
+        rx_config={"backend_port": 8000},
     ),
 ]
 ```
 
-Then, map the exact corresponding routes in your `backend/urls.py` file:
-
-```python
-# backend/urls.py
-from django.contrib import admin
-from django.urls import path, include
-
-urlpatterns = [
-    # Mount the Django admin panel
-    path("admin/", admin.site.urls),  # Matches admin_prefix="/admin"
-    
-    # Mount your custom backend application APIs
-    path("api/", include("shop.urls")),  # Matches backend_prefix="/api"
-]
-```
+`django_prefix` is a list of path prefixes Django owns. Every prefix listed here must correspond to a real `path(...)` entry **above** the `reflex_mount()` line. The catch-all only triggers for paths that don't match any of those prefixes.
 
 ---
 
-## The Path Dispatcher Decision Flow
-
-When a request arrives at your unified ASGI server, the path dispatcher intercepts it and applies matching logic to determine which framework should receive it:
+## 3. The outer dispatcher decision flow
 
 ```mermaid
 flowchart TD
-  A["Incoming HTTP Request"] --> B{"Is it a reserved Reflex path?\n(e.g., /_event, /_upload)"}
-  B -->|YES| C["Reflex ASGI Handler"]
-  B -->|NO| D{"Does the path match any plugin prefix?\n(e.g., /admin, /api, /static)"}
-  D -->|YES| E["Django ASGI Handler"]
-  D -->|NO| C
+  A["Incoming ASGI scope"] --> B{"scope.type"}
+  B -->|lifespan| L["Reflex lifespan tasks"]
+  B -->|websocket| W{"reserved Reflex path?"}
+  W -->|yes| R["Reflex inner _api"]
+  W -->|no| X["close gracefully"]
+  B -->|http| H{"reserved Reflex path?"}
+  H -->|yes| R
+  H -->|no| D["Django ASGI handler"]
+  D --> M["settings.MIDDLEWARE"]
+  M --> U{"urls.py match?"}
+  U -->|/admin /api /static …| V["Django view"]
+  U -->|/ and unknown paths| S["ReflexMountView<br/>(SPA from STATIC_ROOT/_reflex)"]
 ```
 
-> [!NOTE]
-> **Reserved Reflex Paths:** Subpaths starting with `/_event`, `/_upload`, `/_health`, `/ping`, or `/auth-codespace` are hardlocked for Starlette and the Socket.IO compiler. Django will **never** capture them, even if you define a catch-all URL pattern.
+### Reserved Reflex prefixes
+
+These paths are always sent to Reflex, regardless of any URL patterns or catch-alls:
+
+| Prefix | Purpose |
+|:---|:---|
+| `/_event` | Socket.IO state-update channel (HTTP + WebSocket) |
+| `/_upload` | Reflex file upload endpoint |
+| `/_health`, `/ping` | Liveness probes |
+| `/_all_routes` | Internal route enumeration |
+| `/auth-codespace` | Reflex auth dev tooling |
+
+Add custom reserved prefixes via `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES`.
+
+### The SPA catch-all
+
+`reflex_mount()` appends a wildcard URL pattern that points at `ReflexMountView`. The view:
+
+1. Resolves the compiled SPA index (`STATIC_ROOT/_reflex/index.html`, `.web/build/client/index.html`, or `.web/_static/index.html`).
+2. Optionally pipes the HTML through Django's template engine (`REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE = True`) so the shell can render `{{ request.user }}`, `{% csrf_token %}`, `{{ messages }}`, etc.
+3. Streams non-HTML assets (JS bundles, CSS, source maps, images) untouched.
+
+If the bundle is missing, the view returns a 404 with a clear hint pointing at `manage.py export_reflex`.
 
 ---
 
-## Pre-built Authentication Routes
+## 4. Pre-built authentication routes
 
-If you use the built-in authentication views supplied by `reflex-django` (which include ready-to-use registration, login, and password reset interfaces), you can register them in one line:
+The built-in authentication SPA pages (login, register, reset) register in one line:
 
 ```python
-# frontend/frontend.py
+# shop/views.py
 from reflex_django.auth import add_auth_pages
 
-app = rx.App()
-
-# Autoloads pre-built login, register, and reset views
-add_auth_pages(app)
+add_auth_pages()  # registers /login, /register, /password_reset, …
 ```
 
-This registers the standard login views. You can customize these routes (such as shifting the default `/login` route to `/signin`) by adjusting the `REFLEX_DJANGO_AUTH` settings inside your Django settings module. See [Authentication](authentication.md) for custom parameters.
+Customize the URLs via `REFLEX_DJANGO_AUTH` in `settings.py`. See [Authentication](authentication.md).
 
 ---
 
-## Vite Development Proxy Alignment
+## 5. WebSocket scopes
 
-During local development, Reflex runs a Vite development server to compile your React pages. 
+Every WebSocket connection lands on the outer dispatcher:
 
-To ensure incoming calls compile correctly, `reflex-django` automatically injects Vite `server.proxy` rules behind the scenes. This ensures that any frontend requests directed to `/api/...` or `/admin/...` are transparently proxied back to the main unified Python process.
+| Scope path | Behaviour |
+|:---|:---|
+| `/_event/...` | Forwarded to Reflex Socket.IO (the state channel) |
+| `/_upload/...` | Forwarded to Reflex's upload endpoint |
+| Anything else | Closed politely (no Django Channels needed) |
+
+Django itself never sees a WebSocket scope, so your `urls.py` does not need to know about WebSockets at all.
 
 ---
 
-## Common Pitfalls & Mismatches
+## 6. Common pitfalls
 
-### The Prefix Drift (404 Error)
-* **Symptom:** Visiting `http://localhost:3000/api/products/` returns a `404 Not Found` error.
-* **Cause:** Your plugin configuration and Django `urls.py` patterns are out of sync. For example, your plugin sets `backend_prefix="/api"`, but your `urlpatterns` maps routes under `path("v1/", include(...))`.
-* **Fix:** Align them. Ensure the root path segments declared inside `urls.py` correspond exactly with your plugin prefixes.
+### Prefix drift (404)
 
-### The Catch-All Shadowing Issue
-* **Symptom:** Reflex pages fail to load, showing a blank screen or a raw Django response.
-* **Cause:** You have registered a catch-all route (like `re_path(r'^.*$', ...)` or `path("<path:slug>", ...)`) at the root of your Django `urls.py` file, which intercepts and steals requests before they can fall back to the Reflex ASGI handler.
-* **Fix:** Keep your Django URLs tightly scoped under clear path prefixes (like `/api/` or `/backend/`), and let Reflex manage the root routing scope.
+**Symptom:** `GET /api/products/` returns 404.
+
+**Cause:** `django_prefix=("/api",)` does not match the actual Django path. For example, your `urls.py` mounts `path("v1/", include(...))` instead of `path("api/", ...)`.
+
+**Fix:** Align the strings exactly. The dispatcher and the Django URL resolver both use `django_prefix`.
+
+### Catch-all shadowing
+
+**Symptom:** SPA pages return blank screens or raw Django 404s.
+
+**Cause:** You registered a permissive Django pattern (e.g. `re_path(r'^.*$', some_view)`) **above** `reflex_mount()`. It captures `/`, `/notes`, etc. before the SPA catch-all gets a chance.
+
+**Fix:** Keep your Django URLs tightly scoped under explicit prefixes (`/api/`, `/admin/`) and let the SPA catch-all own the root.
+
+### Missing SPA bundle
+
+**Symptom:** `GET /` returns 404 with a "compiled SPA not found" message.
+
+**Cause:** The SPA was never built or staged into `STATIC_ROOT/_reflex/`.
+
+**Fix:** Run `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root`, or use `python manage.py run_reflex` which auto-exports before serving.
+
+### Hijacking a reserved prefix
+
+**Symptom:** Reflex events stop arriving after you added a Django route under `/_event/...`.
+
+**Cause:** Reserved Reflex prefixes (`/_event`, `/_upload`, `/_health`, `/ping`, `/auth-codespace`) are always claimed by Reflex — but Django will still try to resolve them in admin / DRF routers if you add such routes by accident.
+
+**Fix:** Don't add Django routes under those prefixes. Customise the reserved list via `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` if you need extra space.
+
+---
+
+## 7. Path ownership cheat sheet
+
+| Path | Who handles it |
+|:---|:---|
+| `/_event`, `/_upload`, `/_health`, `/ping`, `/_all_routes`, `/auth-codespace` | Reflex (reserved) |
+| `/admin/...`, `/api/...`, anything in `django_prefix` | Django views |
+| `/static/...` | Django (`ASGIStaticFilesHandler` in dev, Nginx/Caddy in prod) |
+| `/static/_reflex/...` | Django staticfiles serving the compiled SPA assets |
+| `/` and any other unknown path | `ReflexMountView` → compiled SPA |
+
+Everything happens on the same port. Same origin. Same cookies. Same session.
 
 ---
 

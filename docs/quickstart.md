@@ -2,9 +2,7 @@
 
 A minimal **reflex-django** app in four steps: Django `settings.py`, `urls.py`, Reflex pages in `views.py`, and `AppState` for the logged-in user.
 
-**Time:** ~10 minutes · **Command:** `python manage.py run_reflex` · **Default port:** `8000` (Django + Reflex on one port)
-
-> **Heads up:** `reflex-django` now uses the *Django-outer, single-port architecture* by default. Django is the ASGI server; Reflex Socket.IO is mounted under it; Vite is invisibly reverse-proxied for HMR. See [Single-port Django-outer architecture](single_port_django_outer.md) for details. Use `REFLEX_DJANGO_URL_ROUTING=reflex_led` to opt out.
+**Time:** ~10 minutes · **Command:** `python manage.py run_reflex` · **Port:** `8000` (Django + Reflex on one port)
 
 ---
 
@@ -23,16 +21,17 @@ myshop/
 ├── manage.py
 ├── config/
 │   ├── settings.py    ← step 2
-│   └── urls.py        ← step 3
+│   ├── urls.py        ← step 3
+│   └── asgi.py        ← step 4
 └── shop/
-    └── views.py       ← step 4 (pages + state)
+    └── views.py       ← step 5 (pages + state)
 ```
 
 ---
 
 ## 2. `settings.py` — register Django + reflex-django
 
-Only three things matter for a minimal setup:
+Three things matter:
 
 1. **`reflex_django` and your app** in `INSTALLED_APPS`
 2. **Session + auth middleware** (so `AppState` can see the user)
@@ -70,6 +69,11 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DATABASES = {
     "default": {
@@ -79,13 +83,13 @@ DATABASES = {
 }
 ```
 
-Why `AsyncStreamingMiddleware`? See [AsyncStreamingMiddleware](async_streaming_middleware.md).
+Every middleware listed here runs on every Reflex event too — `request.user`, `request.session`, `request._messages`, locale, and your custom middleware all populate before each `@rx.event` handler executes. See [AsyncStreamingMiddleware](async_streaming_middleware.md) for why the streaming middleware sits at the end.
 
 ---
 
 ## 3. `urls.py` — wire Reflex with `reflex_mount()`
 
-Django routes come **first**. **`reflex_mount()` last.**
+Django routes come **first**. `reflex_mount()` last.
 
 ```python
 # config/urls.py
@@ -102,10 +106,7 @@ urlpatterns += [
     reflex_mount(
         app_name="shop",
         django_prefix=("/admin",),
-        rx_config={
-            "frontend_port": 3000,
-            "backend_port": 8000,
-        },
+        rx_config={"backend_port": 8000},
     ),
 ]
 ```
@@ -113,18 +114,32 @@ urlpatterns += [
 | Argument | Meaning |
 |:---|:---|
 | `app_name="shop"` | Pages live in `shop/views.py` |
-| `django_prefix` | Paths Django owns (must match `path("admin/", ...)` above) |
-| `rx_config` | Reflex ports (and any other allowed `rx.Config` keys) |
+| `django_prefix` | Path prefixes Django owns (must match `path("admin/", ...)` above) |
+| `rx_config` | Reflex ports and other allowed `rx.Config` keys |
 
 You do **not** create `shop/shop.py`. Reflex loads the app from `reflex_django.django_led_app`.
 
 ---
 
-## 4. `views.py` — pages and `AppState`
+## 4. `asgi.py` — single ASGI entry point
+
+```python
+# config/asgi.py
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+from reflex_django.asgi_entry import application  # noqa: E402,F401
+```
+
+`reflex_django.asgi_entry.application` is the outer dispatcher: it sends Reflex's `/_event`, `/_upload`, and `/_health` paths to Reflex's inner ASGI, and everything else to Django. Both deployment and `manage.py run_reflex` point at this same callable.
+
+---
+
+## 5. `views.py` — pages and `AppState`
 
 ### Pages with `@template`
 
-`@template` registers a route and wraps content in a simple layout:
+`@template` registers a route and wraps content in a layout.
 
 ```python
 # shop/views.py
@@ -134,8 +149,6 @@ from reflex_django.state import AppState
 
 
 class HomeState(AppState):
-    """Use AppState when you need Django session / user."""
-
     greeting: str = "Hello!"
 
     @rx.event
@@ -161,63 +174,60 @@ def index() -> rx.Component:
 
 @template(route="/about", title="About")
 def about() -> rx.Component:
-    return rx.text("This page is shop/views.py — not a Django path().")
+    return rx.text("This page lives in shop/views.py — not a Django path().")
 ```
 
-### How `AppState` works
+### How `AppState` exposes Django
 
 | In event handlers (`@rx.event`) | In the UI |
 |:---|:---|
-| `self.request.user` — Django user | `self.is_authenticated` |
-| `self.request.session` — read/write session | `self.username`, `self.email` |
-| `await self.has_perm("app.change_model")` | Auto-updated each event |
-| `self.django_context` / `self.request` — context processor keys | Copy into reactive vars in `on_load` if the UI needs them |
+| `self.request` — synthetic `HttpRequest` from the full middleware chain | `self.is_authenticated` |
+| `self.user` — `request.user` (already resolved, async-safe) | `self.username`, `self.email` |
+| `self.session` — async session (`await session.aget(...)` / `asave()`) | — |
+| `self.messages` — JSON-safe snapshot of `django.contrib.messages` | `DjangoUserState.messages` (reactive) |
+| `self.csrf_token` — CSRF token for the current request | `DjangoUserState.csrf_token` (reactive) |
+| `self.response` — `HttpResponse` produced by middleware | — |
+| `self.django_context` — context-processor keys | Copy into reactive vars in `on_load` |
+| `await self.has_perm("app.change_model")` | `DjangoUserState.perms` |
 
-Reflex events run over WebSocket. The **event bridge** builds a Django-like `request` on each event and **loads context processors automatically** (default). You do **not** need `await self.load_django_context()` unless you want a mid-handler refresh.
+Reflex events run over WebSocket. The bridge builds a Django request, walks `settings.MIDDLEWARE`, eager-resolves `request.user`, and binds everything before your handler runs. You do not need `await self.load_django_context()` unless you want a mid-handler refresh — context processors load automatically.
 
-**Do not** read `request.user` in class-level defaults (import time crashes with `AppRegistryNotReady`):
+**Do not** read `request.user` in class-level defaults (import-time crash with `AppRegistryNotReady`):
 
 ```python
-# Wrong — runs when views.py is imported
-message: str = f"Hi {request.user}"
+message: str = f"Hi {request.user}"           # wrong — runs at import time
 
-# Right — runs when the page loads
 @rx.event
-async def on_load(self):
+async def on_load(self):                      # right — runs on every event
     if self.request.user.is_authenticated:
         self.message = f"Hi, {self.request.user.get_username()}"
 ```
 
-Defaults in reflex-django (override in `settings.py` if needed):
+### Django template tags in the SPA shell
 
-```python
-REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True
-REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS = True
-```
-
-Then use processor keys on `self.request` (e.g. `self.request.LANGUAGE_CODE`) or `self.django_context["key"]` inside any `@rx.event` handler.
-
-```python
-@rx.event
-async def save_theme(self, value: str):
-    self.request.session["theme"] = value
-    await self.request.session.asave()
-```
+The compiled `index.html` is piped through Django's template engine before it leaves the server (`REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE = True` by default). Inside the shell you can use `{{ request.user }}`, `{% csrf_token %}`, `{% load i18n %}`, and any context-processor key. Inside Reflex components (`.py` files compiled to React) use reactive vars instead — `DjangoUserState.username`, `DjangoUserState.csrf_token`, `self.django_context[...]`.
 
 ---
 
-## 5. Run
+## 6. Run
 
 ```bash
 uv run python manage.py migrate
 uv run python manage.py run_reflex
 ```
 
-| URL | What you see |
-|:---|:---|
-| http://localhost:3000/ | Home page |
-| http://localhost:3000/about | About page |
-| http://localhost:3000/admin/ | Django admin |
+`run_reflex` will:
+
+1. Auto-export the Reflex SPA into `STATIC_ROOT/_reflex/` (frontend-only, no zip).
+2. Start `uvicorn` as a subprocess on port `8000` pointed at `reflex_django.asgi_entry:application`.
+3. Watch your project tree for `.py` changes — every change triggers a clean re-export + uvicorn restart.
+
+```text
+http://localhost:8000/           Home page (SPA)
+http://localhost:8000/about      About page (SPA)
+http://localhost:8000/admin/     Django admin
+http://localhost:8000/_event     Reflex Socket.IO endpoint
+```
 
 Optional — test login:
 
@@ -229,16 +239,34 @@ Log in at `/admin/`, then refresh `/` — `HomeState.greeting` should show your 
 
 ---
 
+## 7. Speed up the dev loop
+
+If your edits are Python/Django-only and don't touch Reflex pages, skip the SPA re-export on each restart:
+
+```bash
+python manage.py run_reflex --skip-rebuild
+```
+
+If you prefer the legacy hot-module-reload experience with a Vite dev server proxied through Django:
+
+```bash
+python manage.py run_reflex --with-vite
+```
+
+---
+
 ## Cheat sheet
 
 | File | Responsibility |
 |:---|:---|
 | `settings.py` | Django apps, middleware, database |
-| `urls.py` | `reflex_mount(...)` — Reflex ports + `app_name` |
-| `shop/views.py` | `@template` pages + `AppState` classes |
-| `manage.py run_reflex` | Dev server (Django + Reflex + WebSockets) |
+| `urls.py` | `reflex_mount(...)` — app name, Django prefixes, ports |
+| `config/asgi.py` | Points at `reflex_django.asgi_entry:application` |
+| `{app}/views.py` | `@template` pages + `AppState` classes |
+| `manage.py run_reflex` | Auto-export + serve + watch (the dev loop) |
+| `manage.py export_reflex` | Build the SPA bundle (CI / pre-deploy) |
 
-No `rxconfig.py` required — `run_reflex` loads config from `reflex_mount()` in memory only.
+No hand-maintained `rxconfig.py` required — `reflex_mount()` provides the runtime config in memory.
 
 ---
 
@@ -246,14 +274,13 @@ No `rxconfig.py` required — `run_reflex` loads config from `reflex_mount()` in
 
 | Problem | Fix |
 |:---|:---|
-| Template picker on first run | Ensure `reflex_django` in `INSTALLED_APPS` and `reflex_mount()` in `urls.py`; restart `run_reflex` |
-| Guest after admin login | Keep `SessionMiddleware` + `AuthenticationMiddleware` |
-| `AppRegistryNotReady` on startup | Do not use `request.user` in class-level state defaults; use `@rx.event` / `on_load` |
-| `ModuleNotFoundError: shop.shop` | Do not add `shop/shop.py`; use `app_name="shop"` on `reflex_mount()` |
-| Admin warnings in console | Add `AsyncStreamingMiddleware` at end of `MIDDLEWARE` |
-| Context processors empty | Ensure `REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True` and template or explicit processors are configured |
-| `dispatch is not a function` in browser | `reflex_mount(app_name=...)` must match the app package with `views.py`; stop server, run `python manage.py run_reflex` from project root, hard-refresh `http://localhost:3000/` (Ctrl+Shift+R); if needed delete `.web/` once and restart |
-| Same error on `AppState` `on_load` | Reinstall editable `reflex-django`, restart `run_reflex`; optional `REFLEX_DJANGO_AUTH_AUTO_SYNC = False` and `await HomeState.sync_from_django()` in `on_load` |
+| 404 on `/` after first run | Re-run `python manage.py run_reflex` so the auto-export stages the bundle into `STATIC_ROOT/_reflex/`; or run `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` explicitly. |
+| Guest after admin login | Keep `SessionMiddleware` + `AuthenticationMiddleware` in `MIDDLEWARE`. |
+| `AppRegistryNotReady` on startup | Don't use `request.user` in class-level state defaults; move it into `@rx.event` / `on_load`. |
+| `ModuleNotFoundError: shop.shop` | Don't add `shop/shop.py`; `reflex_mount(app_name="shop")` uses `shop/views.py`. |
+| Admin warnings about streaming responses | Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the end of `MIDDLEWARE`. |
+| `{{ request.user }}` not rendering | That syntax only works in the SPA shell `index.html` (server-side). Use `DjangoUserState.username` inside Reflex components. |
+| Re-export feels slow | Pass `--skip-rebuild` if your edits don't touch Reflex pages, or `--with-vite` to use the Vite HMR loop. |
 
 ---
 

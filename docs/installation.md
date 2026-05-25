@@ -75,7 +75,7 @@ urlpatterns += [
     reflex_mount(
         app_name="myapp",
         django_prefix=("/admin",),
-        rx_config={"frontend_port": 3000, "backend_port": 8000},
+        rx_config={"backend_port": 8000},
     ),
 ]
 ```
@@ -83,6 +83,20 @@ urlpatterns += [
 See [Configuration](configuration.md) for all `reflex_mount()` options. For pages and `AppState`, follow the [Quickstart](quickstart.md).
 
 `AsyncStreamingMiddleware` in `MIDDLEWARE` is required for clean ASGI streaming (admin, static). Details: [AsyncStreamingMiddleware](async_streaming_middleware.md).
+
+---
+
+## ASGI entry point
+
+```python
+# config/asgi.py
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+from reflex_django.asgi_entry import application  # noqa: E402,F401
+```
+
+This is the callable both `manage.py run_reflex` and your production ASGI server (uvicorn / granian / hypercorn) point at. It composes Django and Reflex behind the outer dispatcher on a single port.
 
 ---
 

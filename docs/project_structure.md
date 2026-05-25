@@ -96,8 +96,10 @@ Set `REFLEX_DJANGO_PAGE_PACKAGES = ["frontend.views"]` or import submodules from
 
 | Path | Notes |
 |:---|:---|
-| **`.web/`** | Reflex/Vite frontend; recreated by compile/run |
+| **`.web/`** | Reflex frontend project; recreated by compile/export |
+| **`.web/build/client/`** | Compiled SPA bundle (SSR layout) produced by `manage.py export_reflex` |
 | **`.reflex/`** | Reflex user dir (may be global on your machine) |
+| **`STATIC_ROOT/_reflex/`** | Final staging target served at runtime by `ReflexMountView` |
 | **`rxconfig.py`** | Optional; only if you set `REFLEX_DJANGO_MATERIALIZE_RXCONFIG=True` |
 
 ---
@@ -106,8 +108,8 @@ Set `REFLEX_DJANGO_PAGE_PACKAGES = ["frontend.views"]` or import submodules from
 
 | Environment | Mechanism |
 |:---|:---|
-| **Development** | `ASGIStaticFilesHandler` when `staticfiles` in `INSTALLED_APPS`; Vite dev server on `frontend_port` |
-| **Production** | `collectstatic` + same ASGI dispatcher; see [Deployment](deployment.md) |
+| **Development** | `manage.py run_reflex` auto-stages the SPA into `STATIC_ROOT/_reflex/`; Django's `ASGIStaticFilesHandler` serves Django admin assets |
+| **Production** | `manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` + `collectstatic` + reverse proxy ([Deployment](deployment.md)) |
 
 ---
 

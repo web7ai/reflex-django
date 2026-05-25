@@ -26,11 +26,13 @@
 
 ## What is reflex-django?
 
-**reflex-django** is a **Django-first** integration layer for [Reflex](https://reflex.dev). You configure Reflex in **`urls.py`** with `reflex_mount()`, define pages in **`{app}/views.py`**, and run **`python manage.py run_reflex`**.
+**reflex-django** is a **Django-first** integration layer for [Reflex](https://reflex.dev). Django and Reflex run as **one ASGI application on one port**. You configure Reflex in **`urls.py`** with `reflex_mount()`, define pages in **`{app}/views.py`**, and run **`python manage.py run_reflex`**.
 
-- **Django** handles `/admin`, `/api`, ORM, migrations, sessions  
-- **Reflex** handles the SPA, client routes, and WebSocket events  
-- **`django_led_app`** replaces `{app}/{app}.py` — no extra Reflex package boilerplate  
+- **Django** is the outer ASGI app — it handles `/admin`, `/api`, ORM, migrations, sessions, and serves the compiled SPA from disk.
+- **Reflex** is mounted under Django — Socket.IO event channel (`/_event`), upload endpoint, health probes, and the SPA shell.
+- **Full middleware chain** runs on every Reflex event — `request.user`, `session`, `messages`, `csrf_token`, and your custom middleware are bound to every `@rx.event` handler.
+- **`django_led_app`** replaces `{app}/{app}.py` — no extra Reflex package boilerplate.
+- **One Python process, one port, one origin.** No CORS, no token bridge, no second dev server.
 
 ---
 
@@ -60,8 +62,13 @@ uv add django reflex reflex-django
 
 # urls.py
 urlpatterns += [
-    reflex_mount(app_name="myapp", rx_config={"frontend_port": 3000, "backend_port": 8000}),
+    reflex_mount(app_name="myapp", rx_config={"backend_port": 8000}),
 ]
+
+# config/asgi.py — single ASGI entry point
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+from reflex_django.asgi_entry import application  # noqa: E402,F401
 ```
 
 ```bash
@@ -78,13 +85,14 @@ python manage.py run_reflex
 | Install | [Installation](installation.md) |
 | **`reflex_mount()` & settings** | [Configuration](configuration.md) |
 | Tutorial | [Quickstart](quickstart.md) |
+| Runtime architecture | [Architecture](architecture.md) |
+| Single-port reference | [Single-port architecture](single_port_django_outer.md) |
+| Routing | [Routing & dispatching](routing.md) |
 | Pages & `@template` | [Pages in views.py](pages_in_views.md) |
 | ASGI streaming | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
 | Brownfield | [Existing Django project](existing_django_project.md) |
 | Folder layout | [Project structure](project_structure.md) |
 | URLs & `django_led_app` | [Django-led URL routing](django_urls.md) |
-| Pages in `views.py` | [Pages in views.py](pages_in_views.md) |
-| Runtime | [Architecture](architecture.md) |
 | CLI | [CLI](cli.md) |
 
 ---
@@ -104,11 +112,12 @@ python manage.py run_reflex
 | I want to… | Read |
 |:---|:---|
 | Set ports and app name | [Configuration](configuration.md) |
+| Understand how Django + Reflex compose | [Architecture](architecture.md) |
+| See the dispatcher routing rules | [Routing & dispatching](routing.md) |
 | Put pages in Django apps | [Pages in views.py](pages_in_views.md) |
 | Fix admin streaming warnings | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
-| Understand `django_led_app` | [Django-led URL routing](django_urls.md) |
-| Use `request.user` in events | [Authentication](authentication.md) |
-| Run migrations | [CLI](cli.md) |
+| Use `request.user` / messages / CSRF in events | [Authentication](authentication.md) |
+| Build the SPA bundle | [CLI](cli.md) |
 | Deploy one process | [Deployment](deployment.md) |
 
 ---
