@@ -387,7 +387,44 @@ def ensure_django_led_app_ready() -> Any:
         migrate_decorated_pages_app_name(resolve_app_name())
         app._apply_decorated_pages()
     sync_page_load_events(app)
+    _ensure_optional_api_endpoints(app)
     return app
+
+
+def _ensure_optional_api_endpoints(app: Any) -> None:
+    """Register Reflex's optional Starlette routes (``/_upload``, …) on ``app._api``.
+
+    :meth:`reflex.app.App._add_optional_endpoints` is normally called from
+    :func:`reflex.compiler.compiler.compile_app`, which only runs inside the
+    SPA export subprocess. In the Django-outer ASGI process we build a fresh
+    :class:`~reflex.app.App` via :func:`ensure_django_led_app_ready` without
+    compiling it (the SPA is already on disk), so those routes are missing
+    from ``app._api`` and ``POST /_upload`` returns ``404 Not Found`` through
+    the :class:`~reflex_django.django_outer_dispatcher.DjangoOuterDispatcher`.
+
+    The check ``Upload.is_used or upload_is_used_marker.exists()`` makes the
+    method a no-op when no page uses :func:`rx.upload`, so it is safe to
+    always invoke. A per-app guard keeps it idempotent across repeat calls
+    (e.g. plugin ``post_compile`` re-invocations during dev).
+    """
+    if app is None:
+        return
+    if getattr(app, "_reflex_django_optional_endpoints_applied", False):
+        return
+    add = getattr(app, "_add_optional_endpoints", None)
+    if not callable(add):
+        return
+    try:
+        add()
+    except Exception:  # noqa: BLE001 — optional endpoints must not fail boot.
+        import logging
+
+        logging.getLogger("reflex_django.app_factory").exception(
+            "Failed to register Reflex optional API endpoints (`/_upload`, …) — "
+            "uploads and codespace auth may return 404."
+        )
+        return
+    app._reflex_django_optional_endpoints_applied = True  # type: ignore[attr-defined]
 
 
 def reset_app_factory_cache() -> None:
