@@ -104,6 +104,7 @@ def install_reflex_django_integration() -> None:
 
     _patch_get_config()
     _patch_vite_dev_dependency()
+    _patch_state_dispatcher_template()
 
     from reflex_django.cli_layout import ensure_reflex_cli_layout
     from reflex_django.mount_config import ensure_mount_config_loaded
@@ -192,6 +193,92 @@ def _patch_vite_dev_dependency() -> None:
     if dev_deps.get("vite") == desired:
         return
     dev_deps["vite"] = desired
+
+
+_STATE_DISPATCHER_MARKER = "/* reflex-django: tolerant dispatcher */"
+
+_STATE_DISPATCHER_ORIGINAL = (
+    "      for (const substate in update.delta) {\n"
+    "        dispatch[substate](update.delta[substate]);"
+)
+
+_STATE_DISPATCHER_PATCHED = (
+    "      for (const substate in update.delta) {\n"
+    f"        {_STATE_DISPATCHER_MARKER}\n"
+    "        const _rxdj_dispatch = dispatch[substate];\n"
+    "        if (typeof _rxdj_dispatch !== \"function\") {\n"
+    "          if (typeof console !== \"undefined\" && console.warn) {\n"
+    "            console.warn(\n"
+    "              \"[reflex-django] No dispatcher for substate '\" + substate + \"' — \"\n"
+    "              + \"skipping delta. This usually means the Python state tree \"\n"
+    "              + \"changed since the SPA was built; re-run `python manage.py \"\n"
+    "              + \"export_reflex` to regenerate. Known dispatchers: \"\n"
+    "              + Object.keys(dispatch).join(\", \"),\n"
+    "            );\n"
+    "          }\n"
+    "          continue;\n"
+    "        }\n"
+    "        _rxdj_dispatch(update.delta[substate]);"
+)
+
+
+def _patch_state_dispatcher_template() -> None:
+    """Make the generated ``utils/state.js`` tolerant of unknown substates.
+
+    The stock Reflex template calls ``dispatch[substate](delta)`` without
+    checking that the substate exists in the client-side dispatcher map.
+    When the running backend's state tree drifts from the bundle (typically
+    because ``.web/`` was generated against an older set of imports than the
+    process is now serving, or a substate is registered late), the WebSocket
+    event handler throws ``TypeError: h[M] is not a function`` and the page
+    sits forever on the loading skeleton.
+
+    We patch the bundled template at boot so every subsequent compile emits a
+    guarded dispatch that logs the missing substate to the browser console
+    instead of crashing the page. The patch is idempotent and recoverable:
+    reinstalling ``reflex_base`` overwrites the template and the next process
+    boot re-applies the patch.
+    """
+    from pathlib import Path  # noqa: PLC0415 — keep import local to the patch.
+
+    template_path: Path | None = None
+    try:
+        import reflex_base  # noqa: PLC0415
+
+        template_path = (
+            Path(reflex_base.__file__).parent
+            / ".templates"
+            / "web"
+            / "utils"
+            / "state.js"
+        )
+    except Exception:  # noqa: BLE001 — best-effort discovery.
+        return
+
+    if template_path is None or not template_path.exists():
+        return
+
+    try:
+        source = template_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+
+    if _STATE_DISPATCHER_MARKER in source:
+        return
+    if _STATE_DISPATCHER_ORIGINAL not in source:
+        return
+
+    patched = source.replace(_STATE_DISPATCHER_ORIGINAL, _STATE_DISPATCHER_PATCHED, 1)
+
+    try:
+        template_path.write_text(patched, encoding="utf-8")
+    except OSError:
+        import logging
+
+        logging.getLogger("reflex_django.integration").warning(
+            "Could not patch %s for tolerant dispatcher; readonly site-packages?",
+            template_path,
+        )
 
 
 def _patch_assert_in_reflex_dir() -> None:

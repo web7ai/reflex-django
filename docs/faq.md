@@ -290,9 +290,22 @@ A leftover `rxconfig.py` is pointing at the old layout. Delete `rxconfig.py`. `r
 
 The SPA hasn't been built yet. Run `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root`, or just `python manage.py run_reflex` and let it build automatically.
 
-### Browser console: `dispatch is not a function`
+### Browser console: `dispatch is not a function` / `h[M] is not a function` (page stuck on loading skeleton)
 
-The compiled SPA's state dispatcher is out of sync with your live state classes (usually after a major change to your state shape). Stop the server, delete `.web/`, restart `run_reflex`. Next build will regenerate everything.
+The compiled SPA's state dispatcher map is missing an entry for a substate the running backend is sending deltas for. Two distinct causes:
+
+**Cause 1 — drift between build and runtime.** `.web/` was generated against an older set of Python imports than the process is now serving (added/renamed a substate, switched branches, edited a `class XxxState(rx.State)`). Recovery: stop the server, delete `.web/` (or `.web/build/` + `.web/utils/state.js`), restart `python manage.py run_reflex`, hard-refresh the browser (Ctrl+Shift+R).
+
+**Cause 2 — runtime-attached substates that the frontend codegen missed.** Some `reflex_django` state classes are exposed via :pep:`562` lazy attribute access on the package (notably `reflex_django.reflex_context.DjangoContextState`) and were historically first imported by middleware on the first WebSocket event — *after* the SPA had already been compiled. Since 0.5.x, `reflex_django.app_factory.prepare_pages_for_compile` (and `ensure_django_led_app_ready`) eagerly imports these classes before Reflex walks the state tree, so both the bundle and the runtime see the same set of substates. If you previously hit `h[<...>django_context_state] is not a function`, a clean rebuild (`rm -rf .web && python manage.py run_reflex`) fixes it.
+
+**Defensive fallback.** As of 0.5.x `reflex-django` also patches Reflex's `utils/state.js` template at boot so the WebSocket event handler *tolerates* unknown substates: instead of throwing and freezing the page, it logs
+
+```
+[reflex-django] No dispatcher for substate '<name>' — skipping delta.
+Known dispatchers: …
+```
+
+…and continues rendering. If you ever see that warning after a clean rebuild, share the substate name — that's a real registration-timing bug we can fix upstream by extending the eager-import list in `_ensure_runtime_state_classes_registered`.
 
 ### Tasks/middleware silently doesn't run on events
 
