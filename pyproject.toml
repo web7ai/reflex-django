@@ -68,6 +68,10 @@ dev = [
     "pytest",
     "pytest-asyncio",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+    "pymdown-extensions>=10.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["reflex_django_tests"]

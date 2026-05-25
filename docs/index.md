@@ -1,26 +1,16 @@
 <style>
-.md-content .md-typeset h1 { display: none; }
+  .md-content .md-typeset > h1:first-of-type { display: none; }
 </style>
 
-<p align="center">
-  <a href="https://github.com/mohannadirshedat/reflex-django">
-    <img src="assets/logo.png" alt="reflex-django logo" width="220" style="border-radius: 16px; margin-bottom: 8px;">
-  </a>
-</p>
-
-<p align="center">
-  <h1 align="center" style="border-bottom: none; font-size: 3.2rem; font-weight: 850; margin-bottom: 0px; background: linear-gradient(135deg, #3f51b5, #00b0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -1px;">reflex-django</h1>
-</p>
-
-<p align="center">
-  <em>Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.</em>
-</p>
-
-<p align="center">
-  <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/v/reflex-django?color=%2334D058&label=pypi%20package" alt="PyPI"></a>
-  <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/pyversions/reflex-django.svg" alt="Python"></a>
-  <a href="https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE"><img src="https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg?color=blue" alt="License"></a>
-</p>
+<div class="rd-hero" markdown>
+  <h1 class="rd-hero__brand">reflex-django</h1>
+  <p class="rd-hero__tagline">Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.</p>
+  <p class="rd-hero__badges">
+    <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/v/reflex-django?color=%23e91e63&label=pypi" alt="PyPI"></a>
+    <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/pyversions/reflex-django.svg?color=%23ad1457" alt="Python"></a>
+    <a href="https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE"><img src="https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg?color=%23ec407a" alt="License"></a>
+  </p>
+</div>
 
 ---
 

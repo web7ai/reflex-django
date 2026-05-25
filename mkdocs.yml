@@ -7,35 +7,44 @@ repo_name: mohannadirshedat/reflex-django
 
 theme:
   name: material
-  logo: assets/logo-icon.png
-  favicon: assets/logo-icon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: pink
+      accent: pink
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: black
-      accent: teal
+      accent: pink
       toggle:
         icon: material/weather-night
         name: Switch to light mode
   font:
     text: Inter
-    code: Fira Code
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
+    - navigation.expand
+    - navigation.indexes
     - navigation.top
     - navigation.tracking
     - navigation.instant
+    - navigation.instant.progress
+    - navigation.footer
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
 
 markdown_extensions:
   - markdown.extensions.admonition

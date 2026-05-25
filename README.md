@@ -1,27 +1,13 @@
-<p align="center">
-  <a href="https://github.com/mohannadirshedat/reflex-django">
-    <img src="https://raw.githubusercontent.com/mohannadirshedat/reflex-django/main/logo.png" alt="reflex-django" width="200">
-  </a>
-</p>
+# reflex-django
 
-<h1 align="center">reflex-django</h1>
+**Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.**
 
-<p align="center">
-  <strong>Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.</strong>
-</p>
+[![PyPI](https://img.shields.io/pypi/v/reflex-django?color=%23e91e63&label=pypi)](https://pypi.org/project/reflex-django)
+[![Python](https://img.shields.io/pypi/pyversions/reflex-django.svg?color=%23ad1457)](https://pypi.org/project/reflex-django)
+[![Docs](https://img.shields.io/badge/docs-online-%23ec407a)](https://mohannadirshedat.github.io/reflex-django/)
+[![License](https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg?color=%23f06292)](https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE)
 
-<p align="center">
-  <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/v/reflex-django?color=%2334D058&label=pypi" alt="PyPI"></a>
-  <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/pyversions/reflex-django.svg" alt="Python"></a>
-  <a href="https://mohannadirshedat.github.io/reflex-django/"><img src="https://img.shields.io/badge/docs-online-blue" alt="Docs"></a>
-  <a href="https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE"><img src="https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg" alt="License"></a>
-</p>
-
-<p align="center">
-  <a href="https://mohannadirshedat.github.io/reflex-django/">Documentation</a> ·
-  <a href="https://github.com/mohannadirshedat/reflex-django">GitHub</a> ·
-  <a href="https://pypi.org/project/reflex-django">PyPI</a>
-</p>
+[Documentation](https://mohannadirshedat.github.io/reflex-django/) · [GitHub](https://github.com/mohannadirshedat/reflex-django) · [PyPI](https://pypi.org/project/reflex-django)
 
 ---
 
