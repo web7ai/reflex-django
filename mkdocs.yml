@@ -1,9 +1,9 @@
 site_name: reflex-django
-site_url: https://mohannadirshedat.github.io/reflex-django/
+site_url: https://web7ai.github.io/reflex-django/
 site_description: Run a Django backend (Django ORM, Django Admin) alongside a Reflex app in one process.
 site_author: Mohannad Irshedat
-repo_url: https://github.com/mohannadirshedat/reflex-django
-repo_name: mohannadirshedat/reflex-django
+repo_url: https://github.com/web7ai/reflex-django
+repo_name: web7ai/reflex-django
 
 theme:
   name: material
@@ -73,7 +73,7 @@ markdown_extensions:
   - pymdownx.magiclink:
       normalize_issue_symbols: true
       repo_url_shorthand: true
-      user: mohannadirshedat
+      user: web7ai
       repo: reflex-django
   - pymdownx.mark
   - pymdownx.smartsymbols

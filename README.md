@@ -4,10 +4,10 @@
 
 [![PyPI](https://img.shields.io/pypi/v/reflex-django?color=%23e91e63&label=pypi)](https://pypi.org/project/reflex-django)
 [![Python](https://img.shields.io/pypi/pyversions/reflex-django.svg?color=%23ad1457)](https://pypi.org/project/reflex-django)
-[![Docs](https://img.shields.io/badge/docs-online-%23ec407a)](https://mohannadirshedat.github.io/reflex-django/)
-[![License](https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg?color=%23f06292)](https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-online-%23ec407a)](https://web7ai.github.io/reflex-django/)
+[![License](https://img.shields.io/github/license/web7ai/reflex-django.svg?color=%23f06292)](https://github.com/web7ai/reflex-django/blob/main/LICENSE)
 
-[Documentation](https://mohannadirshedat.github.io/reflex-django/) · [GitHub](https://github.com/mohannadirshedat/reflex-django) · [PyPI](https://pypi.org/project/reflex-django)
+[Documentation](https://web7ai.github.io/reflex-django/) · [GitHub](https://github.com/web7ai/reflex-django) · [PyPI](https://pypi.org/project/reflex-django)
 
 ---
 
@@ -125,7 +125,7 @@ Reflex sends UI events over a **WebSocket** on `/_event`. Django middleware does
 
 `reflex-django` builds a synthetic `HttpRequest` for every event, runs your full `settings.MIDDLEWARE` chain on it, and binds `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` onto your `AppState` handler. One process. One port. Same auth as your admin.
 
-Full explanation: [Why reflex-django exists](https://mohannadirshedat.github.io/reflex-django/why_reflex_django/).
+Full explanation: [Why reflex-django exists](https://web7ai.github.io/reflex-django/why_reflex_django/).
 
 ---
 
@@ -155,14 +155,14 @@ No `rxconfig.py`. No `{app}/{app}.py`. No separate frontend.
 
 The full docs walk you through the *why*, the *how*, and every knob:
 
-- **[Why reflex-django exists](https://mohannadirshedat.github.io/reflex-django/why_reflex_django/)** — the one-page story
-- **[How Django works in 5 minutes](https://mohannadirshedat.github.io/reflex-django/how_django_works/)**
-- **[How Reflex works in 5 minutes](https://mohannadirshedat.github.io/reflex-django/how_reflex_works/)**
-- **[How the two fit together](https://mohannadirshedat.github.io/reflex-django/how_they_fit/)**
-- **[Your first app — a 15-minute todo list](https://mohannadirshedat.github.io/reflex-django/quickstart/)**
-- **[Add to an existing Django project](https://mohannadirshedat.github.io/reflex-django/existing_django_project/)**
+- **[Why reflex-django exists](https://web7ai.github.io/reflex-django/why_reflex_django/)** — the one-page story
+- **[How Django works in 5 minutes](https://web7ai.github.io/reflex-django/how_django_works/)**
+- **[How Reflex works in 5 minutes](https://web7ai.github.io/reflex-django/how_reflex_works/)**
+- **[How the two fit together](https://web7ai.github.io/reflex-django/how_they_fit/)**
+- **[Your first app — a 15-minute todo list](https://web7ai.github.io/reflex-django/quickstart/)**
+- **[Add to an existing Django project](https://web7ai.github.io/reflex-django/existing_django_project/)**
 
-Site: <https://mohannadirshedat.github.io/reflex-django/>
+Site: <https://web7ai.github.io/reflex-django/>
 
 ---
 
@@ -178,4 +178,4 @@ python manage.py createsuperuser
 
 ---
 
-**Author:** Mohannad Irshedat · [GitHub](https://github.com/mohannadirshedat/reflex-django) · [Docs](https://mohannadirshedat.github.io/reflex-django/)
+**Author:** Mohannad Irshedat · [GitHub](https://github.com/web7ai/reflex-django) · [Docs](https://web7ai.github.io/reflex-django/)

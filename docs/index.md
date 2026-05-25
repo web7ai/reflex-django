@@ -8,7 +8,7 @@
   <p class="rd-hero__badges">
     <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/v/reflex-django?color=%23e91e63&label=pypi" alt="PyPI"></a>
     <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/pyversions/reflex-django.svg?color=%23ad1457" alt="Python"></a>
-    <a href="https://github.com/mohannadirshedat/reflex-django/blob/main/LICENSE"><img src="https://img.shields.io/github/license/mohannadirshedat/reflex-django.svg?color=%23ec407a" alt="License"></a>
+    <a href="https://github.com/web7ai/reflex-django/blob/main/LICENSE"><img src="https://img.shields.io/github/license/web7ai/reflex-django.svg?color=%23ec407a" alt="License"></a>
   </p>
 </div>
 

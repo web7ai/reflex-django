@@ -40,10 +40,10 @@ classifiers = [
 reflex-django = "reflex_django.cli:main"
 
 [project.urls]
-homepage = "https://mohannadirshedat.github.io/reflex-django/"
-documentation = "https://mohannadirshedat.github.io/reflex-django/"
-repository = "https://github.com/mohannadirshedat/reflex-django"
-changelog = "https://github.com/mohannadirshedat/reflex-django/blob/main/CHANGELOG.md"
+homepage = "https://web7ai.github.io/reflex-django/"
+documentation = "https://web7ai.github.io/reflex-django/"
+repository = "https://github.com/web7ai/reflex-django"
+changelog = "https://github.com/web7ai/reflex-django/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reflex_django"]

@@ -332,7 +332,7 @@ If you can't find your question here:
 - [Glossary](glossary.md) — definitions of every term in these docs.
 - [Public API at a glance](public_api.md) — every importable symbol.
 - [Architecture overview](architecture.md) — the full plumbing picture.
-- [GitHub](https://github.com/mohannadirshedat/reflex-django) — issues and discussions.
+- [GitHub](https://github.com/web7ai/reflex-django) — issues and discussions.
 
 ---
 
