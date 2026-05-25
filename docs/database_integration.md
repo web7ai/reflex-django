@@ -1,191 +1,322 @@
-# Database Integration & ORM Mechanics
+# Talking to the database
 
-One of the greatest benefits of using **reflex-django** is the ability to leverage Django's industry-standard Object-Relational Mapper (ORM), transaction isolation controls, and automated migration schema engine directly inside your reactive frontend event handlers.
+Inside a `reflex-django` event handler, the Django ORM works the way it always has — with one important rule: **use the async methods**. The unified ASGI server runs an event loop, and a blocking query stalls every user's connection for the duration of that query.
 
-This guide details how database configurations boot, how to declare models, how to execute non-blocking asynchronous queries, and how to integrate standard Django Admin operations.
-
----
-
-## 1. How Django ORM Boots
-
-When your unified ASGI process starts, `reflex-django` must ensure the Django model registry is fully loaded and configured before Reflex compiles any state components.
-
-### The `configure_django()` Bootstrap Hook
-This is an idempotent setup function called automatically by the plugin during startup and CLI commands:
-
-1. **Environment Overrides**: First, it respects any active environment variables. If `DJANGO_SETTINGS_MODULE` is defined in your shell, it uses that target module.
-2. **Database Routing**: It maps database settings declared in your Django `settings.py` file. If no custom database is configured, it falls back to options parsed from your `rxconfig.py` plugin block (e.g., `REFLEX_DJANGO_DATABASE_URL` or an auto-generated local SQLite file).
-3. **Registry Hydration**: It executes `django.setup()`, which registers all models under `INSTALLED_APPS` and builds SQL abstraction maps.
+This page covers the patterns to use, the patterns to avoid, and a few small tools `reflex-django` adds on top.
 
 ---
 
-## 2. Declaring Models: The `Model` Base Class
+## The async ORM in 60 seconds
 
-While you are free to use standard `models.Model` from `django.db`, `reflex-django` provides a convenient abstract base class: **`reflex_django.model.Model`**.
+Modern Django ships an async counterpart for every common ORM method:
 
-```python
-# shop/models.py
-from django.db import models
-from reflex_django.model import Model
-
-class Product(Model):
-    """A standard Django database model with a high-productivity base class."""
-    name = models.CharField(max_length=128, db_index=True)
-    description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    sku = models.CharField(max_length=64, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"{self.name} (${self.price})"
-```
-
-### Why use `reflex_django.model.Model`?
-* **Modern PK Default**: It automatically binds a `BigAutoField` primary key (`id`), which is the recommended default for scalable production schemas.
-* **Idempotent Bootstrapping**: Importing from `reflex_django.model` safely triggers `configure_django()` behind the scenes, preventing early registry import exceptions.
-* **Auto-Serialization Hooks**: Model instances extending this base automatically register the custom `serialize_django_model` hooks, ensuring clean integration with states.
-
----
-
-## 3. The Migration Workflow
-
-Because your database schema is defined as Python code, you run standard Django migration management utilities to generate and run database alterations.
-
-Always execute migrations using the custom **`reflex django`** wrapper. This ensures the execution context matches the exact configuration layout defined in `rxconfig.py`:
-
-```bash
-# 1. Inspect model files and generate SQL migration scripts
-uv run reflex django makemigrations
-
-# 2. Execute SQL changes against the target database
-uv run reflex django migrate
-```
-
----
-
-## 4. Asynchronous Database Queries in State Handlers
-
-The unified ASGI engine runs on an asynchronous event loop. Performing synchronous, blocking database transactions inside Reflex event handlers will block the thread, causing other user socket connections to lag.
-
-### The Async ORM Rules:
-1. **Define with `async def`**: Always mark your Reflex event handlers as asynchronous.
-2. **Await Async ORM Methods**: Use Django's modern async query methods instead of their blocking equivalents.
-3. **Never Store Models in State Fields**: Reflex state properties are serialized into JSON. Always serialize queries into dictionaries or primitive scalars before assigning them to state fields.
-
-### Async Query Reference Table
-
-| Blocking Method (Do NOT use) | Asynchronous Equivalent (Do use) |
+| Sync (don't use in handlers) | Async (use these) |
 |:---|:---|
-| `Product.objects.create(...)` | `await Product.objects.acreate(...)` |
-| `Product.objects.get(...)` | `await Product.objects.aget(...)` |
-| `product.save()` | `await product.asave()` |
-| `product.delete()` | `await product.adelete()` |
-| `list(Product.objects.all())` | `[p async for p in Product.objects.all()]` |
+| `Model.objects.get(...)` | `await Model.objects.aget(...)` |
+| `Model.objects.create(...)` | `await Model.objects.acreate(...)` |
+| `Model.objects.get_or_create(...)` | `await Model.objects.aget_or_create(...)` |
+| `Model.objects.update_or_create(...)` | `await Model.objects.aupdate_or_create(...)` |
+| `instance.save()` | `await instance.asave()` |
+| `instance.delete()` | `await instance.adelete()` |
+| `Model.objects.filter(...).first()` | `await Model.objects.filter(...).afirst()` |
+| `Model.objects.filter(...).count()` | `await Model.objects.filter(...).acount()` |
+| `list(Model.objects.all())` | `[m async for m in Model.objects.all()]` |
+| `Model.objects.bulk_create(items)` | `await Model.objects.abulk_create(items)` |
 
-### Production-Grade Async Query Example
+There are more (`aexists`, `aupdate`, `abulk_update`, …). The rule of thumb: if the method name doesn't start with `a`, don't use it inside an `async def` event handler.
 
-Here is a complete, thread-safe implementation of a product search catalog:
+---
+
+## A complete pattern
+
+A typical "load and display a list" handler:
 
 ```python
-# frontend/states/catalog.py
 import reflex as rx
+from reflex_django.state import AppState
 from shop.models import Product
 
-class CatalogState(rx.State):
-    search_query: str = ""
+
+class CatalogState(AppState):
     products: list[dict] = []
-    total_matches: int = 0
     loading: bool = False
+    error: str = ""
 
     @rx.event
-    async def search_catalog(self):
-        """Asynchronously queries products and serializes them to reactive state."""
+    async def load(self):
         self.loading = True
-        yield  # Yields state to trigger the loading indicator in the browser
-        
+        yield   # send the loading flag to the UI immediately
         try:
-            # 1. Build an asynchronous filtered queryset
-            qs = Product.objects.filter(
-                name__icontains=self.search_query.strip()
-            ).order_by("-created_at")
-            
-            # 2. Fetch the total count asynchronously
-            self.total_matches = await qs.acount()
-            
-            # 3. Asynchronously iterate and build a serialized list
-            serialized_list = []
-            async for p in qs[:20]:  # Limit output to 20 records
-                serialized_list.append({
-                    "id": p.id,
-                    "name": p.name,
-                    "description": p.description,
-                    "price": float(p.price),  # Convert Decimal to float for JSON
-                    "sku": p.sku,
-                })
-            
-            self.products = serialized_list
-            
+            self.products = [
+                {"id": p.id, "name": p.name, "price": str(p.price)}
+                async for p in Product.objects.filter(is_active=True).order_by("-created_at")[:50]
+            ]
         except Exception as e:
-            return rx.toast.error(f"Search failed: {str(e)}")
-            
+            self.error = f"Couldn't load products: {e}"
         finally:
             self.loading = False
 ```
 
+Three small habits that pay off:
+
+1. **`yield` to flush a partial update** — set the spinner, yield, then do the slow work. The browser shows the spinner without waiting for the query.
+2. **Slice the queryset** (`[:50]`) — even on small tables. It prevents pathological loads.
+3. **Convert to plain dicts** — never assign a model instance directly to a state field. JSON serialization will fail.
+
 ---
 
-## 5. Integrating the Django Admin Panel
-
-You can manage your database tables using Django's powerful built-in administration dashboard.
-
-Register your models inside your backend configuration using the **`register_admin`** decorator. This ensures the models are exposed under your configured `admin_prefix` (default: `/admin`):
+## Creating and updating
 
 ```python
-# shop/admin.py
-from reflex_django import register_admin
+@rx.event
+async def add_product(self):
+    name = self.new_name.strip()
+    price = self.new_price
+    if not name:
+        self.error = "Name is required."
+        return
+    await Product.objects.acreate(
+        name=name,
+        price=price,
+        owner=self.request.user,
+    )
+    self.new_name = ""
+    await self.load()
+```
+
+Notice how `self.request.user` is the authenticated Django user, available because `CatalogState` inherits from `AppState`. ([Why](state_management.md).)
+
+For an update, fetch with `aget`, mutate, then `asave`:
+
+```python
+@rx.event
+async def rename(self, product_id: int, new_name: str):
+    p = await Product.objects.aget(pk=product_id, owner=self.request.user)
+    p.name = new_name
+    await p.asave()
+    await self.load()
+```
+
+The `owner=self.request.user` filter on `aget` is doing double duty: it's both a query filter and a permission check. If the user tries to rename someone else's product, `aget` raises `DoesNotExist` instead of returning the row.
+
+---
+
+## Deleting safely
+
+Same pattern as updating:
+
+```python
+@rx.event
+async def delete(self, product_id: int):
+    try:
+        p = await Product.objects.aget(pk=product_id, owner=self.request.user)
+        await p.adelete()
+    except Product.DoesNotExist:
+        return
+    await self.load()
+```
+
+---
+
+## Don't store model instances in state
+
+This is the same rule from the `AppState` page, but it bears repeating because it's the most common bug:
+
+```python
+# wrong — will crash on JSON serialization
+self.product = product
+
+# right — extract primitives
+self.product = {
+    "id": product.id,
+    "name": product.name,
+    "price": str(product.price),     # Decimal → str
+    "created_at": product.created_at.isoformat(),  # datetime → str
+}
+```
+
+`Decimal` and `datetime` objects aren't JSON-serializable either. Convert them with `str(...)` or `.isoformat()`.
+
+If you have more than a couple of fields, use a [serializer](serializers.md):
+
+```python
+from reflex_django.serializers import ReflexDjangoModelSerializer
+
+class ProductSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Product
+        fields = ("id", "name", "price", "created_at")
+```
+
+```python
+qs = Product.objects.filter(is_active=True)
+self.products = await ProductSerializer(qs, many=True).adata()
+```
+
+---
+
+## Avoiding N+1 queries
+
+If you display a list of products with their author, this naive loop runs one extra query per row:
+
+```python
+# bad — N+1 queries
+self.rows = [
+    {"name": p.name, "author": p.author.username}    # p.author hits the DB each time
+    async for p in Product.objects.all()
+]
+```
+
+Pull related rows in a single join with `select_related`:
+
+```python
+self.rows = [
+    {"name": p.name, "author": p.author.username}
+    async for p in Product.objects.select_related("author").all()
+]
+```
+
+For many-to-many or reverse foreign keys, use `prefetch_related`:
+
+```python
+async for cat in Category.objects.prefetch_related("products").all():
+    ...
+```
+
+If you use [`ModelCRUDView`](crud_with_mixins_and_states.md), declare these in `Meta`:
+
+```python
+class Meta:
+    queryset_select_related = ("author",)
+    queryset_prefetch = ("tags",)
+```
+
+---
+
+## Don't import models at module top
+
+Pages get imported during early bootstrap, before Django's app registry is necessarily ready. Importing models there causes `AppRegistryNotReady`:
+
+```python
+# views.py — risky at import time
 from shop.models import Product
 
-# Registers model and exposes it at http://localhost:3000/admin/
-@register_admin(Product)
-class ProductAdmin(admin.ModelAdmin):
-    list_display = ("name", "price", "sku", "created_at")
-    search_fields = ("name", "sku")
-    list_filter = ("created_at",)
+class CatalogState(AppState):
+    @rx.event
+    async def load(self):
+        ...
 ```
 
----
-
-## 6. Performance & Query Optimization
-
-If you are using automated CRUD views (`ModelCRUDView` or `ModelState`), reflex-django handles the database engine binding using the **`DjangoORMBackend`**.
-
-To prevent "N+1 query" performance bottlenecks on your relational tables, declare optimization variables directly on your State `Meta` configurations:
+Safer pattern — import inside the handler:
 
 ```python
-# frontend/states/orders.py
-from reflex_django.state import ModelState
-from shop.models import Order
-
-class OrderState(ModelState):
-    model = Order
-    fields = ["id", "customer_name", "total_price"]
-    
-    class Meta:
-        # Pre-select foreign key records in a single database JOIN query
-        queryset_select_related = ("customer",)
-        
-        # Pre-fetch related many-to-many objects in a single batch query
-        queryset_prefetch = ("items",)
+class CatalogState(AppState):
+    @rx.event
+    async def load(self):
+        from shop.models import Product   # imported on first call, after Django is ready
+        self.products = [...]
 ```
 
----
-
-## 7. Common Pitfalls
-
-* **Circular Import Loop**: Importing a Django model globally at the root of a Reflex state file *before* the application plugin finishes bootstrapping can trigger a `django.core.exceptions.AppRegistryNotReady` crash. Always import models within your event handler methods or inside lazy loaders, or ensure your Reflex state file is imported after the plugin has finished setting up.
-* **Blocking ORM Operations**: Running synchronous ORM calls (e.g., `Product.objects.count()`) in an `async def` handler will stall the ASGI worker thread. Always use `acount()` and prefix database writes with `await`.
-* **Database Transactions in Async**: Wrapping multi-table asynchronous updates in standard synchronous `with transaction.atomic():` blocks will fail. Wrap async database operations in `async with sync_to_async(transaction.atomic)():` or leverage Django's async transaction hooks.
+Once your project boots cleanly, top-of-file imports usually work. But the inside-handler version is bulletproof and we recommend it for shared library code.
 
 ---
 
-**Navigation:** [← Session Authentication](authentication.md) | [Next: Model Serializers →](serializers.md)
+## The optional `reflex_django.model.Model` base class
+
+You're free to use plain `django.db.models.Model`. `reflex-django` also ships an optional base class that smooths a couple of edge cases:
+
+```python
+from reflex_django.model import Model
+from django.db import models
+
+
+class Product(Model):
+    name = models.CharField(max_length=200)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+```
+
+What it does that the plain `Model` doesn't:
+
+1. **`BigAutoField` PK by default** — a modern, scalable choice.
+2. **Idempotent Django setup** — importing `reflex_django.model` triggers `configure_django()` safely, dodging some import-order pitfalls in scripts and tests.
+3. **Auto-registered Reflex serializer** — model instances of this base have a JSON serializer registered with Reflex out of the box. (You still shouldn't assign instances to state fields, but the registration helps in a few internal places.)
+
+Use it or don't. Both work.
+
+---
+
+## Migrations
+
+Standard Django:
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
+
+No special steps. `reflex-django` doesn't introduce its own migrations; it adds zero new tables.
+
+---
+
+## Transactions in async code
+
+Use `django.db.transaction.atomic` with an async-friendly wrapper. Django's `atomic` is sync, so you need `sync_to_async`:
+
+```python
+from asgiref.sync import sync_to_async
+from django.db import transaction
+
+@rx.event
+async def transfer(self, from_id: int, to_id: int, amount: int):
+    @sync_to_async
+    def do_transfer():
+        with transaction.atomic():
+            src = Account.objects.select_for_update().get(pk=from_id)
+            dst = Account.objects.select_for_update().get(pk=to_id)
+            src.balance -= amount
+            dst.balance += amount
+            src.save()
+            dst.save()
+    await do_transfer()
+```
+
+For most apps you won't need this — single-row writes with `asave()` are atomic at the row level. Use `atomic` when you need multi-row consistency.
+
+---
+
+## A quick decision tree
+
+| You need to… | Use |
+|:---|:---|
+| Read a single row | `await Model.objects.aget(...)` |
+| Read a list | `[m async for m in Model.objects.filter(...)]` (with slicing) |
+| Create a row | `await Model.objects.acreate(...)` |
+| Update an existing row | `await instance.asave()` after mutating |
+| Delete a row | `await instance.adelete()` |
+| Count rows | `await qs.acount()` |
+| Bulk insert | `await Model.objects.abulk_create([...])` |
+| Bulk update | `await Model.objects.abulk_update([...], fields=[...])` |
+| Multi-row consistency | `sync_to_async` wrapping `transaction.atomic` |
+| Skip the N+1 | `select_related` / `prefetch_related` on the queryset |
+
+---
+
+## When you should use `ModelState` instead
+
+If your page is *mostly* "list rows, edit one, save, delete", you can hand the boilerplate to `ModelState` and reduce a CRUD page to about 5 lines:
+
+```python
+class ProductState(ModelState):
+    model = Product
+    fields = ["name", "price"]
+    class Meta:
+        list_var = "products"
+```
+
+`ModelState` is itself an `AppState`, so you keep `self.request.user`, `self.session`, and all the rest. ([Full walkthrough](reactive_model_state.md).)
+
+When you need custom validation, joins, or fancy business logic, drop back to plain `AppState` and write the handlers by hand. Both styles work in the same project.
+
+---
+
+**Next:** [Login & sessions →](authentication.md)

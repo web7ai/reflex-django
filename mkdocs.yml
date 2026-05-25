@@ -89,41 +89,47 @@ extra_javascript:
 
 nav:
   - Welcome:
-    - Overview: index.md
-    - Introduction: introduction.md
-    - Installation: installation.md
-    - Configuration: configuration.md
-  - Getting Started:
-    - Quickstart: quickstart.md
-    - Pages in views.py: pages_in_views.md
-    - AsyncStreamingMiddleware: async_streaming_middleware.md
-    - Existing Django Project: existing_django_project.md
-    - Recommended Layout: project_structure.md
-  - Core Architecture:
-    - Architecture Overview: architecture.md
-    - Routing & URL Dispatching: routing.md
-    - API & HTTP Integration: api_integration.md
-  - State & Context:
-    - State Management: state_management.md
-    - Django Context in Reflex: django_context_to_reflex.md
-    - Django Middleware in Reflex: django_middleware_to_reflex.md
-  - Authentication:
-    - Session Authentication: authentication.md
-  - Internationalization:
-    - i18n & Translations: i18n.md
-  - Database & CRUD:
-    - Database Integration: database_integration.md
-    - Model Serializers: serializers.md
-    - CRUD (No Mixins): crud_without_mixins.md
-    - ModelState vs ModelCRUDView: model_state_and_crud_view.md
-    - Reactive ModelState: reactive_model_state.md
-    - CRUD with Mixins & States: crud_with_mixins_and_states.md
-    - reflex-django Mixins: reflex_django_mixins.md
-    - Forms & Validation: forms_and_validation.md
-  - Development & Ops:
-    - Command Line Interface: cli.md
-    - Testing Guide: testing.md
-    - Deployment Guide: deployment.md
-  - Resources:
-    - Best Practices: best_practices.md
+    - Home: index.md
+    - Why reflex-django exists: why_reflex_django.md
+    - How Django works in 5 minutes: how_django_works.md
+    - How Reflex works in 5 minutes: how_reflex_works.md
+    - How the two fit together: how_they_fit.md
+  - Get Started:
+    - Install: installation.md
+    - Your first app: quickstart.md
+    - Add to an existing Django project: existing_django_project.md
+  - The Essentials:
+    - Project structure: project_structure.md
+    - Configuration with reflex_mount(): configuration.md
+    - Pages live in views.py: pages_in_views.md
+    - AppState — your bridge to Django: state_management.md
+    - Talking to the database: database_integration.md
+    - Login & sessions: authentication.md
+  - Build Real Things:
+    - CRUD the manual way: crud_without_mixins.md
+    - CRUD with ModelState: reactive_model_state.md
+    - ModelCRUDView with serializers: crud_with_mixins_and_states.md
+    - Choosing ModelState vs ModelCRUDView: model_state_and_crud_view.md
+    - Mixins — compose your own state: reflex_django_mixins.md
+    - Forms & validation: forms_and_validation.md
+    - Model serializers: serializers.md
+    - i18n & translations: i18n.md
+    - HTTP APIs alongside Reflex: api_integration.md
+    - Using Django context processors: django_context_to_reflex.md
+    - Custom middleware in events: django_middleware_to_reflex.md
+  - Under the Hood:
+    - Architecture overview: architecture.md
+    - Routing & URL dispatching: routing.md
+    - The WebSocket event pipeline: websocket_event_pipeline.md
+    - AsyncStreamingMiddleware explained: async_streaming_middleware.md
+  - Ship It:
+    - CLI reference: cli.md
+    - Testing: testing.md
+    - Deployment: deployment.md
+    - Best practices: best_practices.md
+    - Migrating from older versions: migration_django_outer.md
+  - Reference:
+    - REFLEX_DJANGO_* settings: settings_reference.md
+    - Public API at a glance: public_api.md
     - FAQ: faq.md
+    - Glossary: glossary.md

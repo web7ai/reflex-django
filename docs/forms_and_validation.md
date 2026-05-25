@@ -1,328 +1,343 @@
-# Forms & Validation
+# Forms & validation
 
-Building production-ready forms requires more than simple text synchronization. Developers must prevent input lag on fast typists, prevent DOM data caching, validate input fields using complex business logic, and render structured errors back to users.
+Two things to understand about forms in `reflex-django`:
 
-To achieve this, `reflex-django` provides an advanced, state-driven validation framework that connects Reflex interactive inputs with Django's native field constraints and validation pipelines.
+1. There are **two styles** of binding form inputs to state — pick the one that fits.
+2. Validation runs in **three stages** before a save hits the database — and you can hook into each one.
+
+This page covers both, with small examples.
 
 ---
 
-## 1. Choosing Your Input Style
+## Style 1 — flat reactive binding (default)
 
-`reflex-django` supports two input styles. Choose the style that best fits your design and performance requirements:
-
-```text
-    1. Flat Bindings (Real-time Sync)       2. Form Submit (Debounced Sync)
-       ┌────────────────────────┐              ┌────────────────────────┐
-       │   value=State.title    │              │      name="title"      │
-       │ on_change=set_title    │              │                        │
-       │ (High reactivity)      │              │ (Zero typing overhead) │
-       └────────────────────────┘              └────────────────────────┘
-```
-
-### Style A: Flat Bindings (Reactivity-First)
-Inputs are directly bound to state fields on the server. The state is updated in real time as the user types.
-
-* **Pros**: Real-time styling, instant character counting, and immediate client-side feedback.
-* **Cons**: Network round-trips for every keystroke (can be optimized using debounce settings).
+Every field on your `ModelState` is a reactive variable. Wire `value` and `on_change` directly:
 
 ```python
-rx.input(
-    value=ProductState.name,
-    on_change=ProductState.set_name,
-    placeholder="Enter product title..."
-)
-```
-
-### Style B: Form Submit (Performance-First)
-Inputs are treated as standard un-bound HTML fields. The data is only transmitted to the server when the user clicks **Submit**.
-
-* **Pros**: Zero typing latency, resilient over high-latency networks.
-* **Cons**: No real-time server-side validation as the user types.
-
-```python
-# Enable form submit processing in your state configuration
 class ProductState(ModelState):
+    model = Product
+    fields = ["name", "price", "sku"]
+
+
+def form_block():
+    return rx.vstack(
+        rx.input(value=ProductState.name,  on_change=ProductState.set_name),
+        rx.input(value=ProductState.price, on_change=ProductState.set_price),
+        rx.input(value=ProductState.sku,   on_change=ProductState.set_sku),
+        rx.button("Save", on_click=ProductState.save),
+    )
+```
+
+Every keystroke updates `ProductState.name` on the server. The UI feels real-time. The downside: you ship one WebSocket event per keystroke. For most forms, that's fine.
+
+When to use: small forms, immediate feedback (e.g. live preview), forms where you want each field validated as the user types.
+
+---
+
+## Style 2 — `Meta.use_form_submit`
+
+For larger forms, you can defer the round trip until "Save":
+
+```python
+class ProductState(ModelState):
+    model = Product
+    fields = ["name", "price", "sku"]
+
     class Meta:
+        list_var = "products"
         use_form_submit = True
-        
-# Bind the submission handler to your form
+```
+
+```python
+def form_block():
+    return rx.form(
+        rx.vstack(
+            rx.input(name="name",  default_value=ProductState.name),
+            rx.input(name="price", default_value=ProductState.price),
+            rx.input(name="sku",   default_value=ProductState.sku),
+            rx.button("Save", type="submit"),
+        ),
+        on_submit=ProductState.save,
+        key=ProductState.form_reset_key,
+    )
+```
+
+`on_submit` ships all fields in one event, in one go. Better for big forms, slower live feedback.
+
+When to use: long forms (10+ fields), forms where most validation only happens on submit anyway.
+
+---
+
+## The `form_reset_key` pattern
+
+To reset a form, bump `form_reset_key`:
+
+```python
 rx.form(
-    rx.vstack(
-        rx.input(name="name", placeholder="Product name..."),
-        rx.input(name="price", placeholder="0.00"),
-        rx.button("Save Item", type="submit"),
-    ),
-    on_submit=ProductState.save_form,  # Auto-generated submission handler
-    reset_on_submit=False,
+    ...,
     key=ProductState.form_reset_key,
 )
 ```
 
-> [!IMPORTANT]
-> When using `use_form_submit`, ensure that the `name=` attribute of each `rx.input` matches the corresponding field name in your Django serializer.
+`ModelState` increments `form_reset_key` whenever:
+
+- A save succeeds (and `Meta.reset_after_save = True`, which is the default).
+- You call `cancel_edit()`.
+- You load a different row for editing.
+- You manually call `self.reset_form()`.
+
+Reflex uses the `key` to remount the form, which resets any internal `<input>` state (cursor positions, uncontrolled values, etc.).
 
 ---
 
-## 2. Form Remounting & Caching Prevention
+## The three-stage validation pipeline
 
-A common bug in reactive single-page applications (SPAs) is **cached browser data**. When you save or cancel a form, the server resets the variables. However, the browser may retain the user's typed text inside input fields.
-
-To solve this, `reflex-django` uses an auto-incrementing integer: **`form_reset_key`**.
+Every save runs through three checks, in order. Any one of them can stop the save:
 
 ```text
-           Form Actions (Save / Cancel / Load Edit)
-                             │
-                             ▼
-             Server Resets State Variables
-                             │
-                             ▼
-            Server Increments form_reset_key
-                             │
-                             ▼
-         React Detects Key Change in the Client
-                             │
-                             ▼
-        Remounts DOM Form Subtree (Discards Caches)
+state field values
+     │
+     ▼
+[1] clean_<field>(value)         ← per-field cleaning (return cleaned, or raise ValueError)
+     │
+     ▼
+[2] validate_state()             ← cross-field validation (write into self.error or *_field_errors)
+     │
+     ▼
+[3] Django Model.full_clean()    ← unique=True, validators=[], required, max_length, ...
+     │
+     ▼
+await instance.asave()
 ```
 
-### The Form Reset Lifecycle
-The engine automatically manages the `form_reset_key` during different user actions:
-
-| Action / Handler | Resets Python Variables? | Increments `form_reset_key`? | Best For |
-|:---|:---|:---|:---|
-| **`cancel_edit()`** | Yes | Yes | Dismissing the editor. |
-| **`load(pk)`** | Hydrates with row data | Yes | Entering edit mode. |
-| **`save()` (Success)** | Yes (when `reset_after_save=True`)| Yes | Finalizing record writes. |
-| **`reset_state_fields()`**| Yes | Yes | Manually clearing all inputs. |
-| **`bump_form_reset_key()`**| No | Yes | Clearing browser text manually without changing state data. |
-
-To enforce this, always assign the key to your form container:
-
-```python
-rx.form(
-    rx.vstack(
-        rx.input(value=State.title, on_change=State.set_title),
-        # All inputs inside this form are cleanly remounted when key changes
-    ),
-    key=State.form_reset_key,
-)
-```
+You can use all three, none of them, or just one. Each has its own job.
 
 ---
 
-## 3. The Multi-Stage Validation Pipeline
+## Stage 1 — `clean_<field>(value)`
 
-Before data is saved to the database, `reflex-django` routes values through a structured validation pipeline:
-
-### Step 1: Normalization (`clean_{field_name}`)
-Define `clean_<field>` methods to normalize and validate individual fields. These methods should return the cleaned value or raise a `serializers.ValidationError`:
-
-```python
-class PostState(ModelState):
-    model = BlogPost
-    fields = ["title", "slug"]
-
-    def clean_slug(self, value: str) -> str:
-        """Normalize URL slug formats: strip whitespace, lowercase, and replace spaces."""
-        cleaned = value.strip().lower().replace(" ", "-")
-        if not cleaned:
-            raise serializers.ValidationError("Slug cannot be empty.")
-        return cleaned
-```
-
-### Step 2: Cross-Field Validation (`validate_state`)
-Override the async `validate_state(self, ctx)` hook to perform cross-field validation. Return a dictionary mapping field names to error messages:
-
-```python
-class RegisterState(AppState):
-    password: str = ""
-    confirm_password: str = ""
-
-    async def validate_state(self, ctx) -> dict[str, str]:
-        errors = await super().validate_state(ctx)
-        
-        if self.password != self.confirm_password:
-            errors["confirm_password"] = "Passwords do not match."
-            
-        return errors
-```
-
-### Step 3: Model-Level Constraints (`run_model_validation`)
-Enable `run_model_validation = True` in your `Meta` class to automatically execute Django's native field constraints and `.full_clean()` validations:
+Best for: normalizing input (trim, upper, parse to a type) and quick per-field checks.
 
 ```python
 class ProductState(ModelState):
     model = Product
     fields = ["name", "sku", "price"]
 
-    class Meta:
-        run_model_validation = True
-        structured_errors = True  # Populates field-specific errors
+    def clean_sku(self, value: str) -> str:
+        return value.strip().upper()
+
+    def clean_price(self, value):
+        try:
+            n = float(value)
+        except (TypeError, ValueError):
+            raise ValueError("Price must be a number")
+        if n < 0:
+            raise ValueError("Price can't be negative")
+        return value
 ```
 
-This ensures that Django's built-in field validators (e.g. `EmailValidator`, unique constraints) are executed, and any errors are captured and returned to the UI.
+The cleaned value is what makes it to the database. Raising `ValueError` records a field error and stops the save.
 
 ---
 
-## 4. Rendering Global & Field-Specific Errors
+## Stage 2 — `validate_state()`
 
-When validation fails, `reflex-django` updates your state's error variables so you can display them in the UI:
+Best for: cross-field rules and state-level checks that depend on more than one input.
 
-### Global Error Buffer
-Available as **`State.error`** (for `ModelState`) or **`State.{list_var}_error`** (for `ModelCRUDView`). It contains a general error summary, perfect for rendering a global banner:
+```python
+class OrderState(ModelState):
+    model = Order
+    fields = ["start_date", "end_date", "amount"]
+
+    class Meta:
+        list_var = "orders"
+        structured_errors = True
+
+    def validate_state(self):
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            self.orders_field_errors["end_date"] = "End date must be on or after start date."
+        if self.amount and float(self.amount) > 10000 and not self.request.user.is_staff:
+            self.error = "Amounts over $10,000 require staff approval."
+```
+
+`validate_state` runs *after* all the `clean_<field>` hooks, so by the time it sees the values, they've been normalized. Set `self.error` for global errors and `self.<list_var>_field_errors[field] = "..."` for per-field errors.
+
+If `validate_state` records any error, the save is cancelled.
+
+---
+
+## Stage 3 — Django model validation
+
+If `Meta.run_model_validation = True` (the default for `ModelState` and `ModelCRUDView`), the framework calls `instance.full_clean()` before saving. That runs:
+
+- `unique=True` checks
+- `validators=[...]` you declared on the model field
+- `max_length`, `null=False`, `blank=False` enforcement
+- Custom `Model.clean()` you wrote
+
+Errors raised by `full_clean()` become per-field errors in `<list_var>_field_errors` (when `structured_errors = True`) or a single message in `self.error`.
+
+```python
+# blog/models.py
+from django.core.validators import MinLengthValidator
+from django.db import models
+
+
+class Post(models.Model):
+    title = models.CharField(
+        max_length=200,
+        validators=[MinLengthValidator(5)],   # → "Ensure this value has at least 5 characters."
+    )
+    slug  = models.SlugField(unique=True)     # → IntegrityError-prevention via full_clean
+```
+
+Set `run_model_validation = False` if you only want stages 1 and 2 (rare).
+
+---
+
+## Showing errors in the UI
+
+Top-level error:
 
 ```python
 rx.cond(
     ProductState.error != "",
-    rx.callout(
-        ProductState.error, 
-        color_scheme="red", 
-        icon="alert_triangle",
-    ),
+    rx.callout(ProductState.error, color_scheme="red"),
 )
 ```
 
-### Field-Specific Errors
-When `Meta.structured_errors = True` is enabled, the engine populates a **`field_errors`** dictionary. You can bind these errors directly to their corresponding inputs:
+Per-field errors (requires `structured_errors = True`):
 
 ```python
+errs = ProductState.products_field_errors    # dict of {field: "message"}
+
 rx.vstack(
-    rx.input(
-        value=ProductState.sku,
-        on_change=ProductState.set_sku,
-        placeholder="Enter SKU code...",
-    ),
-    # Render error only if it exists for this field
-    rx.cond(
-        ProductState.field_errors.get("sku", "") != "",
-        rx.text(
-            ProductState.field_errors.get("sku", ""),
-            color="red",
-            size="1",
-        ),
-    ),
+    rx.input(value=ProductState.name, on_change=ProductState.set_name),
+    rx.cond(errs["name"] != "", rx.text(errs["name"], color="red", size="1")),
 )
 ```
 
+The `*_field_errors` dict is keyed by field name and always exists (empty string for fields without an error).
+
 ---
 
-## 5. Complete Implementation: Form Validation UI
-
-Here is a complete, production-ready form component showing our validation pipeline in action:
+## Full example — all three stages
 
 ```python
-# blog/pages.py
-import reflex as rx
-from blog.states import BlogPostState
+from decimal import Decimal
+from django.core.validators import MinValueValidator
+from django.db import models
 
-def styled_input_field(label: str, input_field: rx.Component, field_name: str) -> rx.Component:
-    """Helper to render labeled inputs with real-time error messages."""
-    return rx.vstack(
-        rx.text(label, size="2", weight="medium", color="gray"),
-        input_field,
-        rx.cond(
-            BlogPostState.field_errors.get(field_name, "") != "",
-            rx.text(
-                BlogPostState.field_errors.get(field_name, ""),
-                color="red",
-                size="1",
-                weight="medium",
-            ),
-        ),
-        spacing="1",
-        width="100%",
+
+class Product(models.Model):
+    name  = models.CharField(max_length=120)
+    sku   = models.CharField(max_length=32, unique=True)
+    price = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        validators=[MinValueValidator(0)],
     )
 
-def article_editor_form() -> rx.Component:
-    return rx.vstack(
-        rx.heading("Article Editor", size="6"),
-        rx.text("Draft stories, format slugs, and publish articles.", color="gray"),
-        rx.divider(),
-        
-        # Form Container
-        rx.form(
-            rx.vstack(
-                styled_input_field(
-                    "Article Title",
-                    rx.input(
-                        value=BlogPostState.title,
-                        on_change=BlogPostState.set_title,
-                        placeholder="Premium Headline...",
-                    ),
-                    "title",
-                ),
-                styled_input_field(
-                    "URL Slug",
-                    rx.input(
-                        value=BlogPostState.slug,
-                        on_change=BlogPostState.set_slug,
-                        placeholder="slug-format-here",
-                    ),
-                    "slug",
-                ),
-                styled_input_field(
-                    "Content Body",
-                    rx.text_area(
-                        value=BlogPostState.body,
-                        on_change=BlogPostState.set_body,
-                        placeholder="Write article...",
-                        rows="6",
-                    ),
-                    "body",
-                ),
-                rx.hstack(
-                    rx.button("Cancel", variant="soft", color_scheme="gray", on_click=BlogPostState.cancel_edit),
-                    rx.spacer(),
-                    rx.button("Save Draft", color_scheme="teal", on_click=BlogPostState.save),
-                    width="100%",
-                ),
-                spacing="4",
-                width="100%",
-            ),
-            key=BlogPostState.form_reset_key,
-            width="100%",
-        ),
-        spacing="4",
-        padding="2em",
-        border="1px solid var(--gray-4)",
-        border_radius="12px",
-        max_width="32em",
-    )
+
+class ProductState(ModelState):
+    model = Product
+    fields = ["name", "sku", "price"]
+
+    class Meta:
+        list_var = "products"
+        run_model_validation = True
+        structured_errors = True
+
+    # Stage 1
+    def clean_name(self, value: str) -> str:
+        return value.strip()
+
+    def clean_sku(self, value: str) -> str:
+        return value.strip().upper()
+
+    def clean_price(self, value):
+        try:
+            Decimal(value)
+        except Exception:
+            raise ValueError("Price must be a decimal number")
+        return value
+
+    # Stage 2
+    def validate_state(self):
+        if not self.name:
+            self.products_field_errors["name"] = "Name is required."
+        if self.sku and not self.sku.startswith("PRD-"):
+            self.products_field_errors["sku"] = "SKUs must start with PRD-"
+
+    # Stage 3 — automatic via run_model_validation = True
+    #   unique=True on sku, MinValueValidator on price, max_length on name
 ```
 
 ---
 
-## 6. Authentication Form Validation Rules
+## A few extra knobs
 
-`reflex-django`'s session authentication routines also leverage structured validation parameters, which can be configured inside your project's `settings.py` file:
+### Reset form after save
 
 ```python
-# django_project/settings.py
+class Meta:
+    reset_after_save = True   # default
+```
 
+### Don't run Django's full_clean
+
+```python
+class Meta:
+    run_model_validation = False
+```
+
+### Skip a field from validation
+
+Mark it as read-only in your serializer (auto-built or explicit). Read-only fields are never written to the database and not validated.
+
+```python
+class ProductSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = Product
+        fields = ("id", "name", "price", "created_at")
+        read_only_fields = ("id", "created_at")
+```
+
+---
+
+## Auth-specific validation (login & register pages)
+
+If you're using `add_auth_pages()`, the built-in login/register pages have their own validation rules driven by `REFLEX_DJANGO_AUTH`:
+
+```python
 REFLEX_DJANGO_AUTH = {
-    # Password complexity rules
-    "PASSWORD_MIN_LENGTH": 8,
-    "PASSWORD_REQUIRE_DIGIT": True,
-    "PASSWORD_REQUIRE_SPECIAL": True,
-    
-    # Registration options
-    "EMAIL_REQUIRED": True,
-    
-    # Login parameter keys
-    "LOGIN_FIELDS": ("username", "email"),
+    "min_password_length": 10,
+    "min_username_length": 3,
+    "password_complexity": {
+        "uppercase": True,
+        "lowercase": True,
+        "digit": True,
+        "symbol": False,
+    },
+    "username_field": "email",
 }
 ```
 
-The authentication mixins (like `session_auth_mixin`) automatically run these rules during user registration and login, mapping any failures to the global `error` buffer.
+Errors appear inline next to the relevant field. The same three-stage pipeline applies under the hood.
 
 ---
 
-## 7. Common Form Pitfalls & Solutions
+## Summary
 
-* **Stale Text Inputs**: If you do not assign `key=State.form_reset_key` to your form container, the client's browser may retain previously typed values after a save or cancel action.
-* **Typing Keystroke Latency**: If bound inputs feel sluggish or laggy, wrap your inputs in standard HTML fields using the `use_form_submit` option to batch transmissions.
-* **Missing Field Declarations**: If you are using `use_form_submit`, ensure that your HTML `name="..."` tags exactly match the fields defined on your Django serializer. Mismatched fields are silently ignored by the deserialization engine.
+| You want to… | Use |
+|:---|:---|
+| Normalize one field before save | `clean_<field>(value)` |
+| Validate that two fields agree | `validate_state()` |
+| Enforce `unique=True` / max_length | `run_model_validation = True` (default) |
+| Live feedback on every keystroke | Flat reactive binding (Style 1) |
+| Defer the round trip until Submit | `Meta.use_form_submit = True` (Style 2) |
+| Reset form fields after save | `Meta.reset_after_save = True` + `key=form_reset_key` on `<form>` |
+| Show per-field errors | `Meta.structured_errors = True` + bind to `<list_var>_field_errors` |
 
 ---
 
-**Navigation:** [← reflex-django Mixins](reflex_django_mixins.md) | [Next: Command Line Interface →](cli.md)
+**Next:** [Model serializers →](serializers.md)

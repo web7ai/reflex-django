@@ -1,307 +1,461 @@
 # Deployment
 
-A production `reflex-django` deployment is a single ASGI process serving everything on one port: the Reflex SPA, Django's admin, your API, static files, and the Reflex Socket.IO state channel. Build the SPA bundle in CI, ship it next to your Python code, and run any ASGI server pointed at `reflex_django.asgi_entry:application`.
+You deploy a `reflex-django` app the same way you deploy any modern Django + ASGI app, with one extra build step: the SPA bundle.
+
+This page covers the production basics — one container, one ASGI server, one reverse proxy — and a few common platforms.
 
 ---
 
-## 1. Production topology
+## What you ship
+
+The artifact is just your Python project plus the compiled SPA. There's no separate frontend image.
 
 ```text
-                  Internet (HTTPS / WSS)
-                          │
-                          ▼
-                Reverse proxy (Nginx / Caddy / ALB)
-                  ┌─────────────────────────────────────┐
-                  │ • SSL/TLS termination               │
-                  │ • Optional static-file passthrough  │
-                  │ • Optional rate limiting / caching  │
-                  └────────────────┬────────────────────┘
-                                   │  (HTTP + WebSocket upgrade)
-                                   ▼
-                Single ASGI process — uvicorn / granian / hypercorn
-                  ┌─────────────────────────────────────┐
-                  │ reflex_django.asgi_entry:application │
-                  │   • DjangoOuterDispatcher           │
-                  │   • Django middleware stack         │
-                  │   • Reflex inner ASGI (_event, …)   │
-                  │   • SPA from STATIC_ROOT/_reflex/   │
-                  └─────────────────────────────────────┘
+your-project/
+├── manage.py
+├── pyproject.toml / uv.lock
+├── config/
+│   ├── settings.py
+│   ├── urls.py
+│   └── asgi.py
+├── shop/
+│   ├── models.py
+│   └── views.py
+└── staticfiles/         ← created by collectstatic in CI
+    └── _reflex/         ← the compiled SPA, staged by export_reflex
 ```
 
-You can also expose the ASGI process directly to the internet — TLS terminated by your ASGI server or by a load balancer in front of it. The reverse proxy is convenient (admin static caching, gzip, rate limiting) but not required.
+In production, an ASGI server runs `reflex_django.asgi_entry:application`. A reverse proxy (Nginx, Caddy, your platform's edge) serves `/static/` from `staticfiles/`. Everything else hits the ASGI process.
 
 ---
 
-## 2. Pre-deploy checklist
+## The build pipeline
 
-| Item | Action |
-|:---|:---|
-| Settings module | `DJANGO_SETTINGS_MODULE=myproject.settings` in env |
-| Debug | `DEBUG = False` |
-| Secrets | `SECRET_KEY` from a secret manager / env var (never auto-generated) |
-| Allowed hosts | `ALLOWED_HOSTS = ["example.com", "www.example.com"]` |
-| Database | Run migrations: `python manage.py migrate` |
-| SPA bundle | Build: `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` |
-| Django assets | Collect: `python manage.py collectstatic --noinput` |
-| Auto settings | `REFLEX_DJANGO_AUTO_SETTINGS = False` (force strict, user-provided settings) |
-
----
-
-## 3. Building the SPA bundle
-
-Build is a one-shot CI step. It produces a static frontend bundle that the ASGI process serves from disk.
+Every deploy runs these in CI (or a Dockerfile build step):
 
 ```bash
-python manage.py export_reflex \
-  --frontend-only \
-  --no-zip \
-  --stage-to-static-root
+uv sync --frozen
+python manage.py migrate --noinput
+python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+python manage.py collectstatic --noinput
 ```
 
-Output is staged into `STATIC_ROOT/_reflex/` (override with `--stage-target`). The SPA index is then picked up by `ReflexMountView` at runtime — no rebuild on first request.
+What each does:
 
-`run_reflex --env prod` does **not** build the bundle automatically. Production servers boot deterministic, prebuilt artifacts; the CI pipeline owns the build step.
+| Step | Effect |
+|:---|:---|
+| `uv sync --frozen` | Install Python deps. |
+| `migrate` | Apply Django migrations. |
+| `export_reflex` | Build the Reflex SPA and stage it into `STATIC_ROOT/_reflex/`. |
+| `collectstatic` | Gather your admin static files + the SPA bundle into `STATIC_ROOT`. |
+
+After this, your container/image has `staticfiles/` ready to serve and the Python deps installed. Now you boot the ASGI server.
 
 ---
 
-## 4. ASGI entry point
+## ASGI server choices
+
+`reflex-django` is just an ASGI app. Use whichever server you like.
+
+### uvicorn
+
+```bash
+uv run uvicorn reflex_django.asgi_entry:application \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 4
+```
+
+### gunicorn + uvicorn worker
+
+```bash
+uv run gunicorn reflex_django.asgi_entry:application \
+    --workers 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 0.0.0.0:8000
+```
+
+### granian
+
+```bash
+uv run granian \
+    --interface asgi \
+    --workers 4 \
+    --host 0.0.0.0 \
+    --port 8000 \
+    reflex_django.asgi_entry:application
+```
+
+### hypercorn
+
+```bash
+uv run hypercorn reflex_django.asgi_entry:application \
+    --workers 4 \
+    --bind 0.0.0.0:8000
+```
+
+All four are fine. Most projects start with uvicorn or gunicorn+uvicorn worker.
+
+---
+
+## Required settings
 
 ```python
-# config/asgi.py
-import os
+# config/production.py (or similar)
+from .settings import *    # base settings
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application  # noqa: E402,F401
-```
+DEBUG = False
 
-Boot with any ASGI server:
+ALLOWED_HOSTS = ["yourdomain.com", "www.yourdomain.com"]
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]   # never commit a real key
 
-```bash
-# uvicorn
-uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers 4
+CSRF_TRUSTED_ORIGINS = ["https://yourdomain.com"]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
-# granian
-granian --interface asgi config.asgi:application --host 0.0.0.0 --port 8000 --workers 4
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# hypercorn
-hypercorn config.asgi:application --bind 0.0.0.0:8000 --workers 4
-```
-
-The dispatcher inside `application` handles HTTP, WebSocket, and ASGI lifespan scopes. There is no separate Daphne or Channels layer.
-
-`manage.py run_reflex --env prod` is a convenience wrapper that boots the same `application` callable through uvicorn, with reload off:
-
-```bash
-python manage.py run_reflex --env prod --backend-host 0.0.0.0 --backend-port 8000 --no-reload
-```
-
----
-
-## 5. Static asset serving
-
-### Option A — let the ASGI process serve `/static/`
-
-`AsyncStreamingMiddleware` plus Django's staticfiles handler in the ASGI app is enough for low/medium traffic. The compiled Reflex SPA lives under `STATIC_ROOT/_reflex/` and the Django admin assets under `STATIC_ROOT/admin/`.
-
-### Option B — front it with Nginx
-
-Hand `/static/` to Nginx for cache headers and zero-copy sendfile:
-
-```nginx
-location /static/ {
-    alias /srv/app/staticfiles/;
-    expires 30d;
-    add_header Cache-Control "public, no-transform";
+# Use a real database
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ["DB_NAME"],
+        "USER": os.environ["DB_USER"],
+        "PASSWORD": os.environ["DB_PASSWORD"],
+        "HOST": os.environ["DB_HOST"],
+        "PORT": os.environ.get("DB_PORT", "5432"),
+        "CONN_MAX_AGE": 600,
+    }
 }
 ```
 
-Reflex bundle assets are inside the same `/static/_reflex/` directory and benefit from the same caching.
+Set `DJANGO_SETTINGS_MODULE=config.production` in the container.
+
+### Don't rely on `default_settings`
+
+`reflex_django.default_settings` is a development convenience. It has an insecure `SECRET_KEY` and `DEBUG = True`. **Never** use it in production. Always point `DJANGO_SETTINGS_MODULE` at your real module.
 
 ---
 
-## 6. Reverse-proxy template (Nginx)
+## A reasonable Dockerfile
+
+```dockerfile
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=config.production
+
+# uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# install deps first (cache layer)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# copy the rest of the project
+COPY . .
+
+# build the SPA and gather static files
+RUN uv run python manage.py export_reflex \
+        --frontend-only --no-zip --stage-to-static-root \
+    && uv run python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+CMD ["uv", "run", "uvicorn", \
+     "reflex_django.asgi_entry:application", \
+     "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+```
+
+Two notes:
+
+- We don't run `migrate` in the Dockerfile. Run it as a one-off command on first deploy, then in a deploy hook.
+- Node toolchain is needed to build the SPA. If your base image doesn't have it, install `nodejs` and `npm` before `export_reflex`. Reflex bundles its own JS runtime in newer versions; check your installed version.
+
+---
+
+## A reasonable docker-compose
+
+For local prod-like testing:
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: config.production
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DB_NAME: shop
+      DB_USER: shop
+      DB_PASSWORD: shop
+      DB_HOST: db
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+volumes:
+  dbdata:
+```
+
+---
+
+## Nginx in front of your app
+
+A typical reverse-proxy block:
 
 ```nginx
+upstream app {
+    server 127.0.0.1:8000;
+}
+
 server {
     listen 80;
-    server_name example.com www.example.com;
+    server_name yourdomain.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name example.com www.example.com;
+    server_name yourdomain.com;
 
-    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
 
-    # Optional — serve compiled assets directly
+    client_max_body_size 50M;
+
+    # Static files served directly by Nginx
     location /static/ {
-        alias /srv/app/staticfiles/;
+        alias /app/staticfiles/;
         expires 30d;
+        add_header Cache-Control "public, immutable";
     }
 
-    # Reflex Socket.IO state channel (WebSocket)
+    # The Reflex WebSocket
     location /_event {
-        proxy_pass         http://127.0.0.1:8000;
+        proxy_pass http://app;
         proxy_http_version 1.1;
-        proxy_set_header   Upgrade            $http_upgrade;
-        proxy_set_header   Connection         "upgrade";
-        proxy_set_header   Host               $host;
-        proxy_set_header   X-Real-IP          $remote_addr;
-        proxy_set_header   X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto  $scheme;
-        proxy_read_timeout 86400;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
     }
 
-    # Everything else (SPA, /admin, /api, /_upload, /_health, …)
+    # Everything else
     location / {
-        proxy_pass        http://127.0.0.1:8000;
-        proxy_set_header  Host               $host;
-        proxy_set_header  X-Real-IP          $remote_addr;
-        proxy_set_header  X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header  X-Forwarded-Proto  $scheme;
+        proxy_pass http://app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
-`/_event` needs the WebSocket upgrade headers. Everything else is plain HTTP. The same proxy block also handles `/_upload`, `/_health`, `/ping`, and `/auth-codespace` — all served by the same ASGI process.
+Three things matter:
+
+- **`/_event` needs WebSocket upgrade headers.** That's where Reflex talks.
+- **`/static/` served by Nginx** offloads asset traffic from the Python process.
+- **`X-Forwarded-Proto: $scheme`** so Django's `SECURE_PROXY_SSL_HEADER` detects HTTPS.
 
 ---
 
-## 7. Docker
+## Caddy alternative
 
-A two-stage Dockerfile keeps the runtime image small. Stage 1 builds the SPA, stage 2 ships the binary + the compiled assets.
+If you prefer Caddy:
 
-```dockerfile
-# syntax=docker/dockerfile:1
-FROM python:3.12-slim AS builder
+```caddyfile
+yourdomain.com {
+    encode gzip
 
-WORKDIR /app
-RUN pip install --no-cache-dir uv
-COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --frozen
+    handle_path /static/* {
+        root * /app/staticfiles
+        file_server
+    }
 
-COPY . .
-ENV DJANGO_SETTINGS_MODULE=config.settings
-RUN uv run python manage.py export_reflex \
-        --frontend-only --no-zip --stage-to-static-root \
- && uv run python manage.py collectstatic --noinput
+    reverse_proxy /_event* 127.0.0.1:8000 {
+        flush_interval -1
+    }
 
-
-FROM python:3.12-slim
-WORKDIR /app
-
-RUN pip install --no-cache-dir uv
-COPY --from=builder /app /app
-
-ENV DJANGO_SETTINGS_MODULE=config.settings
-ENV PORT=8000
-EXPOSE 8000
-
-CMD ["sh", "-c", "uv run python manage.py migrate --noinput && uv run uvicorn config.asgi:application --host 0.0.0.0 --port ${PORT} --workers 4"]
+    reverse_proxy /* 127.0.0.1:8000
+}
 ```
 
-`docker-compose.yml`:
+Caddy auto-handles WebSocket upgrades and TLS certificates.
+
+---
+
+## Health checks
+
+The dispatcher exposes a `/_health` endpoint (and `/ping`) that's safe for load balancers. It returns a small JSON `{"status": "ok"}` without touching the database.
 
 ```yaml
-services:
-  web:
-    build: .
-    ports: ["8000:8000"]
-    environment:
-      DJANGO_SETTINGS_MODULE: config.settings
-      SECRET_KEY: ${SECRET_KEY}
-      ALLOWED_HOSTS: example.com,www.example.com
-      DATABASE_URL: postgres://app:app@db:5432/app
-    depends_on: [db]
+# Kubernetes
+livenessProbe:
+  httpGet:
+    path: /_health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 30
 
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-      POSTGRES_DB: app
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data: {}
+readinessProbe:
+  httpGet:
+    path: /_health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
 ```
 
 ---
 
-## 8. systemd unit
+## State manager: in-memory vs Redis
 
-For VM deploys without containers:
+By default, Reflex stores per-tab state in process memory. That's fine for one process. If you scale to multiple workers and need state to be sticky, point Reflex at Redis:
+
+```python
+# urls.py
+reflex_mount(
+    app_name="shop",
+    rx_config={
+        "backend_port": 8000,
+        "redis_url": os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+    },
+)
+```
+
+With Redis, state is pickled and shared across workers. Sticky sessions on the load balancer are still simpler though — for most apps, sticky session affinity + in-memory state is the right choice.
+
+---
+
+## Worker count
+
+Rule of thumb: `2 * num_cores + 1` for ASGI workers. Async views and event handlers benefit from concurrency *within* a worker, so you don't need as many workers as you would for sync Django.
+
+For most apps: 2-4 workers, sticky session affinity if you have more than one worker.
+
+---
+
+## Database connections
+
+Each worker keeps its own pool. With `CONN_MAX_AGE = 600`, each worker holds connections for up to 10 minutes before recycling. Multiply by the number of workers and add the admin's connections to estimate your peak.
+
+For Postgres, a connection pooler (PgBouncer) in transaction mode is the usual answer for high-concurrency apps.
+
+---
+
+## Platform-specific notes
+
+### Fly.io
+
+Fly's ASGI handling and WebSocket support are excellent out of the box. Use a `fly.toml` with `internal_port = 8000`, expose the standard ports, and Fly handles TLS.
+
+### Railway / Render
+
+Similar: point them at a Dockerfile (or detect Python automatically), set `DJANGO_SETTINGS_MODULE`, and they'll handle the rest. Make sure WebSocket support is enabled for your service (it usually is by default).
+
+### AWS / GCP / Azure (container services)
+
+Use ECS Fargate, Cloud Run, or App Service Containers with a custom Docker image. Front with an ALB / Cloud Load Balancer / Application Gateway that supports WebSocket. Increase the idle timeout to at least 300 seconds so Reflex's WebSocket doesn't get dropped.
+
+### Heroku
+
+Heroku supports WebSocket on dynos. Use a `Procfile`:
+
+```text
+release: python manage.py migrate --noinput
+web: uvicorn reflex_django.asgi_entry:application --host 0.0.0.0 --port $PORT
+```
+
+Add a buildpack for Node if your Reflex version still needs it, and run `export_reflex` in `release` (or in a build hook).
+
+### Bare VPS
+
+The Nginx config above + systemd unit + Let's Encrypt + Postgres + a deploy script. Old-school but it works great.
 
 ```ini
-# /etc/systemd/system/myapp.service
+# /etc/systemd/system/myshop.service
 [Unit]
-Description=reflex-django ASGI app
+Description=My Shop
 After=network.target
 
 [Service]
-User=deploy
-WorkingDirectory=/srv/app
-EnvironmentFile=/srv/app/.env
-ExecStart=/srv/app/.venv/bin/uvicorn config.asgi:application \
-    --host 0.0.0.0 --port 8000 --workers 4
-Restart=always
-RestartSec=5
-
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=myapp
+User=www-data
+WorkingDirectory=/srv/myshop
+Environment="DJANGO_SETTINGS_MODULE=config.production"
+EnvironmentFile=/etc/myshop.env
+ExecStart=/srv/myshop/.venv/bin/uvicorn reflex_django.asgi_entry:application \
+          --host 127.0.0.1 --port 8000 --workers 4
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable myapp
-sudo systemctl start myapp
-journalctl -u myapp -f
+---
+
+## Zero-downtime deploys
+
+The minimal pattern:
+
+1. Build a new image with the new code.
+2. Run migrations: `docker run --rm new-image python manage.py migrate`.
+3. Start the new container; wait for `/_health` to return 200.
+4. Switch the reverse proxy to the new container.
+5. Stop the old container.
+
+Most platforms do steps 3-5 for you. The tricky part is making sure migrations are backwards-compatible with the old code (the standard Django zero-downtime advice applies).
+
+---
+
+## Logging
+
+Use `LOGGING` in settings the standard Django way. Pipe both Django and uvicorn logs to stdout/stderr; let the platform aggregate them.
+
+```python
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {"format": '{"time":"%(asctime)s","level":"%(levelname)s","name":"%(name)s","msg":"%(message)s"}'},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "json"},
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+}
 ```
 
-Build & migrate steps run in your CI pipeline (or as a one-shot `ExecStartPre=` if you really need them on the box).
-
 ---
 
-## 9. Health probes
+## Common production gotchas
 
-Both endpoints below are mounted by Reflex and bypass Django entirely — useful for load balancer liveness / readiness:
-
-| Endpoint | Use |
-|:---|:---|
-| `GET /_health` | Returns a JSON OK when the Reflex event processor is alive. |
-| `GET /ping` | Plain-text OK; cheap. |
-
-For Django-level readiness (DB reachable, migrations applied), add your own `/healthz` Django view.
-
----
-
-## 10. Scaling
-
-- **CPU-bound traffic** — increase ASGI worker count (`--workers N`). State manager defaults to in-memory; switch to Redis via `rx_config={"state_manager_mode": "redis", "redis_url": "..."}` when running more than one worker.
-- **WebSocket fan-out** — Reflex Socket.IO scales with workers when a shared state manager (Redis) is configured; otherwise each worker keeps its own state and clients pinned to a single worker via sticky sessions.
-- **Static files** — put a CDN in front of `/static/`. The SPA bundle is fully cacheable; bust caches with a fresh export.
-- **Database** — standard Django: connection pooling (`pgbouncer`, `CONN_MAX_AGE`), read replicas, etc.
-
----
-
-## 11. Troubleshooting
-
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Fix |
 |:---|:---|:---|
-| `GET /` returns 404 with "compiled SPA not found" | Bundle not built or not staged. | Run `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` and redeploy. |
-| Django admin unstyled | `collectstatic` didn't run, or Nginx alias mismatches `STATIC_ROOT`. | Run `collectstatic` and verify the alias path. |
-| `400 Bad Request` on every request | Domain not in `ALLOWED_HOSTS`. | Add it. |
-| `502 Bad Gateway` on WebSocket | Reverse proxy missing `Upgrade` / `Connection` headers. | Use the Nginx template above. |
-| Sessions don't persist across workers | In-memory state manager + multiple workers. | Configure Redis state manager and/or sticky sessions. |
-| `SynchronousOnlyOperation` during a Reflex event | Direct ORM call in async code outside the bridge. | Use `await Model.objects.aget(...)` or wrap in `sync_to_async`. The bridge already provides an async-safe `self.user`. |
+| WebSocket disconnects after 60s | Reverse proxy timeout too low | Bump `proxy_read_timeout` / idle timeout to 600s+ |
+| `CSRF verification failed` on admin | Missing `X-Forwarded-Proto` | Set `SECURE_PROXY_SSL_HEADER` and ensure your proxy sends the header |
+| Browser shows old SPA after deploy | Bundle cache | Add `expires` + `immutable` to `/static/`. Reflex bundles are content-hashed. |
+| Sessions reset between requests | Multiple workers without sticky sessions | Enable sticky sessions on the load balancer or use a shared session backend |
+| Reflex events 500 with no useful logs | Custom middleware blowing up | Set `LOGGING` level to DEBUG, restart, reproduce |
+| `503` from health check | Worker count too low | Scale workers, or increase the readiness `initialDelaySeconds` |
 
 ---
 
-**Navigation:** [← Testing](testing.md) | [Next: Best Practices →](best_practices.md)
+**Next:** [Best practices →](best_practices.md)

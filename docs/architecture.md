@@ -1,12 +1,14 @@
-# Architecture
+# Architecture overview
 
-`reflex-django` runs Django and Reflex as **one ASGI application on one port**. Django is the outer server: every browser request — HTTP and WebSocket — first hits Django's middleware stack. Reflex's reactive engine (Socket.IO event channel, upload endpoint, health probes, and SPA shell) is mounted as a set of ASGI sub-applications under Django, and the compiled Reflex bundle is served straight from disk by Django.
+This page is the most technical one in the docs. If you've read [How the two fit together](how_they_fit.md) and you're comfortable with that mental model, you can skip this until you actually need to look something up.
 
-This document walks through the runtime topology, the request and event lifecycles, and how the bootstrap stitches the two frameworks together inside a single Python process.
+What follows is the full runtime picture: the ASGI dispatcher, the event bridge, the bootstrap order, how state survives across events, and how the dev server's rebuild loop works.
 
 ---
 
 ## The three pillars
+
+`reflex-django` is built from three independent pieces. Each does one job:
 
 ```mermaid
 flowchart LR
@@ -30,11 +32,11 @@ flowchart LR
     end
 ```
 
-| Pillar | What it does |
+| Pillar | Job |
 |:---|:---|
-| **Bootstrap** | Importing `ROOT_URLCONF` runs `reflex_mount()`, which registers the in-memory `rx.Config`. `install_reflex_django_integration()` patches `reflex.config.get_config()`, calls `configure_django()`, discovers pages from `{app}/views.py`, and builds `rx.App` via the built-in `reflex_django.django_led_app` factory. |
-| **ASGI dispatch** | A thin outer ASGI app (`DjangoOuterDispatcher`) inspects each incoming scope and routes it to Django, to Reflex's inner ASGI, or to Reflex's lifespan handler. |
-| **Event bridge** | Each Reflex event builds a synthetic `HttpRequest`, runs the full `settings.MIDDLEWARE` chain on it, and binds the resulting `request`, `user`, `session`, `messages`, `csrf_token`, and `response` to the active `AppState` handler. |
+| **Bootstrap** | At import time, register Reflex config from `reflex_mount()`, set up Django, discover pages, build `rx.App`. |
+| **ASGI dispatch** | At request time, an outer ASGI app routes each scope to Django or to Reflex's inner ASGI. |
+| **Event bridge** | At event time, build a synthetic `HttpRequest`, run middleware, and bind context onto the handler. |
 
 ---
 
@@ -83,30 +85,32 @@ flowchart TB
   DjangoViews --> DjangoORM
 ```
 
-A single Python process owns the database connection pool, the in-memory state manager, and the compiled Reflex bundle. There is no second process, no second port, no CORS, no token bridge.
+One Python process owns the database connection pool, the in-memory state manager, and the compiled Reflex bundle. There's no second process, no second port, no CORS, no token bridge.
 
 ---
 
 ## The outer dispatcher
 
-`reflex_django.django_outer_dispatcher.DjangoOuterDispatcher` is the ASGI callable returned by `reflex_django.asgi_entry.application`. It owns four routing decisions:
+`reflex_django.django_outer_dispatcher.DjangoOuterDispatcher` is the ASGI callable returned by `reflex_django.asgi_entry.application`. Every incoming ASGI scope passes through it first.
+
+It owns four routing decisions:
 
 ```text
 incoming ASGI scope
    │
    ▼
-scope["type"] == "lifespan"  ──►  Reflex lifespan (event processor, prerender, background tasks)
-scope["type"] == "websocket" ──►  reserved Reflex path?
-                                       ├── yes → Reflex inner _api
-                                       └── no  → close gracefully (no Channels needed)
-scope["type"] == "http"      ──►  reserved Reflex path?
-                                       ├── yes → Reflex inner _api
-                                       └── no  → Django ASGI handler
+scope["type"] == "lifespan"   ──►  Reflex lifespan (event processor, prerender, background tasks)
+scope["type"] == "websocket"  ──►  reserved Reflex path?
+                                        ├── yes → Reflex inner _api
+                                        └── no  → close gracefully (no Channels needed)
+scope["type"] == "http"       ──►  reserved Reflex path?
+                                        ├── yes → Reflex inner _api
+                                        └── no  → Django ASGI handler
 ```
 
 ### Reserved Reflex prefixes
 
-These paths are always sent to Reflex's inner ASGI, regardless of any URL patterns or catch-alls you may have:
+These paths are always sent to Reflex's inner ASGI, regardless of `urls.py`:
 
 | Prefix | Purpose |
 |:---|:---|
@@ -116,38 +120,44 @@ These paths are always sent to Reflex's inner ASGI, regardless of any URL patter
 | `/_all_routes` | Internal route enumeration |
 | `/auth-codespace` | Reflex auth dev tooling |
 
-Add custom reserved prefixes via `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES`.
+Customize via `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES`.
 
 ### The SPA catch-all
 
-Every non-reserved, non-Django path falls through Django's `urls.py` and ultimately hits `ReflexMountView`. This view serves the compiled Reflex SPA (`STATIC_ROOT/_reflex/index.html` and its assets) and, when `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE = True`, runs the `index.html` shell through Django's template engine first. That gives the SPA access to `{{ request.user }}`, `{% csrf_token %}`, `{{ messages }}`, `{% load i18n %}`, and every Django template context processor — rendered server-side, inlined into the HTML the browser receives.
+Anything that isn't a reserved prefix and isn't a `django_prefix` falls through Django's `urls.py` to `ReflexMountView`. That view:
+
+1. Resolves the compiled SPA index (`STATIC_ROOT/_reflex/index.html`, `.web/build/client/index.html`, or `.web/_static/index.html`).
+2. Optionally pipes the HTML through Django's template engine (`REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE = True`) so the shell can render `{{ request.user }}`, `{% csrf_token %}`, `{{ messages }}`, `{% load i18n %}`.
+3. Streams JS/CSS/images untouched.
+
+If the bundle is missing, the view returns a 404 with a hint pointing at `manage.py export_reflex`.
 
 ---
 
 ## HTTP request lifecycle
 
 ```text
-Browser request  →  ASGI server  →  DjangoOuterDispatcher
-                                          │
-                                          ├── /_event, /_upload, /_health, …
-                                          │       └─►  Reflex _api  (full Reflex pipeline)
-                                          │
-                                          └── everything else  →  Django ASGI handler
-                                                                      │
-                                                                      ▼
-                                                            settings.MIDDLEWARE (full chain)
-                                                                      │
-                                                                      ├── /admin/      → admin views
-                                                                      ├── /api/        → your DRF views
-                                                                      ├── /static/     → ASGIStaticFilesHandler
-                                                                      └── /<anything>  → urls.py → ReflexMountView
-                                                                                              │
-                                                                                              ▼
-                                                                                    STATIC_ROOT/_reflex/index.html
-                                                                                    (optionally Django-templated)
+Browser request → ASGI server → DjangoOuterDispatcher
+                                    │
+                                    ├── /_event, /_upload, /_health, …
+                                    │       └─►  Reflex _api  (full Reflex pipeline)
+                                    │
+                                    └── everything else  →  Django ASGI handler
+                                                                │
+                                                                ▼
+                                                      settings.MIDDLEWARE (full chain)
+                                                                │
+                                                                ├── /admin/      → admin views
+                                                                ├── /api/        → your DRF views
+                                                                ├── /static/     → ASGIStaticFilesHandler
+                                                                └── /<anything>  → urls.py → ReflexMountView
+                                                                                       │
+                                                                                       ▼
+                                                                             STATIC_ROOT/_reflex/index.html
+                                                                             (optionally Django-templated)
 ```
 
-Django middleware sees every page navigation — same `process_request`, `process_view`, `process_response`, `process_exception` semantics you already use for `/admin` and `/api`. The Reflex SPA shell is just another Django response.
+Django middleware sees every page navigation — same `process_request`, `process_view`, `process_response`, `process_exception` semantics as for `/admin` and `/api`. The Reflex SPA shell is just another Django response.
 
 ---
 
@@ -166,7 +176,7 @@ sequenceDiagram
 
     Browser->>Reflex: socket event (router_data + payload)
     Reflex->>Bridge: preprocess(event)
-    Bridge->>Bridge: build synthetic HttpRequest<br/>(cookies, headers, method, scheme, POST, resolver_match)
+    Bridge->>Bridge: build synthetic HttpRequest
     Bridge->>Handler: dispatch(request) through settings.MIDDLEWARE
     Handler-->>Bridge: HttpResponse + populated request
     Bridge->>Bridge: eager-resolve request.user (aget_user)
@@ -188,33 +198,35 @@ Inside any `@rx.event` method on an `AppState` subclass:
 
 | Attribute | Value |
 |:---|:---|
-| `self.request` | Synthetic `HttpRequest` produced by the middleware chain |
-| `self.response` | `HttpResponse` produced by the middleware chain (200 unless a middleware short-circuits) |
+| `self.request` | Synthetic `HttpRequest` after the middleware chain |
+| `self.response` | `HttpResponse` after the chain (200 unless a middleware short-circuited) |
 | `self.user` | `request.user` (already resolved — no `SynchronousOnlyOperation`) |
-| `self.session` | `request.session` (async-safe access via `await session.aget(...)`/`asave()`) |
-| `self.messages` | `[{level, level_tag, message, tags, extra_tags}, …]` (JSON-safe snapshot of `django.contrib.messages`) |
+| `self.session` | `request.session` (async-safe access) |
+| `self.messages` | `[{level, level_tag, message, tags, extra_tags}, …]` snapshot |
 | `self.csrf_token` | CSRF token for the current request |
-| `self.django_response` | The raw `HttpResponse` (handy for inspecting headers a middleware set) |
+| `self.django_response` | Raw `HttpResponse` (handy for inspecting headers) |
 | `self.resolver_match` | `ResolverMatch` if the path resolves to a Django view |
 | `self.django_context` | Dict of context-processor keys (when `REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True`) |
 
 ### Middleware short-circuits become navigations
 
-If any middleware returns a response without calling the next layer — for example a `LoginRequiredMiddleware` returning `HttpResponseRedirect("/login")` — the bridge converts that 3xx into a Reflex `rx.redirect(...)` event. The browser navigates; the handler does not run. Disable with `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False`.
+If any middleware returns a response without calling the next layer — for example `LoginRequiredMiddleware` returning `HttpResponseRedirect("/login")` — the bridge converts that 3xx into a Reflex `rx.redirect(...)` event. The browser navigates; the handler does not run.
+
+Disable with `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False`.
 
 ### Skipped middleware
 
-`CsrfViewMiddleware` and `reflex_django.streaming_middleware.AsyncStreamingMiddleware` are always skipped on Socket.IO events (no CSRF tokens on persistent sockets, no streaming HTTP responses needed). Override the skip list with `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+`CsrfViewMiddleware` and `reflex_django.streaming_middleware.AsyncStreamingMiddleware` are always skipped on Socket.IO events. CSRF doesn't apply to same-origin WebSocket traffic, and streaming responses don't exist there. Override with `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
 
 ---
 
 ## Reactive bridge: Django context inside the UI
 
-The full middleware chain populates the handler's context, but `AppState` also exposes the **reactive** counterparts that the SPA can bind to directly — no extra plumbing:
+The middleware chain populates the handler's context. `AppState` also exposes the reactive counterparts the SPA can bind to directly:
 
 ```python
 class HomeState(AppState):
-    pass  # AppState already exposes the fields below as reactive vars
+    pass    # AppState already exposes the reactive fields
 
 
 def navbar():
@@ -247,7 +259,7 @@ def hidden_csrf():
 | `is_authenticated`, `username`, `email`, `is_staff`, `is_superuser` | `request.user` |
 | `messages` | `django.contrib.messages.get_messages(request)` snapshot |
 | `csrf_token` | `django.middleware.csrf.get_token(request)` |
-| `language`, `language_bidi` | `django.utils.translation.get_language()` / `get_language_bidi()` |
+| `language`, `language_bidi` | `translation.get_language()` / `get_language_bidi()` |
 | `perms` | JSON-safe `request.user.get_all_permissions()` |
 
 Toggle individual mirrors with `REFLEX_DJANGO_MIRROR_MESSAGES`, `REFLEX_DJANGO_MIRROR_CSRF`, `REFLEX_DJANGO_MIRROR_LANGUAGE`.
@@ -256,21 +268,23 @@ Toggle individual mirrors with `REFLEX_DJANGO_MIRROR_MESSAGES`, `REFLEX_DJANGO_M
 
 ## State serialization
 
-Reflex periodically pickles `BaseState` instances to its state manager (memory, Redis, etc.). Django's `HttpRequest` and `ResolverMatch` are not picklable, so the integration patches `BaseState.__getstate__` to strip the transient `_django_led_request_wrapper` and `_django_led_response` attributes before serialization. The next event rebuilds them from the incoming `router_data`. You never lose `self.request` between events; you just don't pay for shipping it across processes.
+Reflex periodically pickles `BaseState` instances to its state manager (memory, Redis, etc.). Django's `HttpRequest` and `ResolverMatch` are **not** picklable, so `reflex-django` patches `BaseState.__getstate__` to strip the transient `_django_led_request_wrapper` and `_django_led_response` attributes before serialization. The next event rebuilds them from the incoming `router_data`.
+
+In other words: you never lose `self.request` between events, but you also don't pay to ship it across processes.
 
 ---
 
 ## Frontend bundle: built once, served from disk
 
-The Reflex SPA is **always** served from a compiled bundle on disk — there is no separate frontend dev server. The bundle lives at:
+The Reflex SPA is **always** served from a compiled bundle on disk. There's no separate frontend dev server unless you explicitly opt in with `--with-vite`. The bundle lives at:
 
 ```text
-STATIC_ROOT/_reflex/        # canonical location served by ReflexMountView
+STATIC_ROOT/_reflex/        # canonical location, served by ReflexMountView
 .web/build/client/          # build output (SSR layout)
 .web/_static/               # build output (legacy layout)
 ```
 
-`manage.py run_reflex` rebuilds that bundle in-process before starting the ASGI server, then watches the project root for `.py` changes. Each change triggers a clean rebuild + uvicorn restart:
+`manage.py run_reflex` rebuilds that bundle in-process before starting the ASGI server, then watches the project root for `.py` changes. Each change triggers a clean rebuild and uvicorn restart:
 
 ```mermaid
 flowchart LR
@@ -283,7 +297,7 @@ flowchart LR
     G --> D
 ```
 
-Because the rebuild happens in a parent watcher and the server is a clean subprocess, every restart serves the freshly compiled bundle — no stale assets, no half-reloaded modules.
+The rebuild happens in a parent watcher and the server is a clean subprocess. Every restart serves the freshly compiled bundle — no stale assets, no half-reloaded modules.
 
 ---
 
@@ -292,12 +306,12 @@ Because the rebuild happens in a parent watcher and the server is a clean subpro
 | Aspect | Development | Production |
 |:---|:---|:---|
 | **Processes** | One: ASGI server (uvicorn) | One: ASGI server (uvicorn / granian / hypercorn) |
-| **Frontend bundle** | Auto-rebuilt by `run_reflex` on every code change | Built in CI, copied into `STATIC_ROOT/_reflex` |
-| **Reload** | Parent-side `watchfiles` loop drives clean uvicorn restarts + rebuilds | None — the container or systemd unit owns lifecycle |
-| **Static files** | Served by `ASGIStaticFilesHandler` (Django) | Served by Nginx/Caddy from `STATIC_ROOT` (or by the ASGI process if you prefer) |
-| **DEBUG** | `True` (Django default) | `False` (set explicitly) |
-| **`REFLEX_DJANGO_DEV_PROXY`** | Off (no upstream needed; everything serves from disk) | Off |
-| **Show "Built with Reflex" badge** | Off by default | Off by default |
+| **Frontend bundle** | Auto-rebuilt by `run_reflex` on every `.py` change | Built in CI, copied into `STATIC_ROOT/_reflex` |
+| **Reload** | Parent-side `watchfiles` drives clean uvicorn restarts | None — the container or systemd unit owns lifecycle |
+| **Static files** | Served by Django's `ASGIStaticFilesHandler` | Served by Nginx/Caddy from `STATIC_ROOT` |
+| **DEBUG** | `True` | `False` |
+| **`REFLEX_DJANGO_DEV_PROXY`** | Off (no upstream needed) | Off |
+| **"Built with Reflex" badge** | Off by default | Off by default |
 
 ---
 
@@ -326,6 +340,8 @@ Once that completes, the process is ready to serve. Every subsequent request flo
 
 ## Why a single process
 
+Everything that follows is a consequence of running both frameworks in one process:
+
 - **Shared sessions out of the box.** Logging in via `/admin/` and reading `request.user` from a Reflex event use the same `SessionMiddleware`, the same session store, and the same database connection.
 - **No cross-origin handshake.** The SPA, the API, and the WebSocket all share an origin. Cookies just work.
 - **One deploy unit.** One container, one systemd unit, one log stream, one set of env vars.
@@ -333,4 +349,4 @@ Once that completes, the process is ready to serve. Every subsequent request flo
 
 ---
 
-**Navigation:** [← Project Structure](project_structure.md) | [Routing →](routing.md) | [WebSocket event pipeline →](websocket_event_pipeline.md) | [Single-port reference →](single_port_django_outer.md)
+**Next:** [Routing & URL dispatching →](routing.md)

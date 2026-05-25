@@ -1,353 +1,298 @@
-# CRUD with Mixins & States
+# ModelCRUDView with serializers
 
-While **`ModelState`** provides a high-speed, zero-boilerplate shortcut for standard database operations, larger applications often demand custom database serialization, pluralized naming patterns, or pre-existing Django Rest Framework (DRF) schemas. 
+`ModelCRUDView` is the second declarative CRUD class in `reflex-django`. It does the same job as `ModelState` — list/save/delete with reactive vars — but with two important differences:
 
-To support these architectures, `reflex-django` offers a modular, explicit mixin: **`ModelCRUDView`**. When combined with **`AppState`**, it provides developers with absolute control over serializers, relational field optimization, custom lifecycle events, and fine-grained database queries, all while preserving the core benefits of automated CRUD integration.
+1. You provide an **explicit serializer class** instead of letting one be auto-built.
+2. The generated state variables and handlers use the **plural model name** (`posts`, `save_post`, `delete_post`) instead of generic `data` / `save` / `delete`.
 
----
-
-## 1. When to Choose ModelCRUDView
-
-Here is a quick architectural checklist to help you select the ideal paradigm:
-
-| Need | Recommended Class | Details |
-|:---|:---|:---|
-| **Rapid Prototyping** | `ModelState` | Auto-compiles a schema from `model` and `fields` with generic `data` and `error` parameters. |
-| **Custom Schemas** | `ModelCRUDView` | Allows you to pass an explicit `ReflexDjangoModelSerializer` class with nesting or computed fields. |
-| **Pluralized Naming** | `ModelCRUDView` | Variables match your database collections (e.g. `self.posts` instead of `self.data`, `self.posts_error` instead of `self.error`). |
-| **Read-Only Slices** | `ModelListView` | A stripped-down cousin of `ModelCRUDView` that ignores saving and deleting handlers, perfect for search-only dashboards. |
-
-```text
-       ModelState                  ModelCRUDView + AppState
- ┌──────────────────────┐          ┌──────────────────────┐
- │ • Class: ModelState  │          │ • Class: AppState,   │
- │ • Writable: Fields   │          │          ModelCRUDView│
- │ • Serializer: Auto   │   vs.    │ • Serializer: Custom │
- │ • List: self.data    │          │ • List: self.[plural]│
- │ • Error: self.error  │          │ • Error: [plural]_err│
- └──────────────────────┘          └──────────────────────┘
-```
+If you're integrating with an existing DRF schema, or you want each CRUD state to have a clearly-named API, this is the class for you. Otherwise, [`ModelState`](reactive_model_state.md) is shorter and just as powerful.
 
 ---
 
-## 2. Defining the Model & Custom Serializer
+## When you'd reach for this
 
-Consider a blogging application where each `BlogPost` belongs to an `Author`. We want custom field requirements, read-only audit timestamps, and relational controls.
+- You already have `BlogPostSerializer` from DRF and you want to reuse it.
+- Your project has many CRUD pages and you'd rather see `state.posts` and `state.save_post()` than `state.data` and `state.save()`.
+- You want the option to compose CRUD behavior from explicit [mixins](reflex_django_mixins.md) (e.g. only list + create, no delete).
 
-### Step 1: Define the Django Model
-```python
-# blog/models.py
-from django.conf import settings
-from django.db import models
+---
 
-class BlogPost(models.Model):
-    title = models.CharField(max_length=200, help_text="Headline of the article")
-    slug = models.SlugField(max_length=220, unique=True)
-    body = models.TextField(blank=True)
-    published = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    author = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="blog_posts"
-    )
-
-    def __str__(self):
-        return self.title
-```
-
-### Step 2: Create the Explicit Serializer
-Subclass `ReflexDjangoModelSerializer` to map Python structures to client JSON. This gives us granular control over field constraints and read-only attributes:
+## The smallest example
 
 ```python
 # blog/serializers.py
 from reflex_django.serializers import ReflexDjangoModelSerializer
 from blog.models import BlogPost
 
+
 class BlogPostSerializer(ReflexDjangoModelSerializer):
     class Meta:
         model = BlogPost
-        fields = ("id", "title", "slug", "body", "published", "created_at")
-        read_only_fields = ("id", "created_at")
+        fields = ("id", "title", "content", "is_published", "created_at")
 ```
 
----
-
-## 3. Declaring the Custom CRUD State
-
-Now, inherit from both `AppState` and `ModelCRUDView`. In this scenario, we override names in the `Meta` options to output pluralized listings (`posts`) and assign custom legacy events:
-
 ```python
-# blog/states/posts.py
-from reflex_django.state import AppState, ModelCRUDView
+# blog/views.py
+import reflex as rx
+from reflex_django import template
+from reflex_django.state import ModelCRUDView, AppState
+from blog.models import BlogPost
 from blog.serializers import BlogPostSerializer
 
-class PostsState(AppState, ModelCRUDView):
-    """Manages the backend context and schema interaction for BlogPosts."""
-    serializer_class = BlogPostSerializer
-    
-    # Optional: Configure database search and sorting attributes
-    search_fields = ("title", "slug")
-    ordering = ("-created_at",)
 
-    class Meta:
-        list_var = "posts"            # Generates self.posts (instead of self.data)
-        error_var = "posts_error"      # Generates self.posts_error (instead of self.error)
-        save_event = "save_post"       # Attaches legacy event handler save_post()
-        delete_event = "delete_post"   # Attaches legacy event handler delete_post()
-```
-
-### What Assembly Dynamically Hydrates:
-* **Collection Variable**: `posts: list[dict]` holding serialized active records.
-* **Error Buffer**: `posts_error: str` holding active operational errors.
-* **Input Parameters**: `title`, `slug`, `body`, and `published` (with matching `set_*` setters).
-* **Legacy Events**: `on_load_posts` (list load), `save_post` (save), `delete_post(pk)` (delete), and `start_edit(pk)` (hydrates inputs).
-* **Canonical API**: Because `use_canonical_api` defaults to `True`, the engine **also** injects clean, generic methods (`refresh`, `save`, `load`, `delete`, `create`, `cancel_edit`). Both legacy and canonical events route through the same underlying logic.
-
----
-
-## 4. Advanced User-Scoped Data Protection
-
-Securing multi-tenant or user-scoped applications requires restricting data queries so users can only view or mutate records they own.
-
-### Option A: Custom Lifecycle Hooks (Maximum Flexibility)
-Override individual lifecycle methods on your State class to apply query parameters and author mappings dynamically:
-
-```python
-class PostsState(AppState, ModelCRUDView):
+class BlogPostState(AppState, ModelCRUDView):
+    model = BlogPost
     serializer_class = BlogPostSerializer
 
     class Meta:
         list_var = "posts"
-        read_only_fields = ("author",)  # Extracted from request, never mapped from user forms
+        save_event = "save_post"
+        delete_event = "delete_post"
+        ordering = ("-created_at",)
+```
 
+What you get:
+
+| Reactive var / handler | What it is |
+|:---|:---|
+| `BlogPostState.posts` | List of dicts (the current page) |
+| `BlogPostState.editing_id` | PK being edited, or `-1` |
+| `BlogPostState.error` | Top-level error |
+| `BlogPostState.on_load_posts()` | Initial load |
+| `BlogPostState.save_post()` | Validate + create or update |
+| `BlogPostState.delete_post(pk)` | Delete a row |
+| `BlogPostState.start_editing(pk)` | Enter edit mode |
+| `BlogPostState.cancel_edit()` | Leave edit mode |
+| `BlogPostState.title`, `content`, `is_published` | One per writable serializer field |
+| `BlogPostState.set_title(value)`, etc. | Setters for each field |
+
+The naming follows your `Meta` — that's the main visible difference from `ModelState`.
+
+---
+
+## A complete CRUD page
+
+### The model
+
+```python
+# blog/models.py
+from django.conf import settings
+from django.db import models
+
+
+class BlogPost(models.Model):
+    title         = models.CharField(max_length=200)
+    content       = models.TextField(blank=True)
+    is_published  = models.BooleanField(default=False)
+    author        = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blog_posts",
+    )
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+```
+
+### The serializer
+
+```python
+# blog/serializers.py
+from reflex_django.serializers import ReflexDjangoModelSerializer
+from blog.models import BlogPost
+
+
+class BlogPostSerializer(ReflexDjangoModelSerializer):
+    class Meta:
+        model = BlogPost
+        fields = ("id", "title", "content", "is_published", "author_id", "created_at")
+        read_only_fields = ("id", "author_id", "created_at")
+```
+
+### The state
+
+```python
+# blog/views.py
+import reflex as rx
+from reflex_django import template
+from reflex_django.state import ModelCRUDView, AppState
+from blog.models import BlogPost
+from blog.serializers import BlogPostSerializer
+
+
+class BlogPostState(AppState, ModelCRUDView):
+    model = BlogPost
+    serializer_class = BlogPostSerializer
+
+    class Meta:
+        list_var = "posts"
+        save_event = "save_post"
+        delete_event = "delete_post"
+        ordering = ("-created_at",)
+        run_model_validation = True
+        structured_errors = True
+
+    # Scope all reads to the logged-in user
     def get_queryset(self):
-        """Query posts belonging strictly to the authenticated request user."""
         return BlogPost.objects.filter(author=self.request.user)
 
     def get_object_lookup(self, pk: int) -> dict:
-        """Enforce owner validation when retrieving single rows for edits or deletes."""
         return {"pk": pk, "author": self.request.user}
 
     def get_create_kwargs(self, state_data: dict) -> dict:
-        """Inject the authenticated user's PK into newly saved BlogPost objects."""
         return {**state_data, "author": self.request.user}
 ```
 
-### Option B: The `UserScopedMixin` (Declarative Layout)
-If you are managing typical user-owned models, mix in `UserScopedMixin` to automatically configure the hooks:
+`AppState` first in the MRO means `self.request.user` works in `get_queryset` and the rest of the hooks. The order matters.
+
+### The UI
 
 ```python
-from reflex_django.state.mixins import UserScopedMixin
-
-class PostsState(AppState, ModelCRUDView, UserScopedMixin):
-    serializer_class = BlogPostSerializer
-    
-    # Specify the foreign key database column on BlogPost
-    scope_field = "author_id"  
-
-    class Meta:
-        list_var = "posts"
-```
-
----
-
-## 5. Query Optimization & Relational Slicing
-
-For tables with foreign keys or many-to-many relationships, triggering standard queries can quickly trigger the dreaded `N+1` database query problem. `ModelCRUDView` provides native performance parameters in `Meta` to execute prefetching and joins directly inside the async database call.
-
-```python
-class AdvancedPostsState(AppState, ModelCRUDView):
-    serializer_class = BlogPostSerializer
-
-    class Meta:
-        list_var = "posts"
-        
-        # Optimize database joins using select_related for foreign keys
-        queryset_select_related = ("author", "category")
-        
-        # Optimize database queries using prefetch_related for M2M structures
-        queryset_prefetch = ("tags",)
-```
-
----
-
-## 6. Complete Implementation: The Blog Portal Page
-
-Here is a full, production-ready admin interface utilizing our `PostsState` class:
-
-```python
-# blog/pages.py
-import reflex as rx
-from blog.states.posts import PostsState
-
-def blog_admin_page() -> rx.Component:
+def field_input(label: str, input_: rx.Component, err: rx.Var) -> rx.Component:
     return rx.vstack(
-        rx.heading("Article Publisher", size="7", weight="bold"),
-        rx.text("Publish stories, manage drafts, and track user posts.", color="gray"),
-        rx.divider(),
-        
-        # Status Alert Bar
-        rx.cond(
-            PostsState.posts_error != "",
-            rx.callout(
-                PostsState.posts_error, 
-                color_scheme="red", 
-                icon="alert_triangle",
-                width="100%",
-            )
-        ),
-        
-        # Form Editor Grid (triggers when editing is active or fields contain text)
-        rx.cond(
-            (PostsState.editing_id >= 0) | (PostsState.title != "") | (PostsState.slug != ""),
-            rx.vstack(
-                rx.heading(
-                    rx.cond(PostsState.editing_id >= 0, "Edit Story Draft", "Write New Post"),
-                    size="4",
-                ),
-                
-                # Wrap all editable fields in rx.form and bind key to force input refreshes
-                rx.form(
-                    rx.vstack(
-                        rx.input(
-                            placeholder="Draft Title...",
-                            value=PostsState.title,
-                            on_change=PostsState.set_title,
-                        ),
-                        rx.input(
-                            placeholder="URL slug-format-here...",
-                            value=PostsState.slug,
-                            on_change=PostsState.set_slug,
-                        ),
-                        rx.text_area(
-                            placeholder="Write your article content here...",
-                            value=PostsState.body,
-                            on_change=PostsState.set_body,
-                            rows="6",
-                        ),
-                        rx.hstack(
-                            rx.checkbox(
-                                "Publish Immediately",
-                                checked=PostsState.published,
-                                on_change=PostsState.set_published,
-                            ),
-                            rx.spacer(),
-                            rx.button("Cancel", variant="outline", on_click=PostsState.cancel_edit),
-                            rx.button("Save Article", color_scheme="teal", on_click=PostsState.save_post),
-                            width="100%",
-                        ),
-                        spacing="3",
-                    ),
-                    key=PostsState.form_reset_key,
-                    width="100%",
-                ),
-                padding="1.5em",
-                background="var(--gray-2)",
-                border_radius="8px",
-                width="100%",
-            )
-        ),
-        
-        # Articles Grid List
-        rx.cond(
-            PostsState.posts.length() > 0,
-            rx.grid(
-                rx.foreach(
-                    PostsState.posts,
-                    lambda post: rx.card(
-                        rx.vstack(
-                            rx.hstack(
-                                rx.text(post["title"], weight="bold", size="4"),
-                                rx.spacer(),
-                                rx.cond(
-                                    post["published"],
-                                    rx.badge("Published", color_scheme="green"),
-                                    rx.badge("Draft", color_scheme="yellow"),
-                                )
-                            ),
-                            rx.text(
-                                rx.cond(
-                                    post["body"] != "",
-                                    post["body"],
-                                    "No content provided.",
-                                ),
-                                size="2", 
-                                color="gray",
-                                line_clamp=2,
-                            ),
-                            rx.divider(),
-                            rx.hstack(
-                                rx.text(f"Created: {post['created_at']}", size="1", color="gray"),
-                                rx.spacer(),
-                                rx.button(
-                                    "Edit", 
-                                    size="1", 
-                                    variant="soft",
-                                    on_click=PostsState.start_edit(post["id"]),
-                                ),
-                                rx.button(
-                                    "Delete", 
-                                    size="1", 
-                                    color_scheme="red",
-                                    variant="soft",
-                                    on_click=PostsState.delete_post(post["id"]),
-                                ),
-                                spacing="2",
-                            ),
-                            spacing="2",
-                            width="100%",
-                        )
-                    )
-                ),
-                columns="2",
-                spacing="4",
-                width="100%",
-            ),
-            rx.center(
-                rx.text("No articles written yet. Write your first story above!", color="gray"),
-                width="100%",
-                padding="4em",
-            )
-        ),
-        
-        spacing="5",
-        width="100%",
-        max_width="56em",
-        on_mount=PostsState.on_load_posts,
+        rx.text(label, size="2"),
+        input_,
+        rx.cond(err != "", rx.text(err, size="1", color="red")),
+        spacing="1",
     )
+
+
+def blog_page() -> rx.Component:
+    errs = BlogPostState.posts_field_errors
+    return rx.vstack(
+        rx.heading("My Blog Posts"),
+
+        rx.hstack(
+            rx.button("New post", on_click=BlogPostState.create),
+            rx.spacer(),
+            rx.text(f"Total: {BlogPostState.posts.length()}"),
+        ),
+
+        # form (only when editing)
+        rx.cond(
+            BlogPostState.editing_id != -1,
+            rx.form(
+                rx.vstack(
+                    field_input("Title", rx.input(value=BlogPostState.title, on_change=BlogPostState.set_title), errs["title"]),
+                    field_input("Content", rx.text_area(value=BlogPostState.content, on_change=BlogPostState.set_content), errs["content"]),
+                    rx.hstack(
+                        rx.text("Published"),
+                        rx.switch(checked=BlogPostState.is_published, on_change=BlogPostState.set_is_published),
+                    ),
+                    rx.hstack(
+                        rx.button("Save",   on_click=BlogPostState.save_post),
+                        rx.button("Cancel", on_click=BlogPostState.cancel_edit, variant="ghost"),
+                    ),
+                ),
+                key=BlogPostState.form_reset_key,
+            ),
+        ),
+
+        rx.foreach(BlogPostState.posts, post_row),
+        spacing="3",
+        padding="2em",
+    )
+
+
+def post_row(row: dict) -> rx.Component:
+    return rx.hstack(
+        rx.text(row["title"], weight="bold"),
+        rx.spacer(),
+        rx.cond(row["is_published"], rx.badge("Published", color_scheme="green"), rx.badge("Draft")),
+        rx.button("Edit",   on_click=BlogPostState.start_editing(row["id"])),
+        rx.button("Delete", on_click=BlogPostState.delete_post(row["id"]), color_scheme="red"),
+        padding="0.5em",
+        border_bottom="1px solid rgba(0,0,0,0.08)",
+    )
+
+
+@template(route="/blog", title="Blog", on_load=BlogPostState.on_load_posts)
+def index() -> rx.Component:
+    return blog_page()
+```
+
+That's a CRUD page with explicit serializer, custom-named handlers (`save_post`, `delete_post`), and per-user scoping in about 100 lines including the UI.
+
+---
+
+## `Meta` options
+
+The `Meta` inner class controls naming and behavior:
+
+| Option | Default | What it does |
+|:---|:---|:---|
+| `list_var` | derived from model (e.g. `blog_posts`) | Name of the reactive list variable. |
+| `save_event` | `"save"` | Name of the save handler. |
+| `delete_event` | `"delete"` | Name of the delete handler. |
+| `ordering` | `()` | Tuple of ORM ordering fields (same as `Model.Meta.ordering`). |
+| `paginate_by` | `0` (off) | Rows per page. Set a positive number to enable pagination. |
+| `reset_after_save` | `True` | Clear the form after a successful save. |
+| `run_model_validation` | `True` | Call Django's `full_clean()` before save. |
+| `structured_errors` | `True` | Populate `<list_var>_field_errors` dict for per-field UI. |
+| `queryset_select_related` | `()` | Apply `select_related(...)` on every list query. |
+| `queryset_prefetch` | `()` | Apply `prefetch_related(...)` on every list query. |
+| `permission_classes` | `()` | DRF-style permission classes (see [mixins](reflex_django_mixins.md)). |
+| `search_fields` | `()` | Fields to include in `?search=` filter. |
+| `auto_refresh` | `False` | Refresh the list on every event automatically. |
+| `owner_field` | `None` | Used by `UserScopedMixin` to identify the FK to scope by. |
+
+---
+
+## Hooks you can override
+
+| Hook | What it controls |
+|:---|:---|
+| `get_queryset()` | Base queryset for list and `get_object`. |
+| `filter_queryset(qs)` | Apply search/filter to the queryset. |
+| `get_object_lookup(pk)` | Kwargs for finding one row (scope check). |
+| `get_create_kwargs(state_data)` | Extra kwargs for creating a new row. |
+| `clean_<field>(value)` | Per-field cleaning (return cleaned value or raise). |
+| `validate_state()` | Cross-field validation in state. |
+| `before_save(instance)` | Called right before `await instance.asave()`. |
+| `after_save(instance)` | Called after a successful save. |
+| `before_delete(instance)` | Called before `await instance.adelete()`. |
+| `after_delete(instance)` | Called after a successful delete. |
+
+Hooks are normal methods. `async` if they touch the database, `def` if they're just data shaping.
+
+---
+
+## Optimizing query joins
+
+For tables with foreign keys or many-to-many fields, declare them so you don't get N+1:
+
+```python
+class Meta:
+    list_var = "posts"
+    queryset_select_related = ("author",)         # FK joined in one SQL query
+    queryset_prefetch = ("tags", "comments")      # many-to-many / reverse FK batched
 ```
 
 ---
 
-## 7. Configuration Reference: Meta Options
+## `ModelState` vs `ModelCRUDView` — which one?
 
-These attributes represent all available customization fields inside the nested `class Meta` of `ModelCRUDView` or `ModelState`:
+Both are declarative CRUD. The difference is mostly naming and how the serializer is sourced.
 
-| Meta Attribute | Default Value | Role & Description |
+| | `ModelState` | `ModelCRUDView` |
 |:---|:---|:---|
-| **`list_var`** | `"data"` | Name of the state variable holding the serialized records. |
-| **`error_var`** | `"error"` | Name of the state variable holding query or operational errors. |
-| **`save_event`** | `"save_{model}"` | Legacy event handler name generated to perform saves. |
-| **`delete_event`** | `"delete_{model}"` | Legacy event handler name generated to perform deletions. |
-| **`use_canonical_api`**| `True` | Automatically inject clean, generic methods (`refresh`, `save`, `load`, `delete`, `create`, `cancel_edit`). |
-| **`reset_after_save`** | `True` | Resets all input state variables to their defaults after a successful save. |
-| **`form_reset_var`** | `"form_reset_key"` | The variable incremented on cancel, save, and edit to force React form remounts. |
-| **`run_model_validation`**| `False` | Performs full model-level validation (runs Django `full_clean()`) prior to saving. |
-| **`structured_errors`**| `False` | Generates a structured field errors dictionary (`field_errors`) for UI bindings. |
-| **`queryset_select_related`**| `()` | Tuple of relational field names to load in a single database query. |
-| **`queryset_prefetch`**| `()` | Tuple of relational fields to load via prefetch queries. |
-| **`permission_classes`**| `()` | List of permission authorization classes evaluated during actions. |
-| **`login_required_actions`**| `load, save, delete` | Set of actions restricted to authenticated users. |
+| Inheritance | already an `AppState` | mix in with `AppState` yourself |
+| Serializer | auto-built from `model` + `fields` | you write a `serializer_class` |
+| List variable | `state.data` (or custom via `Meta.list_var`) | plural model name (or custom) |
+| Save handler | `state.save()` | `state.save_<model>()` (or custom) |
+| Delete handler | `state.delete(pk)` | `state.delete_<model>(pk)` (or custom) |
+| Best for | New CRUD pages, fast iteration | Sharing a DRF serializer or wanting explicit names |
+
+Both classes share the same dispatch pipeline under the hood, so any pattern you learn (validation, scoping, hooks) applies to both. See [Choosing ModelState vs ModelCRUDView](model_state_and_crud_view.md) for a side-by-side.
 
 ---
 
-## 8. Common Pitfalls & Anti-Patterns
+## Pagination, search, validation
 
-* **Missing AppState Subclassing**: `ModelCRUDView` is a mixin class. If you do not include `AppState` first (e.g. `class MyState(AppState, ModelCRUDView)`), session mapping and authenticated request parameters will not exist, causing operational crashes during dispatching.
-* **Assuming 'data' or 'error' Variables Exist**: Unlike `ModelState`, `ModelCRUDView` relies on pluralized properties by default. If your model is `Product` and you do not set `Meta.list_var`, the variable is named `products` (not `data`) and `products_error` (not `error`).
-* **Omitting async def on Customized Handlers**: If you override a generated handler (like `save_post`), always declare the method with `async def` and invoke database commands asynchronously. Sync queries blocks the ASGI execution loop.
+The patterns are identical to [`ModelState`](reactive_model_state.md). Add `paginate_by` to `Meta` for pagination. Add `search_fields` for search. Override `clean_<field>` and `validate_state` for validation. Same hooks, same behavior, just different default names.
 
 ---
 
-**Navigation:** [← Reactive ModelState](reactive_model_state.md) | [Next: reflex-django Mixins →](reflex_django_mixins.md)
+**Next:** [Choosing ModelState vs ModelCRUDView →](model_state_and_crud_view.md) · [Or: Mixins →](reflex_django_mixins.md)

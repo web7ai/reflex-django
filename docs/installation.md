@@ -1,20 +1,26 @@
-# Installation
+# Install
 
-Install **reflex-django** into a Django project virtual environment and register it in `INSTALLED_APPS`. Configuration happens in **`urls.py`** via `reflex_mount()`, not in a mandatory `rxconfig.py`.
+Install three packages, add one app to `INSTALLED_APPS`, and add one line to `urls.py`. That's the whole setup.
+
+If you'd like to understand what these pieces do before installing, read [Why reflex-django exists](why_reflex_django.md) first. Otherwise, dive in.
 
 ---
 
-## Requirements
+## What you need
 
-| Component | Version |
+| | Version |
 |:---|:---|
-| **Python** | `>= 3.12, < 4.0` |
-| **Django** | `>= 6.0, < 7.0` |
-| **Reflex** | `>= 0.9.2, < 1.0` |
+| **Python** | 3.12 or newer |
+| **Django** | 6.0 or newer |
+| **Reflex** | 0.9.2 or newer |
+
+If you don't have a Django project yet, the [Your first app](quickstart.md) tutorial walks you through creating one from scratch.
 
 ---
 
-## Install packages
+## 1. Install the packages
+
+We recommend [`uv`](https://github.com/astral-sh/uv), but `pip` works fine too.
 
 === "uv (recommended)"
 
@@ -28,9 +34,13 @@ Install **reflex-django** into a Django project virtual environment and register
     pip install django reflex reflex-django
     ```
 
+That installs Django, Reflex, and `reflex-django` itself. Nothing else to install.
+
 ---
 
-## Register in Django
+## 2. Register `reflex_django` in `settings.py`
+
+Add `"reflex_django"` to `INSTALLED_APPS`, and add one line to `MIDDLEWARE` at the bottom:
 
 ```python
 # config/settings.py
@@ -42,8 +52,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "reflex_django",      # required for run_reflex, helpers, discovery
-    "myapp",
+    "reflex_django",        # <- add this
+    "myapp",                # <- your app
 ]
 
 MIDDLEWARE = [
@@ -54,17 +64,20 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",   # <- add this (last)
 ]
 
 ROOT_URLCONF = "config.urls"
 ```
 
+The `AsyncStreamingMiddleware` line keeps Django's admin streaming responses happy under ASGI. It does nothing on plain HTTP servers, so it's safe to leave on. ([Why it exists](async_streaming_middleware.md).)
+
 ---
 
-## Wire `reflex_mount()` in `urls.py`
+## 3. Wire `reflex_mount()` into `urls.py`
 
 ```python
+# config/urls.py
 from django.contrib import admin
 from django.urls import path
 from reflex_django.urls import reflex_mount
@@ -80,13 +93,16 @@ urlpatterns += [
 ]
 ```
 
-See [Configuration](configuration.md) for all `reflex_mount()` options. For pages and `AppState`, follow the [Quickstart](quickstart.md).
+The two rules that matter:
 
-`AsyncStreamingMiddleware` in `MIDDLEWARE` is required for clean ASGI streaming (admin, static). Details: [AsyncStreamingMiddleware](async_streaming_middleware.md).
+- **Django routes first**, `reflex_mount()` last.
+- **`django_prefix`** lists the paths Django owns. Every prefix here must have a matching `path(...)` line above it.
+
+For the full set of options, see [Configuration](configuration.md).
 
 ---
 
-## ASGI entry point
+## 4. Point your ASGI entry at `reflex_django`
 
 ```python
 # config/asgi.py
@@ -96,45 +112,41 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 from reflex_django.asgi_entry import application  # noqa: E402,F401
 ```
 
-This is the callable both `manage.py run_reflex` and your production ASGI server (uvicorn / granian / hypercorn) point at. It composes Django and Reflex behind the outer dispatcher on a single port.
+That's the single ASGI callable both `manage.py run_reflex` and your production server (uvicorn, granian, hypercorn, …) will use. It composes Django and Reflex on one port.
 
 ---
 
-## Verify
+## 5. Run
 
 ```bash
 python manage.py migrate
 python manage.py run_reflex
 ```
 
-Or check Django management access:
-
-```bash
-python manage.py help
-# reflex django help also works when using the Reflex CLI entry point
-```
+Open `http://localhost:8000/`. The first run takes a moment because it compiles the Reflex SPA, but subsequent runs are quick.
 
 ---
 
-## Production
+## Production note
 
 > [!WARNING]
-> Always set `DJANGO_SETTINGS_MODULE` in production. Do not rely on `reflex_django.default_settings` (insecure dev fallback).
+> In production, **always** set `DJANGO_SETTINGS_MODULE` to your real settings module. Don't rely on `reflex_django.default_settings` — that's a development convenience with an insecure `SECRET_KEY`.
 
-Use a real `SECRET_KEY`, `DEBUG = False`, and restricted `ALLOWED_HOSTS`. See [Deployment](deployment.md).
-
----
-
-## Troubleshooting
-
-**`AppRegistryNotReady`**
-
-Import models inside `@rx.event` handlers, not at the top of `views.py`, during early imports.
-
-**Settings ignored**
-
-`DJANGO_SETTINGS_MODULE` from `manage.py` or the environment overrides everything else. Keep deployment env aligned with your project.
+Other production essentials (real `SECRET_KEY`, `DEBUG = False`, restricted `ALLOWED_HOSTS`, static files, reverse proxy) live in the [Deployment](deployment.md) guide.
 
 ---
 
-**Navigation:** [← Introduction](introduction.md) | [Quickstart →](quickstart.md) | [Configuration →](configuration.md)
+## Common bumps
+
+**`AppRegistryNotReady` at import time**
+You're probably importing a Django model at the top of `views.py`. Move the import inside your event handler. (Django needs `django.setup()` to finish before model classes can be touched.)
+
+**Settings are getting ignored**
+`DJANGO_SETTINGS_MODULE` from your shell environment always wins. If you're confused, run `python -c "import os; print(os.environ.get('DJANGO_SETTINGS_MODULE'))"` and see what's actually set.
+
+**`ModuleNotFoundError: shop.shop`**
+You don't need `shop/shop.py`. `reflex_mount(app_name="shop")` loads pages from `shop/views.py` via `reflex_django.django_led_app`. If something is asking for `shop.shop`, you probably have a leftover `rxconfig.py` from a previous Reflex setup — delete it.
+
+---
+
+**Next:** [Your first app →](quickstart.md)

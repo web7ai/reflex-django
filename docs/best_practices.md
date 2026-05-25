@@ -1,210 +1,208 @@
-# Best Practices & Architecture Guide
+# Best practices
 
-Building production-ready, unified applications requires adhering to reliable design patterns. Because `reflex-django` bridges two distinct software models—Django's synchronous, request-response, database-centric model and Reflex's asynchronous, reactive, state-driven model—it is important to configure your code for security, execution performance, and circular import prevention.
-
-This manual presents production-tested guidelines and architecture patterns for writing secure, performant, and maintainable unified applications.
+The patterns below are things you'll figure out yourself after a week or two. Reading them now saves time. None of these are rules — they're defaults that work well for most projects.
 
 ---
 
-## 1. Domain Separation & The Data Flow
+## Project layout
 
-To keep your codebase clean and scalable as it grows, enforce a strict separation of concerns between your business logic layer and your presentation layer.
+**Put pages in `{app}/views.py`.** Don't create a separate `frontend/` folder unless you have a real reason. Keeping pages next to their models is the single biggest readability win.
 
-```text
-    ┌────────────────────────────────────────────────────────┐
-    │                      DATABASE LAYER                    │
-    │  • Django models.py (Field schemas, db constraints)    │
-    │  • Django managers.py (Custom SQL querysets)           │
-    └──────────────────────────┬─────────────────────────────┘
-                               │
-                               ▼
-    ┌────────────────────────────────────────────────────────┐
-    │                    SERIALIZATION LAYER                 │
-    │  • ReflexDjangoModelSerializer (JSON schemas, read-only)│
-    └──────────────────────────┬─────────────────────────────┘
-                               │
-                               ▼
-    ┌────────────────────────────────────────────────────────┐
-    │                     CONTROLLER LAYER                   │
-    │  • ProductState (Validation hooks, permission checks)  │
-    └──────────────────────────┬─────────────────────────────┘
-                               │
-                               ▼
-    ┌────────────────────────────────────────────────────────┐
-    │                     PRESENTATION LAYER                 │
-    │  • product_catalog_page (Reflex component components)  │
-    └────────────────────────────────────────────────────────┘
-```
+**One `settings.py` with environment-driven overrides.** Don't ship five settings modules. Use environment variables for the things that change between environments (DB, SECRET_KEY, ALLOWED_HOSTS).
 
-### Key Architectural Guidelines
-1. **Define Domain Rules in Django**: Place constraints, default values, database relationship controls, and custom query scopes inside Django models, managers, and fields.
-2. **Handle Mappings in Serializers**: Restrict client read/write access and define computed properties using `ReflexDjangoModelSerializer` schemas.
-3. **Orchestrate Events in States**: Use Reflex States solely as controllers to parse client inputs, evaluate permissions, and invoke underlying services.
-4. **Build Pure UI in Pages**: Restrict Reflex page components strictly to visual layouts, layout alignments, and bindings to State variables.
+**Group related state classes near the page that uses them.** If `CartState` is only used by `cart_page`, they belong in the same file.
 
 ---
 
-## 2. Import Hygiene & The Startup Lifecycle
+## State
 
-Because Django models require a booted registry to operate, importing models or database-bound states at the module level before `django.setup()` executes will trigger `AppRegistryNotReady` exceptions.
+**Default to `AppState`, not `rx.State`.** Even if you don't need `self.request.user` today, you probably will tomorrow. The overhead is one extra context binding per event — negligible.
 
-### Stage 1: Load Configuration
-Reflex parses `rxconfig.py` at startup. No Django imports should exist at this level.
-              │
-              ▼
-### Stage 2: Initialize Settings & App Registry
-`ReflexDjangoPlugin` resolves environment configurations and boots `django.setup()`.
-              │
-              ▼
-### Stage 3: Load Application States
-Your state files (`state.py`) can now safely import Django models and serializers.
+**Use plain `rx.State` only for UI-local concerns.** Filter bars, modals, theme toggles. Things that genuinely don't care about Django.
 
-### Import Best Practices
-* **Avoid Module-Level Database Imports in Configs**: Never import Django models inside `rxconfig.py` or any utilities imported by it.
-* **Defer Submodule Loading**: If you have helper functions that import models or execute queries, place imports inside the function body rather than at the top of the file:
+**Never base authorization on the reactive snapshot.** `self.is_authenticated`, `self.username`, etc. are shipped to the browser. Always check `self.request.user` in handlers.
 
-```python
-# Avoid top-level module imports for database models in utility scripts
-# from shop.models import Product  <-- Can cause AppRegistryNotReady
+**Don't store model instances in state fields.** Always convert to dicts. JSON serialization will fail on `Product` and other Django model instances.
 
-def calculate_discount(product_id: int) -> float:
-    # Safely import inside the function context
-    from shop.models import Product
-    ...
-```
+**Keep state fields small.** Lists of 10,000 dicts ship 10,000 dicts to the browser. Paginate.
 
 ---
 
-## 3. Server-Side Security & Mutation Traps
+## Async / sync
 
-When building reactive UIs, it is easy to assume that hiding a button in the frontend is enough to secure an action. **This is a dangerous misconception.** Reflex state variables are transmitted to and stored on the client browser. An attacker can inspect the client-side state and trigger events directly.
+**Always `async def` your event handlers.** Even if the body is simple. Reflex schedules them on the event loop either way; consistent style avoids surprises later.
 
-> [!CAUTION]
-> Never rely on client state flags (like `State.is_authenticated` or `State.is_staff`) inside critical event handlers to determine authorization. Always validate permissions on the server using `self.request.user` or auth decorators during the event call.
+**Use the async ORM (`acreate`, `aget`, `asave`, `adelete`, `async for`).** A sync ORM call in an event handler stalls every connection. The methods all exist; use them.
 
-### The Secure Event Pattern (Server-Side Checks)
-```python
-# Correct, secure implementation
-class CatalogState(ModelState):
-    model = Product
-    fields = ["name", "price"]
+**Wrap sync-only libraries in `sync_to_async`.** Some Django utilities (transactions, `Site.objects.get_current()`) are sync. Wrap them once, await the wrapper.
 
-    @rx.event
-    @login_required # Enforces active session validation on every call
-    async def save(self):
-        # 1. Perform server-side role check
-        if not self.request.user.is_staff:
-            self.error = "Permission denied: Staff access required."
-            return
-            
-        # 2. Proceed with database mutations
-        await self.dispatch(ACTION_SAVE)
-```
-
-### The Browser Cookie Synchronization Pattern
-When authenticating users (via `alogin()` or custom endpoints), always synchronize the browser session cookies. This ensures that Django session cookies are updated across both HTTP and WebSocket channels:
-
-```python
-from reflex_django.middleware import collect_reflex_context
-
-@rx.event
-async def login_user(self):
-    user = await aauthenticate(username=self.username, password=self.password)
-    if user:
-        await alogin(self.django_request, user)
-        # Force browser cookie sync to align WebSocket sessions
-        return rx.call_script("document.cookie = ...")
-```
+**Slice querysets.** `qs[:50]`, not `list(qs)`. A `LIMIT` in SQL costs almost nothing; loading everything costs a lot.
 
 ---
 
-## 4. Thread-Safe, Non-Blocking Async Execution
+## URLs and routing
 
-Reflex event loops run asynchronously. If you execute synchronous database queries inside an event handler, you will **block the entire ASGI execution loop**, causing other users' requests to queue up and freeze.
+**Django routes go above `reflex_mount()`.** Always.
 
-### The Golden Rule of Database Queries
-Always use `async def` for handlers that execute database queries, and use Django's modern async ORM helpers:
+**Every prefix in `django_prefix` matches a real `path(...)` above.** Drift here is the #1 cause of 404s.
 
-```python
-# Bad, blocking implementation
-@rx.event
-def save_item(self):
-    # BLOCKS the ASGI thread!
-    Product.objects.create(name=self.name, price=self.price)
+**Don't add Django `path()` entries for SPA pages.** SPA routes live in `@template(route=...)`. Adding a Django path shadows them.
 
-# Good, thread-safe implementation
-@rx.event
-async def save_item(self):
-    # Runs asynchronously without blocking other users
-    await Product.objects.acreate(name=self.name, price=self.price)
-```
+**Don't add Django routes under reserved Reflex prefixes** (`/_event`, `/_upload`, `/_health`, `/ping`).
 
-Use the following async ORM equivalents:
-* Use `acreate()` instead of `create()`.
-* Use `aget()` instead of `get()`.
-* Use `asave()` instead of `save()`.
-* Use `adelete()` instead of `delete()`.
-* Iterate over querysets using `async for`:
-
-```python
-async for product in Product.objects.filter(is_active=True):
-    print(product.name)
-```
+**Use `Meta.ordering` on models.** Stable ordering everywhere — admin, API, Reflex lists — without thinking.
 
 ---
 
-## 5. State Serialization & Client Leakage Rules
+## Forms and validation
 
-Reflex state variables (defined in your State class) are serialized to JSON and sent to the client browser. 
+**Three stages, in order:** `clean_<field>` for per-field cleaning, `validate_state` for cross-field rules, `run_model_validation = True` to lean on Django's own validators.
 
-### What You Can Put in State Variables
-* **Safe Types**: Strings, integers, floats, booleans, lists, and dictionaries.
-* **Serialized Models**: Dictionaries containing raw field values returned by your serializer (`serializers.data` or `await serializer.adata()`).
+**Set `structured_errors = True`** if you want per-field error messages. Bind them to `<list_var>_field_errors[<field>]` in the UI.
 
-### What You Must Never Put in State Variables
-* **Django Model Instances**: Raw model instances (e.g. `product = Product()`) are not JSON-serializable and will crash the Reflex serializer.
-* **Database Connection Handlers**: Raw database connection pointers or cursor pools.
-* **System Request Objects**: Raw `HttpRequest` or `WSGIRequest` instances.
-* **Sensitive Secrets**: Unhashed passwords, private security tokens, or customer billing details.
+**Always show the global error too.** A `rx.cond(MyState.error != "", rx.callout(...))` at the top of the form catches edge cases the per-field display misses.
+
+**Reset form on success.** `Meta.reset_after_save = True` + `key=form_reset_key` on the `<rx.form>`.
 
 ---
 
-## 6. Query Performance Optimization
+## ORM patterns
 
-To prevent high-volume database queries from slowing down your application, leverage `ModelCRUDView`'s relational optimization fields.
+**Scope queries by user inside the handler.** `Model.objects.filter(owner=self.request.user)` is your security boundary.
 
-### Database Joins & Prefetching
-For tables with foreign key relationships, set `Meta.queryset_select_related` and `Meta.queryset_prefetch` to execute database joins in a single query:
+**Scope edits by user too.** `await Model.objects.aget(pk=id, owner=self.request.user)` — never `aget(pk=id)` alone. If the user tampers with an ID, `aget` raises `DoesNotExist` instead of returning a foreign row.
 
-```python
-class PostState(ModelState):
-    model = BlogPost
-    fields = ["title", "content"]
+**Use `select_related` / `prefetch_related` aggressively.** N+1 is the most common performance bug in any Django app.
 
-    class Meta:
-        list_var = "posts"
-        
-        # Executes SQL join for the foreign key, preventing N+1 queries
-        queryset_select_related = ("author",)
-        
-        # Prefetches many-to-many tag relationships in a single batch
-        queryset_prefetch = ("tags",)
-```
+**Use `only()`** on wide tables when you only need a few fields.
+
+**Use `ModelState`'s `Meta.queryset_select_related`/`Meta.queryset_prefetch`** to apply joins consistently across all generated CRUD operations.
 
 ---
 
-## 7. Production Readiness Checklist
+## CRUD style
 
-Before launching your unified application in production, verify that the following configurations are applied:
+**Start with `ModelState`.** It's shorter and just as capable. Reach for `ModelCRUDView` only when you specifically want explicit serializers or named handlers.
 
-- [ ] **Production Settings**: Ensure `DJANGO_SETTINGS_MODULE` is explicitly set to point to your production configuration file.
-- [ ] **Debug Disabled**: Verify that `DEBUG = False` is set in your active settings file.
-- [ ] **Persistent Secret Keys**: Confirm that your production `SECRET_KEY` is loaded from a secure environment variable.
-- [ ] **Allowed Hosts**: Ensure `ALLOWED_HOSTS` is restricted to your production domain names.
-- [ ] **Static Assets Compiled**: Verify that `collectstatic` was executed during the build stage.
-- [ ] **Database Migrations Applied**: Ensure database migrations run successfully in your deployment pipeline before the application boots.
-- [ ] **Server-Side Checks Enabled**: Verify that every mutating state handler evaluates permissions and validates input fields on the server.
+**Drop to plain `AppState` for weird workflows.** Wizards, multi-model forms, computed lists — the manual style is fine. Don't twist `ModelState` to fit.
+
+**Use `UserScopedMixin` instead of manually overriding three hooks.** If `owner_field` covers your case, the mixin is one line; the manual override is six.
 
 ---
 
-**Navigation:** [← Deployment Guide](deployment.md) | [Next: FAQ →](faq.md)
+## Middleware
+
+**Custom middleware works on Reflex events too — by default.** You don't need to do anything special.
+
+**Skip `CsrfViewMiddleware` and `AsyncStreamingMiddleware` on events.** They're already in the default skip list. Leave it alone.
+
+**Put `AsyncStreamingMiddleware` last** in `MIDDLEWARE`. Always.
+
+**Custom middleware that redirects becomes `rx.redirect(...)`** on events. Useful for `LoginRequiredMiddleware` patterns.
+
+---
+
+## Security
+
+**Never trust the snapshot.** `self.is_authenticated`, `self.username` — UI only.
+
+**Always re-check on the server.** Permissions, ownership, "is this the right user?" — every mutation. The decorators (`@login_required`, `@permission_required`) help, but they're aids, not replacements for thinking.
+
+**Validate on the server.** Even if you also validate in the UI for UX. The UI can be bypassed.
+
+**Don't reuse the dev `SECRET_KEY`** in production. `os.environ["DJANGO_SECRET_KEY"]` is the answer.
+
+**Set `ALLOWED_HOSTS`** in production. `["*"]` is a footgun.
+
+**Set `SESSION_COOKIE_SECURE = True`** and `CSRF_COOKIE_SECURE = True` once you have HTTPS.
+
+---
+
+## Performance
+
+**Paginate everything.** Lists, tables, even "small" tables.
+
+**Cache expensive context-processor calls.** If a processor hits the database, memoize the result per-request.
+
+**Use a real database in dev.** Postgres > SQLite for catching missing indexes early.
+
+**Profile before optimizing.** Reflex's docs have a profiling section. Most "slow" pages are slow because of one N+1 query, not the framework.
+
+**Pre-build the SPA in CI.** Don't run `export_reflex` on the production server every time the app boots.
+
+---
+
+## Logging
+
+**Log at module level.** Use the standard `logging.getLogger(__name__)`. Pipe everything to stdout/stderr in production; let your platform aggregate.
+
+**Don't `print()` in production.** It works, but it's not structured. Use logging with a JSON formatter.
+
+**Log enough context.** `logger.info("checkout completed", extra={"user_id": user.id, "order_id": order.id})` is far more debuggable than `logger.info("done")`.
+
+---
+
+## Testing
+
+**Test the handler, not the framework.** Use `begin_event_request` / `end_event_request` to set up the context, then call the handler directly. Don't try to open a real WebSocket for unit tests.
+
+**Test the ownership boundary.** Write a test where one user tries to edit another user's row. The handler should refuse.
+
+**Run migrations in CI** so schema drift gets caught.
+
+**Use `@pytest.mark.django_db`** liberally. The cost is small compared to the bugs it catches.
+
+---
+
+## Dev workflow
+
+**`run_reflex --skip-rebuild`** when you're only editing Django models, migrations, or admin.
+
+**`run_reflex --with-vite`** when you're iterating on Reflex pages and want hot-reload.
+
+**Keep the `.web/` and `.reflex/` directories in `.gitignore`.** Both are caches; nothing in them is yours.
+
+**Don't delete `.web/` casually.** Rebuilding is fast but not instant. Delete it only when you have a *real* reason (corrupted bundle, version upgrade).
+
+---
+
+## i18n
+
+**`gettext_lazy` for component literals.** `gettext` for handler output.
+
+**Always `compilemessages` after editing `.po` files.** `makemessages` alone doesn't update what's loaded at runtime.
+
+**Test RTL.** Set the cookie and make sure your layout doesn't break.
+
+---
+
+## CI/CD
+
+**Build the SPA in the image, not at boot.** Faster cold starts, more predictable behavior.
+
+**Run `migrate` as a release/deploy step**, not as part of the boot sequence. Multiple workers running migrate at the same time is a classic foot-gun.
+
+**Health-check `/_health`**, not `/`. It doesn't touch the DB.
+
+---
+
+## Documentation hygiene
+
+**Document the *why*, not the *what*.** Why this state class has a custom `get_queryset` matters; *that* it has one is obvious from the code.
+
+**Keep your `README.md` to one screen.** Link out to docs. Don't duplicate.
+
+**Update the docs when you change behavior.** Stale docs are worse than no docs.
+
+---
+
+## When in doubt
+
+- "Will this scale?" → Probably yes for the next year. Ship it. Profile later.
+- "Should I add a new state class?" → If it has its own data, yes. If it shares everything with an existing state, no.
+- "Should I write this as a Reflex event or an HTTP endpoint?" → Who's calling it? SPA → event. Anything else → HTTP.
+- "Should I use `ModelState` or write it manually?" → If it's standard CRUD, `ModelState`. If it's weird, manual.
+
+---
+
+**Next:** [Migrating from older versions →](migration_django_outer.md)

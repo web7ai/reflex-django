@@ -1,960 +1,458 @@
-# Authentication
+# Login & sessions
 
-Django **session authentication** in Reflex events, a unified **`AppState`** auth bridge, decorators, and optional canned login/register pages.
+Django auth, but it works inside Reflex events too. You log in once at `/admin/` (or through `reflex-django`'s built-in login page) and from then on every `@rx.event` handler sees `self.request.user` — the real user, from the real session, with the real permissions.
 
----
-
-## Prerequisites
-
-- [Django middleware to Reflex](django_middleware_to_reflex.md) — how `DjangoEventBridge` binds `request.user` per event  
-- [State management](state_management.md) — plain `rx.State` vs helper states
+This page covers the patterns you'll actually use: gating handlers, gating pages, the built-in login UI, and the small "live vs snapshot" rule that catches everyone once.
 
 ---
 
-## How authentication reaches Reflex
+## How auth actually reaches a Reflex event
 
-Reflex UI actions run over **Socket.IO**, not through Django’s HTTP middleware stack. **`DjangoEventBridge`** (enabled by default on `ReflexDjangoPlugin`) rebuilds a synthetic `HttpRequest` for every event, loads the session from the cookie, and resolves `request.user` with Django’s **`aget_user`**—the same auth backends and session store as normal Django views.
+You probably remember from [How the two fit together](how_they_fit.md): Reflex events arrive on a WebSocket, where Django middleware doesn't normally run. `reflex-django` fixes that with the `DjangoEventBridge` — a small piece that, on every event:
 
-```mermaid
-flowchart TB
-  subgraph browser [Browser]
-    UI[Reflex UI]
-    Cookie[sessionid cookie]
-  end
-  subgraph event [Each Reflex event]
-    E[Event + router_data]
-    Bridge[DjangoEventBridge.preprocess]
-    Req[Synthetic HttpRequest]
-    Sess[SESSION_ENGINE]
-    User[aget_user]
-    CTX[current_request / current_user]
-    Sync[AppState.refresh_django_user_fields]
-    H[Your handler]
-  end
-  UI --> E
-  Cookie --> E
-  E --> Bridge --> Req
-  Req --> Sess --> User --> CTX
-  CTX --> Sync --> H
-```
+1. Builds a synthetic `HttpRequest` from the WebSocket payload (cookies, headers, path).
+2. Runs your `settings.MIDDLEWARE` chain on it — including `SessionMiddleware` and `AuthenticationMiddleware`.
+3. Eagerly resolves `request.user` with Django's async `aget_user`.
+4. Binds the result onto your `AppState` instance.
 
-| Path | Middleware | Session | User |
-|------|------------|---------|------|
-| **HTTP** (`/admin`, `/api`, …) | Full Django `MIDDLEWARE` | `SessionMiddleware` | `AuthenticationMiddleware` |
-| **Reflex events** | Bridge only (session + auth + optional i18n) | `SESSION_ENGINE` on synthetic request | `aget_user` in bridge |
-
-There is **no second auth implementation**—handlers use Django’s session row and user model. OAuth, JWT, and multi-tenant auth are not built in yet.
-
-For how **cookies**, **sessionStorage**, and **server-side Reflex state** fit together, see [Browser storage: Django `sessionid` vs Reflex `token`](#browser-storage-django-sessionid-vs-reflex-token-for-django-developers).
+The cookie is the same `sessionid` cookie Django sets when you log in. The session row is the same row from `django_session`. There is no second auth system. If `request.user.is_authenticated` is `True` for `/admin/`, it's also `True` for the next Reflex event.
 
 ---
 
-## Two layers: live objects vs reactive snapshot
+## The "live vs snapshot" rule (read this once)
 
-`AppState` (and `DjangoUserState`) expose **two** ways to read auth, on purpose:
+`AppState` exposes the user in **two** ways. They look similar; one is safe for security checks and one isn't.
 
-| Layer | Where | Use for |
-|-------|--------|---------|
-| **Live** | `self.user`, `self.session` in `@rx.event` handlers | Authorization, ORM scoping, session writes |
-| **Snapshot** | `self.is_authenticated`, `self.username`, `self.email`, … | UI bindings on **`AppState`** / **`DjangoUserState`** branches (`rx.cond`, `rx.text`) |
-| **Live UI (canned auth)** | **`DjangoAuthState.is_authenticated`** (`@rx.var`) | Sidebar logout, **`@login_required`** page gate — reads **`current_user()`** per event |
+| What it is | Where to use it |
+|:---|:---|
+| **`self.request.user`** (or `self.user`) — the live Django user for this event, computed server-side | Inside `@rx.event` handlers. Use for authorization, ORM filters, mutations. |
+| **`self.is_authenticated`**, **`self.username`**, **`self.email`**, … — reactive snapshot fields | Inside components (`rx.cond`, `rx.text`). Use for UI rendering only. |
+
+The reactive snapshot is shipped to the browser. Browser state can be tampered with. **Never** base a security decision on the snapshot alone.
 
 ```python
-# Live — always current for this event; not sent to the browser as a Reflex var
-if self.user.is_authenticated:
-    await MyModel.objects.filter(owner=self.user).adelete()
+# wrong — relies on browser-visible flag
+@rx.event
+async def delete_post(self, post_id: int):
+    if self.is_authenticated and self.is_staff:    # snapshot — spoofable
+        await Post.objects.filter(pk=post_id).adelete()
 
-# Snapshot — synced to the client for AppState / dashboard branches
-rx.cond(DashboardState.is_authenticated, rx.text(DashboardState.username), ...)
-
-# Canned auth branch — live session via @rx.var (not the inherited django_user_state snapshot)
-rx.cond(DjangoAuthState.is_authenticated, logout_button, ...)
+# right — checks the live user
+@rx.event
+async def delete_post(self, post_id: int):
+    if self.request.user.is_authenticated and self.request.user.is_staff:
+        await Post.objects.filter(pk=post_id).adelete()
 ```
 
-In component code, **`DjangoAuthState.is_authenticated`** is a Reflex **`Var`** (for example `BooleanCastedVar`), not a Python **`bool`**—that is expected. The client evaluates it from server state after each event.
-
-**Rule:** Never use snapshot or computed UI fields alone to allow deletes, admin actions, or private data—always check `self.user` or `require_login_user()` in the handler.
-
-When **`REFLEX_DJANGO_AUTH_AUTO_SYNC`** is `True` (default), the bridge refreshes snapshot fields on every event for **all** **`DjangoUserState`** substates and **`DjangoAuthState`** (username, email, …), so navbars and dashboards update after login/logout without calling `sync_from_django` on every page. **`DjangoAuthState.is_authenticated`** is separate: it is a **`@rx.var`** that calls **`current_user()`** and does not rely on the old inherited snapshot on a parent `django_user_state` substate.
-
-**`DjangoUserState.sync_from_django`** (e.g. in page `on_load`) performs the same full-tree refresh for snapshot fields. Optional **`DjangoAuthState.sync_auth_ui`** refreshes snapshots and marks inherited fields dirty when you mix auth and app substates in one layout.
+Easier rule: in handlers, use `self.request.user`. In components, use `self.is_authenticated` / `self.username`.
 
 ---
 
-## Accessing the Django request on `AppState`
+## Gating handlers with decorators
 
-Every Reflex event runs with a **synthetic `HttpRequest`** built by **`DjangoEventBridge`** from `router_data` (path, query string, cookies, headers, client IP). **`AppState`** (and subclasses like **`ModelState`**) expose that request on the state instance so handlers feel like Django views.
-
-### Three equivalent styles
-
-| Style | Where | Best for |
-|-------|--------|----------|
-| **`self.request`** | `AppState` / `ModelState` handlers | Instance-based code, CRUD hooks (`get_queryset`, …) |
-| **`self.django_request`** | Same | When you need the raw `HttpRequest` object |
-| **`from reflex_django import request`** | Any `rx.State` handler | Plain `rx.State` without `AppState` |
-| **`current_request()` / `current_user()`** | Any handler | Explicit, functional style |
-
-All of them read the **same** bridged request for the current event. Outside an event (import time, background task), there is no request—`request.user` is anonymous and `request.GET` is empty.
-
-```mermaid
-flowchart LR
-  Bridge[DjangoEventBridge] --> Http[HttpRequest]
-  Http --> CTX[current_request contextvar]
-  CTX --> SR[self.request / request proxy]
-  CTX --> SU[self.user]
-  Dispatch[ModelCRUDView.dispatch] --> Bind[bind_request_context]
-  Bind --> SR
-```
-
-### `self.request` — `DjangoStateRequest` wrapper
-
-On **`AppState`**, **`self.request`** is a **`DjangoStateRequest`** that wraps the synthetic `HttpRequest` and (when context collection runs) merged **context-processor** output.
-
-| Access | What you get |
-|--------|----------------|
-| **`self.request.user`** | Live Django user (`AnonymousUser` when logged out)—use for ORM filters and authorization |
-| **`self.request.django_request`** | Same as **`self.django_request`** — raw `HttpRequest` |
-| **`self.request.GET`**, **`.POST`**, **`.path`**, **`.method`**, **`.META`**, **`.COOKIES`** | Forwarded from the underlying `HttpRequest` |
-| **`self.request.LANGUAGE_CODE`**, **`self.request.SITE_NAME`**, … | Keys from **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** (when loaded) |
-| **`self.request.context`** | `dict` copy of all processor keys (e.g. `context["user"]` for JSON snapshot) |
-
-**`self.user`** is a shortcut for **`self.request.user`** (and **`current_user()`**). Prefer **`self.request.user`** in CRUD hooks for consistency with Django view style.
-
-**Important:** **`self.request.user`** is the **live** user model. Context processors often expose a **JSON `user` snapshot** for templates—that lives in **`self.request.context["user"]`**, not in **`self.request.user`**.
-
-### Example: dashboard handler (plain `AppState`)
-
-```python
-import reflex as rx
-from reflex_django.state import AppState
-
-class DashboardState(AppState):
-    last_path: str = ""
-
-    @rx.event
-    async def on_load(self):
-        # Auth — same as self.user
-        if not self.request.user.is_authenticated:
-            return rx.redirect("/login")
-
-        # Query string from the page URL (router_data)
-        tab = self.request.GET.get("tab", "overview")
-
-        # Session (also available as self.session["key"])
-        self.request.session["last_visit"] = "dashboard"
-
-        # Optional: context processor keys when configured
-        site = getattr(self.request, "SITE_NAME", None)
-
-        self.last_path = self.request.path
-        return rx.toast.info(f"Tab={tab}, site={site}")
-```
-
-### Example: user-scoped CRUD hooks (`ModelState` / `ModelCRUDView`)
-
-During **`dispatch`** (`save`, `refresh`, `load`, …), reflex-django calls **`bind_request_context()`**, which attaches **`self.request`** with context processors when **`load_context_processors`** is `True` (default).
-
-```python
-from reflex_django.state import ModelState
-from notes.models import Note
-
-class NotesState(ModelState):
-    model = Note
-    fields = ["title", "content"]
-    ordering = ("-id",)
-
-    def get_queryset(self):
-        # Scope rows to the logged-in user
-        return Note.objects.filter(owner=self.request.user)
-
-    def get_object_lookup(self, pk: int) -> dict:
-        return {"pk": pk, "owner": self.request.user}
-
-    def get_create_kwargs(self, state_data: dict) -> dict:
-        return {**state_data, "owner": self.request.user}
-
-    def filter_queryset(self, qs):
-        # Processor key (settings.REFLEX_DJANGO_CONTEXT_PROCESSORS)
-        if getattr(self.request, "LANGUAGE_CODE", None) == "ar":
-            qs = qs.filter(locale="ar")
-        return qs
-```
-
-`ModelState` subclasses **`AppState`**, so you can use **`self.request`** in custom **`@rx.event`** methods as well as in generated CRUD hooks.
-
-### Example: read query params on a plain `rx.State`
-
-When a class does **not** subclass `AppState`, use the module proxy:
-
-```python
-import reflex as rx
-from reflex_django import request
-
-class SearchState(rx.State):
-    @rx.event
-    async def run_search(self):
-        q = request.GET.get("q", "").strip()
-        if not request.user.is_authenticated:
-            return rx.toast.error("Sign in to search")
-        # ... ORM using request.user
-```
-
-Invalid import: `from reflex_django.state import request` — use **`from reflex_django import request`**.
-
-### `self.django_request` — raw `HttpRequest`
-
-Use when a Django API expects the real request object (login, messages, third-party helpers):
-
-```python
-from reflex_django.context import current_request
-from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
-
-class AuthState(AppState):
-    @rx.event
-    async def sign_in_and_go(self):
-        ok = await self.login(self.username, self.password)
-        if not ok:
-            return await self.on_auth_failed()
-        http = self.django_request  # or current_request()
-        if http is not None:
-            return _sync_session_cookie_then_nav(http, "/")
-```
-
-### Context processors on `self.request`
-
-Enable processors in Django settings via **`REFLEX_DJANGO_CONTEXT_PROCESSORS`** (see [Django context to Reflex](django_context_to_reflex.md)). During **`ModelCRUDView.dispatch`**, keys are merged onto **`self.request`**:
-
-```python
-# Attribute style (template-like)
-lang = self.request.LANGUAGE_CODE
-
-# Dict style (explicit)
-snapshot = self.request.context.get("user", {})
-perms = self.request.context.get("permissions", [])
-```
-
-Disable collection but keep the HTTP request:
-
-```python
-class PublicState(ModelState):
-    model = Article
-    fields = ["title", "body"]
-    load_context_processors = False  # class body or Meta
-```
-
-### What not to do
-
-| Do not | Do instead |
-|--------|------------|
-| Pass **`self.request.user`** into **`rx.text(...)`** | Use snapshot vars: **`self.username`**, **`self.is_authenticated`** |
-| Rely on **`self.is_authenticated`** alone to allow deletes | Check **`self.request.user`** or **`require_login_user()`** in the handler |
-| Expect CSRF middleware on Reflex events | Protect mutations with **`@login_required`**, permissions, or Django HTTP views |
-| Use **`self.request`** at import time | Only inside **`@rx.event`** handlers (after the bridge runs) |
-
-### HTTP details
-
-Query params, cookies, and headers come from **`event.router_data`**. See [Django middleware to Reflex](django_middleware_to_reflex.md) for the full bridge pipeline and **`from reflex_django import request`** API (`request.headers`, `request.COOKIES`, `request.path`, …).
-
----
-
-## Quick start
-
-**1. Plugin** (in `rxconfig.py`):
-
-```python
-from reflex_django import ReflexDjangoPlugin
-
-config = rx.Config(
-    app_name="myapp",
-    plugins=[
-        ReflexDjangoPlugin(
-            settings_module="backend.settings",
-            install_event_bridge=True,  # default
-        )
-    ],
-)
-```
-
-**2. State** — subclass `AppState`:
-
-```python
-import reflex as rx
-from reflex_django.state import AppState
-
-class AppStateRoot(AppState):
-    """Rename to match your app; shown as one Reflex state tree."""
-
-    @rx.event
-    async def on_load(self):
-        # Optional: auto-sync usually makes this unnecessary for auth fields
-        await self.refresh_django_user_fields()
-```
-
-**3. Protect handlers and pages:**
+`reflex-django` ships two decorators for the most common cases:
 
 ```python
 from reflex_django.auth import login_required, permission_required
 
-@rx.event
-@login_required
-async def members_only(self):
-    return self.user.get_username()
+class PostState(AppState):
+
+    @rx.event
+    @login_required
+    async def create(self):
+        # self.request.user is guaranteed to be authenticated here
+        await Post.objects.acreate(owner=self.request.user, title=self.title)
+
+    @rx.event
+    @permission_required("blog.change_post")
+    async def edit(self, post_id: int):
+        ...
+
+    @rx.event
+    @permission_required("blog.delete_post", redirect="/login")
+    async def delete(self, post_id: int):
+        ...
+```
+
+If the user isn't authenticated (or doesn't have the permission), the handler doesn't run. The decorator returns a `rx.redirect(...)` to `REFLEX_DJANGO_LOGIN_URL` (default: `/login`).
+
+You can also do explicit checks if you need finer-grained control:
+
+```python
+from reflex_django.auth import require_login_user
 
 @rx.event
-@permission_required("shop.view_product", redirect="/login")
-async def list_products(self):
+async def custom_check(self):
+    user = require_login_user()    # raises if not authenticated
     ...
 ```
 
 ---
 
-## Complete example: layout, dashboard, and custom login
+## Gating whole pages
 
-This pattern fits apps that use **`AppState`** for both navigation and feature state (no separate `DjangoUserState` class required).
-
-**`myapp/state.py`**
+Wrap a page function with `@login_required` and Reflex will redirect anonymous visitors:
 
 ```python
 import reflex as rx
-from reflex_django.state import AppState
-
-
-class SiteState(AppState):
-    login_username: str = ""
-    login_password: str = ""
-    login_error: str = ""
-
-    @rx.event
-    async def submit_login(self):
-        self.login_error = ""
-        ok = await self.login(self.login_username, self.login_password)
-        if not ok:
-            self.login_error = "Invalid username or password."
-            self.login_password = ""
-            return
-        # After login, sync browser cookie (see "Session cookie sync" below)
-        from reflex_django.context import current_request
-        from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
-
-        request = current_request()
-        if request is not None:
-            return _sync_session_cookie_then_nav(request, "/")
-
-    @rx.event
-    async def sign_out(self):
-        await self.logout()
-        from reflex_django.context import current_request
-        from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
-
-        request = current_request()
-        if request is not None:
-            return _sync_session_cookie_then_nav(
-                request, "/login", clear_cookie=True
-            )
-
-
-def navbar() -> rx.Component:
-    return rx.hstack(
-        rx.link("Home", href="/"),
-        rx.spacer(),
-        rx.cond(
-            SiteState.is_authenticated,
-            rx.hstack(
-                rx.text("Hi, ", SiteState.username),
-                rx.button("Log out", on_click=SiteState.sign_out),
-            ),
-            rx.link("Sign in", href="/login"),
-        ),
-        width="100%",
-        padding="1rem",
-    )
-
-
-def dashboard_page() -> rx.Component:
-    return rx.vstack(
-        navbar(),
-        rx.heading("Dashboard"),
-        rx.cond(
-            SiteState.is_staff,
-            rx.badge("Staff"),
-            rx.fragment(),
-        ),
-        rx.text("Theme from session: ", SiteState.username),  # bind real vars as needed
-        padding="2rem",
-    )
-
-
-def login_page() -> rx.Component:
-    return rx.center(
-        rx.card(
-            rx.heading("Sign in"),
-            rx.input(
-                placeholder="Username",
-                value=SiteState.login_username,
-                on_change=SiteState.set_login_username,
-            ),
-            rx.input(
-                placeholder="Password",
-                type="password",
-                value=SiteState.login_password,
-                on_change=SiteState.set_login_password,
-            ),
-            rx.cond(
-                SiteState.login_error != "",
-                rx.callout(SiteState.login_error, color_scheme="red"),
-            ),
-            rx.button("Sign in", on_click=SiteState.submit_login, width="100%"),
-            padding="1.5rem",
-        ),
-        min_height="80vh",
-    )
-```
-
-**`myapp/myapp.py`**
-
-```python
-import reflex as rx
+from reflex_django import template
 from reflex_django.auth import login_required
 
-from myapp.state import dashboard_page, login_page
-
-app = rx.App()
-app.add_page(dashboard_page, route="/", title="Dashboard")
-app.add_page(login_page, route="/login", title="Sign in")
-
-# Optional: wrap page function for client-side login gate
-@rx.page(route="/settings")
+@template(route="/account", title="Account")
 @login_required
-def settings_page():
-    return rx.heading("Settings")
+def account() -> rx.Component:
+    return rx.text("Members only.")
 ```
 
-Use **`add_auth_pages(app)`** instead of a custom login page when you want batteries-included UI ([Canned auth pages](#canned-auth-pages) below).
+Or, if you want to control the redirect target per page:
+
+```python
+@template(route="/billing")
+@login_required(login_url="/login?next=/billing")
+def billing() -> rx.Component:
+    ...
+```
 
 ---
 
-## `AppState` API reference
+## Reading the user in handlers
 
-Import:
-
-```python
-from reflex_django.state import AppState
-```
-
-`AppState` extends `DjangoUserState` and is the recommended base for dashboards and **`ModelCRUDView`** CRUD states.
-
-Handlers (server): **`self.request`**, **`self.django_request`**, **`self.user`**, **`self.session`**.  
-UI (reactive): **`self.is_authenticated`**, **`self.username`**, **`self.email`**, …
-
-See [Accessing the Django request on `AppState`](#accessing-the-django-request-on-appstate) for full **`self.request`** examples.
-
-### `self.request` and `self.django_request`
-
-| Property | Type | Role |
-|----------|------|------|
-| **`self.request`** | `DjangoStateRequest` | **`.user`**, **`.GET`**, **`.path`**, context-processor keys, **`.context`** dict |
-| **`self.django_request`** | `HttpRequest \| None` | Raw Django request from the event bridge |
+Inside any `@rx.event async def` on an `AppState` subclass:
 
 ```python
 class OrdersState(AppState):
     @rx.event
-    async def export_csv(self):
-        if not self.request.user.is_staff:
-            return await self.on_permission_denied()
-        tenant = self.request.GET.get("tenant")
-        rows = await Order.objects.filter(tenant_id=tenant).aiterator()
-        ...
+    async def my_orders(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return rx.redirect("/login")
+        self.orders = [
+            {"id": o.id, "total": str(o.total)}
+            async for o in Order.objects.filter(customer=user)
+        ]
 ```
 
-Equivalent: **`from reflex_django import request`** then **`request.user`**, **`request.GET.get("tenant")`** in any `rx.State`.
+Everything you know about Django users works here:
 
-### `self.user` (property)
+- `user.is_authenticated`, `user.is_staff`, `user.is_superuser`
+- `user.username`, `user.email`, `user.get_full_name()`
+- `await user.aget_all_permissions()`, `user.has_perm("app.codename")` (sync-safe in this context — the bridge eager-resolves)
+- `user.groups` (use async ORM or prefetch in heavy code paths)
 
-Returns the live Django user for the current event (`AnonymousUser` when logged out). Supports everything on your user model: `is_authenticated`, `username`, `email`, `is_staff`, `is_superuser`, and `user.groups` (use async ORM or prefetch in handlers).
+For ORM queries, scope by `owner=user` (or `tenant=user.tenant`, etc.) — same pattern as in Django views.
 
-```python
-class OrdersState(AppState):
-    @rx.event
-    async def ship_order(self, order_id: int):
-        if not self.user.is_authenticated:
-            return rx.toast.error("Sign in required")
-        order = await Order.objects.aget(pk=order_id, customer=self.user)
-        ...
-```
+---
 
-Equivalent without `AppState`: `from reflex_django import current_user` then `user = current_user()`, or **`self.request.user`** when you subclass **`AppState`**.
-
-### `self.session` (property)
-
-A **`SessionProxy`** over Django’s session for this event. Reads and writes persist to the session backend; **`__setitem__`** and **`__delitem__`** call `save()` automatically.
+## Reading and writing the session
 
 ```python
 class PreferencesState(AppState):
     @rx.event
     async def set_theme(self, theme: str):
-        self.session["theme"] = theme  # auto-saved
+        self.session["theme"] = theme
+        await self.session.asave()
 
     @rx.event
-    async def clear_theme(self):
-        del self.session["theme"]
-
-    @rx.event
-    async def load_theme(self) -> str:
-        return self.session.get("theme", "light")
+    async def on_load(self):
+        self.theme = self.session.get("theme", "light")
 ```
 
-For bulk updates, you can call `await self.session.asave()` explicitly after several in-memory changes if you bypass the proxy’s setters.
-
-### Snapshot fields (reactive UI)
-
-| Field | Meaning |
-|-------|---------|
-| `user_id` | Primary key or `None` |
-| `username` | `get_username()` |
-| `email` | Email address |
-| `first_name`, `last_name` | Profile names |
-| `is_authenticated` | Logged in |
-| `is_staff`, `is_superuser` | Django flags |
-| `group_names` | List of group names when loaded |
-
-Refresh manually:
-
-```python
-await self.refresh_django_user_fields()
-# or (updates every DjangoUserState substate, including DjangoAuthState)
-await self.sync_from_django(include_groups=True)
-```
-
-`sync_from_django` walks the client state tree and refreshes **every** `DjangoUserState` substate and **`DjangoAuthState`** (snapshot fields such as `username`), not only the handler’s node.
-
-For **`DjangoAuthState`**, use **`DjangoAuthState.is_authenticated`** in UI (`@rx.var` from **`current_user()`**). Do not expect the legacy inherited path `…django_user_state.is_authenticated` on the auth branch—that parent substate no longer exists on the flat auth class.
-
-Group names are only loaded when `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` is `True` or `include_groups=True` is passed.
-
-### `await self.has_perm(perm: str) -> bool`
-
-Async wrapper around Django’s `user.has_perm("app_label.codename")`.
-
-```python
-if await self.has_perm("billing.change_invoice"):
-    await self._save_invoice()
-else:
-    return await self.on_permission_denied()
-```
-
-### `await self.has_group(name: str) -> bool`
-
-Checks membership by group **name**. Uses `group_names` when already loaded; otherwise one async DB query.
-
-```python
-if await self.has_group("editors"):
-    self.show_editor_tools = True
-```
-
-### `await self.login(username, password, *, login_fields=None) -> bool`
-
-Uses Django’s **`aauthenticate`** (via `aauthenticate_login_fields`) and **`alogin`**. On success, saves the session and refreshes snapshot fields. Returns `False` and calls **`on_auth_failed()`** when credentials fail or no request is bound.
-
-```python
-ok = await self.login(email, password, login_fields=("email",))
-```
-
-`login_fields` defaults to `REFLEX_DJANGO_AUTH["LOGIN_FIELDS"]` or `("username",)`.
-
-### `await self.logout() -> None`
-
-Calls **`alogout`**, saves the session, and refreshes snapshot fields. Pair with cookie sync JS when you need the browser’s `sessionid` updated ([Session cookie sync](#session-cookie-sync-after-login)).
-
-### Hooks
-
-```python
-class BrandedState(AppState):
-    async def on_auth_failed(self):
-        self.login_error = "We could not sign you in."
-        return rx.toast.error("Invalid credentials")
-
-    async def on_permission_denied(self):
-        return rx.redirect("/forbidden")
-```
-
-Default `on_permission_denied` shows a generic error toast.
+The session is the same per-user session backed by `django_session`. It's shared between HTTP requests and Reflex events.
 
 ---
 
-## Server-side authorization (without decorators)
+## Flash messages
 
-Use these inside any `rx.State` or `AppState` handler:
+Add messages from a handler:
 
 ```python
-from reflex_django import current_user, require_login_user
-from reflex_django.auth import auser_has_perm, ReflexDjangoAuthError
+from django.contrib import messages
 
 @rx.event
-async def delete_item(self, item_id: int):
+async def submit(self):
     try:
-        user = require_login_user()
-    except ReflexDjangoAuthError:
-        return rx.toast.error("Sign in required")
-
-    if not await auser_has_perm(user, "shop.delete_product"):
-        return rx.toast.error("Permission denied")
-
-  # safe to delete
+        ...
+        messages.success(self.request, "Saved.")
+    except Exception:
+        messages.error(self.request, "Couldn't save.")
 ```
 
-`require_login_user()` raises when the user is anonymous—useful when you want explicit error handling instead of `rx.redirect`.
-
----
-
-## Decorators
-
-Import from `reflex_django.auth` or `from reflex_django import login_required, permission_required`.
-
-### `@login_required`
-
-Works on **page functions** (no `self`) and **event handlers** (`async def handler(self, ...)`).
+Render them in your UI by binding to the reactive `DjangoUserState.messages` list:
 
 ```python
-from reflex_django.auth import login_required
+from reflex_django import DjangoUserState
 
-# Page: UI gate using DjangoAuthState.is_authenticated (@rx.var) + redirect on mount
-@rx.page(route="/dashboard")
-@login_required
-def dashboard():
-    return rx.heading("Members only")
-
-# Event: server check + rx.redirect when anonymous
-class SecretState(AppState):
-    @rx.event
-    @login_required(login_url="/login")
-    async def load_secret(self):
-        return {"data": "classified"}
-```
-
-| Parameter | Default | Role |
-|-----------|---------|------|
-| `login_url` | `REFLEX_DJANGO_LOGIN_URL` | Redirect target for anonymous users on **events** |
-
-> **Warning:** Page decorators only affect what the **client** renders first. Always protect events that return or mutate private data.
-
-### `@permission_required`
-
-**Event handlers** enforce the permission with `auser_has_perm`. **Pages** gate on login (and optional `fallback` component); enforce fine-grained permissions in `on_load` events or handler methods.
-
-```python
-from reflex_django.auth import permission_required
-
-class CatalogState(AppState):
-    @rx.event
-    @permission_required("products.view_product", redirect="/login")
-    async def load_catalog(self):
-        return await Product.objects.all().values_list("name", flat=True)
-
-    @rx.event
-    @permission_required(
-        "products.delete_product",
-        on_denied=lambda self: rx.toast.error("Not allowed"),
+def message_banner():
+    return rx.foreach(
+        DjangoUserState.messages,
+        lambda m: rx.callout(m.message, color_scheme=m.level_tag),
     )
-    async def delete_product(self, product_id: int):
-        await Product.objects.filter(pk=product_id).adelete()
 ```
 
-| Parameter | Role |
-|-----------|------|
-| `perm` | Django permission string (`app_label.codename`) |
-| `redirect` | `rx.redirect` target when denied (handlers) |
-| `login_url` | Used when anonymous (falls back to redirect) |
-| `fallback` | Page-only: component factory when not authenticated |
-| `on_denied` | Event-only: `callable(state)` return value (e.g. toast, redirect) |
-
-If `on_denied` is omitted and the state defines `on_permission_denied`, that method is awaited.
+Each message has `level`, `level_tag`, `message`, `tags`, and `extra_tags`.
 
 ---
 
-## Settings
+## The built-in auth pages
 
-| Setting | Default | Meaning |
-|---------|---------|---------|
-| `REFLEX_DJANGO_AUTH_AUTO_SYNC` | `True` | Refresh `AppState` snapshot vars on each event |
-| `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | `False` | Include `group_names` in sync (extra query) |
-| `REFLEX_DJANGO_LOGIN_URL` | `/login` | Default redirect for decorators |
-| `REFLEX_DJANGO_AUTH` | (see README) | Canned pages, routes, `LOGIN_FIELDS`, messages |
-
-Disable auto-sync if you need to minimize per-event work and will call `sync_from_django` yourself:
+If you want login, register, password-reset, and password-reset-confirm pages without writing them, drop one call into your `views.py`:
 
 ```python
-# settings.py
-REFLEX_DJANGO_AUTH_AUTO_SYNC = False
+# shop/views.py
+from reflex_django.auth import add_auth_pages
+
+add_auth_pages()
+```
+
+That registers four routes (with sensible defaults):
+
+| Route | What it does |
+|:---|:---|
+| `/login` | Username/password sign in |
+| `/register` | Create a new user |
+| `/password_reset` | Send a reset email |
+| `/password_reset_confirm` | Set a new password |
+
+### Customizing them
+
+Put a `REFLEX_DJANGO_AUTH` dict in `settings.py` to change titles, URLs, or behavior:
+
+```python
+REFLEX_DJANGO_AUTH = {
+    "login_url": "/sign-in",
+    "register_url": "/sign-up",
+    "post_login_url": "/dashboard",
+    "post_logout_url": "/",
+    "username_field": "email",
+    "min_password_length": 10,
+    "register_enabled": True,
+    "password_reset_enabled": True,
+    "page_titles": {
+        "login": "Sign in to MyShop",
+        "register": "Create your account",
+    },
+}
+```
+
+To register pages individually instead of all at once:
+
+```python
+from reflex_django.auth import register_login_page, register_register_page
+
+register_login_page()
+register_register_page()
 ```
 
 ---
 
-## Browser storage: Django `sessionid` vs Reflex `token` (for Django developers)
+## Custom login flow
 
-If you are used to **Django-only** apps, login usually means: the browser gets a **`sessionid` cookie**, Django loads the session row from the database (or cache), and **`request.user`** is set in middleware. Reflex adds a **second client identifier** that is easy to confuse with “the session” because it is also called `token` and lives in the browser—but it is **not** your Django session and **not** a JWT or API key.
+If you want a fully custom login page, use the `login`/`logout` helpers on `AppState`:
 
-### Three different things in the browser
+```python
+class AuthState(AppState):
+    username: str = ""
+    password: str = ""
+    error: str = ""
 
-| What | Where | Who owns it | What it means |
-|------|--------|-------------|----------------|
-| **`sessionid`** (name from `SESSION_COOKIE_NAME`, default `sessionid`) | **HTTP cookie** | **Django** | Primary key into Django’s session store. This is **who is logged in**. The bridge reads it from `router_data.headers.cookie` (or the real cookie on full page loads) and builds `request.user` via `aget_user`. |
-| **`csrftoken`** (from `CSRF_COOKIE_NAME`, default `csrftoken`) | **HTTP cookie** | **Django** | CSRF protection for unsafe HTTP requests. Often sent with Reflex events when present; cleared on logout together with `sessionid`. |
-| **`token`** | **`sessionStorage`** (key literally named `token`) | **Reflex** | **Per-tab client id** (UUID). Same value as `self.router.session.client_token` in Python. Used to associate this browser tab with **Reflex server state** over the WebSocket—not with Django’s `django_session` table. |
+    @rx.event
+    async def submit(self):
+        self.error = ""
+        ok = await self.login(self.username, self.password)
+        if not ok:
+            self.error = "Invalid username or password."
+            self.password = ""
+            return
+        return rx.redirect("/")
 
-Other keys you may see in **sessionStorage** (for example `react-router-scroll-positions`) are Reflex/router UI cache. They are unrelated to Django login.
-
-**Do not confuse** Reflex’s `token` with:
-
-- Django’s **`sessionid`** cookie (session auth),
-- Password-reset URL segments named `[token]` or `[key]` (Django’s one-time reset token),
-- A bearer/API token you might add in a custom API.
-
-### Where each piece is used in the pipeline
-
-```mermaid
-flowchart TB
-  subgraph browser [Browser tab]
-    SS["sessionStorage.token\n(Reflex client UUID)"]
-    CK["Cookie: sessionid, csrftoken\n(Django)"]
-  end
-  subgraph reflex_server [Reflex + reflex-django]
-    WS[WebSocket / Socket.IO event]
-    RD[router_data on state tree]
-    Bridge[DjangoEventBridge]
-    Req[Synthetic HttpRequest]
-    User[request.user via aget_user]
-  end
-  subgraph django_store [Django]
-    SessRow[(Session row in DB/cache)]
-  end
-  SS --> WS
-  CK --> RD
-  CK --> WS
-  WS --> RD
-  RD --> Bridge --> Req
-  Req --> SessRow
-  SessRow --> User
+    @rx.event
+    async def sign_out(self):
+        await self.logout()
+        return rx.redirect("/login")
 ```
 
-1. **Full page load (HTTP)** — The browser sends **`sessionid`** in the `Cookie` header. Django middleware (on admin, API routes, etc.) loads the session as usual.
-2. **Reflex event (WebSocket)** — The client sends **`router_data`** (path, headers, and often a copy of cookies). **`DjangoEventBridge`** builds a synthetic `HttpRequest`, copies cookies into `request.COOKIES`, loads the session with **`SESSION_ENGINE`**, and resolves **`request.user`**—the same as a view, without running the full `MIDDLEWARE` stack.
-3. **Reflex `token`** — Identifies **this tab’s** connection to Reflex state on the server (hydration, reconnect, background tasks). It does **not** replace `sessionid`; Django auth for handlers still comes from the **session cookie** (and mirrored cookie string in `router_data`).
+`await self.login(...)` calls Django's `aauthenticate` + `alogin` and updates the session. `await self.logout()` calls `alogout`.
 
-### Login: what changes
+### A note on cookie sync after login
 
-| Step | Django | Browser |
-|------|--------|---------|
-| `await self.login(...)` / `alogin` | Creates/updates the **session row** and binds the user | — |
-| `session_async_save` | Persists the session backend | — |
-| `mirror_auth_cookies_to_state_tree` | — | Copies **`sessionid`** into **`router_data.headers.cookie`** on the Reflex state tree so later events without cookie headers still see the new session |
-| `_sync_session_cookie_then_nav` | — | **`sessionStorage.clear()`** (drops stale Reflex `token`), expires old **`sessionid`** in JS, writes new **`sessionid`**, then navigates (e.g. to `/`) |
-
-So after login you want **both**: a valid Django session row **and** the browser holding the matching **`sessionid`** cookie (plus a fresh Reflex client id after storage clear).
-
-### Logout: what must be cleared
-
-| Step | Django | Browser / Reflex |
-|------|--------|------------------|
-| `await self.logout()` / `alogout` | **`flush`** session row; user is anonymous on the server | — |
-| `strip_auth_cookies_from_request` | Removes `sessionid` / `csrftoken` from the **synthetic** request for this event | — |
-| `clear_auth_cookies_from_state_tree` | — | Strips `sessionid` / `csrftoken` from persisted **`router_data`** on all substates |
-| `_sync_session_cookie_then_nav(..., clear_cookie=True)` | — | Expires **`sessionid`** and **`csrftoken`** cookies, **`sessionStorage.clear()`** and **`localStorage.clear()`**, then navigates to `/login` |
-
-If you only clear Django’s session row and cookies but leave the old Reflex **`token`** in **sessionStorage**, the tab can reconnect with a **stale Reflex state** (still showing authenticated UI) while cookies are empty—classic **`/` ↔ `/login` redirect loop**. That is why logout clears client storage as well as cookies via `browser_auth_logout_clear_js` in `reflex_django.session_js`.
-
-### Mental model (one paragraph)
-
-**Django answers “who is this user?”** using the **`sessionid` cookie** and the session table. **Reflex answers “which tab / which copy of UI state?”** using **`sessionStorage.token`** and server-side state keyed by that client id. reflex-django wires Django into Reflex events by rebuilding **`request.user`** from cookies on every event; you must keep **cookies**, **`router_data` cookie mirrors**, and **Reflex client storage** in sync on login and logout because Reflex does not run `SessionMiddleware` or send `Set-Cookie` for you on Socket.IO events.
-
----
-
-## Session cookie sync after login
-
-Reflex events **do not** run `SessionMiddleware`, so `alogin` may not send `Set-Cookie` to the browser. Without syncing, the next full page load can still send an old `sessionid`. See [Browser storage: Django `sessionid` vs Reflex `token`](#browser-storage-django-sessionid-vs-reflex-token-for-django-developers) for the full picture.
-
-**After `await self.login(...)` or registration**, mirror the cookie and navigate:
+Reflex's WebSocket connection was opened with the *anonymous* session cookie. After `self.login(...)`, Django updates the session row server-side, but the browser still has the old cookie until the next HTTP response sets it. For most apps this is fine — the next HTTP navigation or page load updates the cookie. If you want it to update immediately, redirect through an HTTP response:
 
 ```python
 from reflex_django.context import current_request
 from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
 
-request = current_request()
-if request is not None:
-    return _sync_session_cookie_then_nav(request, "/")  # post-login path
+@rx.event
+async def submit(self):
+    ok = await self.login(self.username, self.password)
+    if not ok:
+        self.error = "Invalid credentials"
+        return
+    return _sync_session_cookie_then_nav(current_request(), "/")
 ```
 
-Logout with cookie clear (session + CSRF in the browser, plus server session flush):
-
-```python
-await self.logout()
-return _sync_session_cookie_then_nav(request, "/login", clear_cookie=True)
-```
-
-`DjangoAuthState.logout` and `session_auth_mixin` handlers do this automatically. They also clear Reflex client `sessionStorage` (websocket `token`, scroll cache) and `localStorage` on logout via `browser_auth_logout_clear_js`. Login clears `sessionStorage` before writing the new `sessionid`. Lower-level helpers: `browser_auth_logout_clear_js`, `browser_auth_cookies_clear_js`, `session_cookie_set_js`, `session_cookie_clear_js` from `reflex_django.session_js`.
-
-**HttpOnly cookies:** JS cookie mirroring cannot set `HttpOnly`; see Django `SESSION_COOKIE_HTTPONLY` tradeoffs in production.
+That issues a real HTTP redirect that carries the fresh `Set-Cookie` header.
 
 ---
 
-## `AppState` + `ModelCRUDView`
+## Login UI snapshot vs `AppState` snapshot
 
-CRUD states should inherit **`AppState`** so list/save/delete handlers can use **`self.request.user`** (or **`self.user`**) and default `login_required` wrapping. **`ModelCRUDView.dispatch`** calls **`bind_request_context()`** before hooks run—use **`self.request`** inside **`get_queryset`**, **`get_create_kwargs`**, etc.
+A small detail that occasionally trips people up.
 
-```python
-from reflex_django.state import AppState, ModelCRUDView
-from reflex_django.state.mixins.scoping import UserScopedMixin
+There are **two** ways the UI can react to login state:
 
-class NotesState(AppState, ModelCRUDView, UserScopedMixin):
-    scope_field = "user_id"
-
-    class Meta:
-        serializer = NoteSerializer
-        list_var = "notes"
-
-    def get_queryset(self, ctx):
-        # self.user is available in hooks
-        return super().get_queryset(ctx).filter(user=ctx.user)
-```
-
-Generated handlers call `require_login_user()` when the action is listed in `Meta.login_required_actions`.
-
----
-
-## `DjangoUserState` without `AppState`
-
-`DjangoUserState` is the same auth mixin without `AppStateMeta` / CRUD assembly. Use it for a **navbar-only** state or with **`session_auth_mixin`**:
+1. **Inheriting from `AppState`** — `MyState.is_authenticated`, `MyState.username`. These are part of your normal state tree and update via the per-event refresh.
+2. **`DjangoAuthState`** — a separate, lightweight Reflex state shipped with the built-in auth pages. Its `is_authenticated` is a `@rx.var` (a computed reactive variable) that calls `current_user()` each time, independent of your `AppState` subtree.
 
 ```python
-from reflex_django import DjangoUserState
-from reflex_django.mixins import SessionAuthConfig, session_auth_mixin
+from reflex_django.auth import DjangoAuthState
 
-LoginState = session_auth_mixin(
-    SessionAuthConfig(
-        post_login_redirect="/",
-        post_logout_redirect="/login",
-    ),
-    base=DjangoUserState,
-)
-```
-
-`DjangoAuthState` (canned auth pages) is a **flat** Reflex substate: **`AuthBridgeMixin` + `rx.State`**, with login/register/reset mixins merged in one class (not a nested `DjangoUserState` → `DjangoAuthState` substate chain).
-
-| Field / API | Role on `DjangoAuthState` |
-|-------------|---------------------------|
-| `user_id`, `username`, `email`, … | Owned snapshot fields (synced like `DjangoUserState`) |
-| **`is_authenticated`** | **`@rx.var`** — live `current_user().is_authenticated` for UI and `@login_required` |
-| `sync_from_django` | Same tree sync as `DjangoUserState` (delegated implementation) |
-| `sync_auth_ui` | Optional: refresh snapshots + dirty-mark on auth substate after layout mount |
-| `logout`, `submit_login`, … | Session auth events from `session_auth_mixin` |
-
-**Sidebar / layout example:**
-
-```python
-from reflex_django.auth.state import DjangoAuthState
-
-def sidebar_logout():
-    return rx.cond(
-        DjangoAuthState.is_authenticated,
-        rx.button("Log out", on_click=DjangoAuthState.logout),
-        rx.fragment(),
+def navbar():
+    return rx.hstack(
+        rx.cond(
+            DjangoAuthState.is_authenticated,
+            rx.text("logged in"),
+            rx.link("Sign in", href="/login"),
+        ),
     )
 ```
 
-**App dashboards** that use **`AppState`** / **`OverviewState`** should keep using that branch’s snapshot **`is_authenticated`** (or **`self.request.user`** in handlers). Mixing branches is fine: Welcome text can come from `load_metrics` + `self.request.user` while logout uses **`DjangoAuthState.is_authenticated`**.
+If you use `add_auth_pages()`, `DjangoAuthState` is registered automatically. If your app uses `AppState` everywhere, `MyState.is_authenticated` is enough.
+
+When `REFLEX_DJANGO_AUTH_AUTO_SYNC = True` (default), the bridge refreshes the snapshot fields on every event for all `AppState` subclasses. You usually don't need to call `await self.refresh_django_user_fields()` yourself.
 
 ---
 
-## Canned auth pages
-
-**Settings** (`backend/settings.py`):
+## Permission checks
 
 ```python
-REFLEX_DJANGO_AUTH = {
-    "SIGNUP_ENABLED": True,
-    "PASSWORD_RESET_ENABLED": True,
-    "LOGIN_URL": "/login",
-    "SIGNUP_URL": "/register",
-    "LOGIN_REDIRECT_URL": "/",
-    "LOGIN_FIELDS": ["username"],  # or ["email"] or ["username", "email"]
-}
+# In a handler
+if await self.user.ahas_perm("blog.delete_post"):
+    ...
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "noreply@localhost"
+# Or via decorator
+@rx.event
+@permission_required("blog.delete_post", redirect="/login")
+async def delete_post(self, post_id: int):
+    ...
+
+# Or read all permissions
+perms = await self.user.aget_all_permissions()
 ```
 
-**App module:**
+The reactive `self.perms` field (a JSON-safe list of `app.codename` strings) is fine for UI hiding/showing, but again: only use it for visual hints, not for actual access checks.
+
+---
+
+## Common patterns
+
+### Optional login on a page
 
 ```python
-from reflex_django.auth import add_auth_pages, login_required
+@template(route="/", on_load=HomeState.on_load)
+def home() -> rx.Component:
+    return rx.cond(
+        HomeState.is_authenticated,
+        rx.text(f"Hi, {HomeState.username}"),
+        rx.text("Hello, guest."),
+    )
 
-app = rx.App()
-add_auth_pages(app)
 
-app.add_page(index, route="/", on_load=...)  # your pages
-
-@login_required
-def dashboard():
-    return rx.heading("Members only")
+class HomeState(AppState):
+    @rx.event
+    async def on_load(self):
+        # AppState auto-refreshes is_authenticated/username; no extra work needed.
+        pass
 ```
 
-Pages: `LoginPage`, `RegisterPage`, `PasswordResetPage`, `PasswordResetConfirmPage`. Customize via `BaseAuthPage` hooks or `REFLEX_DJANGO_AUTH["MESSAGES"]`.
+### Required login on a page
 
-See [README authentication section](../README.md) for the full `REFLEX_DJANGO_AUTH` key table.
+```python
+@template(route="/dashboard", on_load=DashboardState.on_load)
+def dashboard() -> rx.Component:
+    return rx.heading("Dashboard")
 
----
 
-## Choosing an API
+class DashboardState(AppState):
+    @rx.event
+    async def on_load(self):
+        if not self.request.user.is_authenticated:
+            return rx.redirect("/login?next=/dashboard")
+```
 
-| Goal | Recommended API |
-|------|-----------------|
-| Navbar / `rx.cond` on login | `AppState` snapshot fields + auto-sync |
-| Check permission in handler | `await self.has_perm(...)` or `@permission_required` |
-| Scoped queryset | `self.user` in `get_queryset` / `filter(user=self.user)` |
-| Custom login form | `await self.login(...)` + `_sync_session_cookie_then_nav` |
-| Ready-made auth UI | `add_auth_pages(app)` + `DjangoAuthState` |
-| No AppState in this class | `current_user()` in plain `rx.State` |
+### Required role/permission
 
----
+```python
+class AdminToolsState(AppState):
+    @rx.event
+    @permission_required("staff.view_admin_tools", redirect="/login")
+    async def on_load(self):
+        ...
+```
 
-## Troubleshooting
+### Owner-scoped CRUD
 
-| Symptom | Likely cause | Fix |
-|---------|----------------|-----|
-| `current_user()` always anonymous | Event bridge off | `install_event_bridge=True` on plugin |
-| `self.request.user` always anonymous | Same as above | Enable bridge; ensure `sessionid` cookie is sent |
-| `AttributeError` on `self.request` outside event | No bridged request | Only access inside `@rx.event` handlers |
-| `self.request.SITE_NAME` missing | Processors not loaded | Set `REFLEX_DJANGO_CONTEXT_PROCESSORS`; use CRUD `dispatch` or `bind_request_context` |
-| Confused `request.user` in UI | User model in component tree | Use `self.username` / `self.is_authenticated` in `rx.*` |
-| Login works once, next event anonymous | Browser cookie stale | `_sync_session_cookie_then_nav` after login |
-| UI shows logged out while handler sees user | Snapshot not synced | Enable `REFLEX_DJANGO_AUTH_AUTO_SYNC` or `on_load=State.sync_from_django` |
-| `/` and `/login` redirect loop after re-login | Logout strips `sessionid` from persisted `router_data`; login only updated the browser cookie; events without cookies saw anonymous on `/` but authenticated on `/login` | Upgrade reflex-django (mirrors session into `router_data` on login + fixes cookie merge in the event bridge); `pip install -e` and **restart Reflex** |
-| Loop fixed only after clearing **session storage** in devtools (`token`, `react-router-scroll-positions`) | Stale Reflex websocket `token` in `sessionStorage` reconnects to old server state after logout | Upgrade reflex-django (`browser_auth_logout_clear_js` on logout); restart Reflex |
-| Logout button flashes then hides | UI bound to inherited `django_user_state.is_authenticated` snapshot, or stale snapshot on auth branch | Use **`DjangoAuthState.is_authenticated`** (`@rx.var`); reinstall editable package and **restart Reflex** |
-| `print(DjangoAuthState.is_authenticated)` shows a `Var`, not `True`/`False` | Expected in Python component code | Vars are reactive; test in the browser or in an event handler with `current_user()` |
-| Logout hidden on small screens | Sidebar `display` breakpoints hide the column | Show sidebar from `md`/`lg` up (see your `sidebar.py` `display=[...]`) |
-| `RuntimeError: No Django session` | Handler outside event / bridge failed | Ensure bridge runs; check logs for preprocess errors |
-| Permission always denied | Wrong codename or user lacks perm | Verify in Django admin; use `user.has_perm` in shell |
-| `ImportError: _session_async_save` | Old import path | Use `from reflex_django.state.auth_bridge import session_async_save` |
+```python
+class TodosState(AppState):
+    todos: list[dict] = []
 
----
+    @rx.event
+    async def load(self):
+        if not self.request.user.is_authenticated:
+            self.todos = []
+            return
+        self.todos = [
+            {"id": t.id, "title": t.title}
+            async for t in Todo.objects.filter(owner=self.request.user)
+        ]
+```
 
-## Security checklist
-
-1. Authorize **mutations** with **`self.request.user`**, **`self.user`**, `require_login_user()`, or `has_perm`—not `is_authenticated` alone on the client.  
-2. Use **`@login_required`** / **`@permission_required`** on events that return private data.  
-3. Use a stable **`SECRET_KEY`** in production (password reset tokens).  
-4. Set **`SIGNUP_ENABLED=False`** if only admins may create users.  
-5. Scope querysets to **`self.request.user`** (or `UserScopedMixin`) for multi-user data.
+For the `ModelState`/`ModelCRUDView` equivalent of "scope to current user", see the [user-scoping section in the CRUD guide](crud_with_mixins_and_states.md).
 
 ---
 
-## See also
+## What about CSRF on Reflex events?
 
-- [State management](state_management.md) — plain `rx.State` vs helpers  
-- [Django middleware to Reflex](django_middleware_to_reflex.md) — bridge internals  
-- [CRUD with mixins](crud_with_mixins_and_states.md) — `ModelCRUDView`  
-- [Best practices](best_practices.md)
+`CsrfViewMiddleware` is intentionally **skipped** on Reflex WebSocket events. CSRF protects HTML form submissions where a third-party site could trigger a request with the user's cookies. A persistent WebSocket initiated by your own SPA doesn't have that attack shape — and Reflex events can't be triggered from a third-party origin anyway because of same-origin enforcement on the WebSocket.
+
+If you need extra protection on a mutation, prefer:
+
+- `@login_required` / `@permission_required` decorators on the handler.
+- Server-side checks on `self.request.user` before mutating.
+- For truly sensitive operations (account deletion, password change), require re-authentication or perform them through a dedicated Django HTTP view.
+
+The CSRF token itself is still available on `self.csrf_token` and `DjangoUserState.csrf_token` for any forms you POST through HTTP.
 
 ---
 
-**Navigation:** [← Django Middleware in Reflex](django_middleware_to_reflex.md) | [Next: Database Integration →](database_integration.md)
+## What's not built in (yet)
+
+`reflex-django` ships Django session auth. It does **not** ship:
+
+- OAuth / OIDC providers (use `django-allauth` or `social-auth-app-django` with your normal Django setup; the session it produces works inside Reflex too)
+- JWT
+- Multi-tenant auth
+
+These work fine through Django — the built-in middleware-based session is the integration point. Wire `django-allauth` as usual; users who log in through Google will have `request.user.is_authenticated == True` inside `@rx.event` handlers automatically.
+
+---
+
+## Cheat sheet
+
+| You want to… | Do this |
+|:---|:---|
+| Get the live user in a handler | `self.request.user` |
+| Show "Hi, name" in the UI | `rx.text(f"Hi, {AppState.username}")` |
+| Gate a handler by login | `@login_required` |
+| Gate a handler by permission | `@permission_required("app.codename")` |
+| Gate a whole page | wrap the page function with `@login_required` |
+| Log a user in from code | `await self.login(username, password)` |
+| Log a user out | `await self.logout()` |
+| Read the session | `self.session["key"]` |
+| Write the session | `self.session["key"] = value; await self.session.asave()` |
+| Add a flash message | `messages.success(self.request, "Saved")` |
+| Render flash messages | `rx.foreach(DjangoUserState.messages, ...)` |
+| Use built-in login/register/reset pages | `add_auth_pages()` in any `views.py` |
+
+---
+
+**Next:** [CRUD the manual way →](crud_without_mixins.md) · [Or: jump to CRUD with ModelState →](reactive_model_state.md)

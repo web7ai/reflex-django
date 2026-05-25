@@ -1,154 +1,196 @@
-# Command Line Interface
+# CLI reference
 
-`reflex-django` is operated through Django's `manage.py`. Two custom commands cover the entire build + serve lifecycle:
-
-- **`run_reflex`** — the dev loop (auto-export + serve + watch on port `8000`).
-- **`export_reflex`** — build the SPA bundle for CI / deployment.
-
-Every other Django command (`migrate`, `makemigrations`, `createsuperuser`, `shell`, `collectstatic`, …) works exactly as it does on any Django project.
+`reflex-django` adds two Django management commands. Plus the rest of `manage.py` keeps working as you'd expect. This page is a tour of what each command does and the flags that matter.
 
 ---
 
-## `manage.py run_reflex`
+## The two new commands
 
-```bash
-python manage.py run_reflex
-```
-
-What it does, in order:
-
-1. Bootstraps the reflex-django integration in the current Python process (patches `reflex.config.get_config`, runs `configure_django()`, imports `{app}/views.py`).
-2. Auto-exports the Reflex SPA bundle:
-   `manage.py export_reflex --frontend-only --no-zip --stage-to-static-root`.
-3. Spawns `uvicorn` as a subprocess pointed at `reflex_django.asgi_entry:application` on `0.0.0.0:8000`.
-4. Watches the project root for `.py` changes via `watchfiles`. Every change cleanly stops the uvicorn subprocess, re-exports the SPA, and respawns uvicorn.
-
-Excluded from the watcher: `.web/`, `node_modules/`, `staticfiles/`, `static_collected/`, `.reflex/`, `dist/`, `build/`, and your `STATIC_ROOT`. The export itself can never re-trigger the loop.
-
-### Flags
-
-| Flag | Effect |
+| Command | What it does |
 |:---|:---|
-| *(none)* | Auto-export + serve + watch. The canonical dev loop. |
-| `--skip-rebuild` | Keep the watcher but skip the per-restart re-export. Fast path for Python-only edits that don't touch Reflex pages. |
-| `--no-reload` | One-shot: rebuild + serve, no watcher, no auto-restart. |
-| `--env prod` | Production semantics: no auto-export at boot, `DEBUG` off, dev proxy off, no watcher. |
-| `--frontend-only` | Just rebuild the bundle and exit. Useful in CI / pre-deploy. |
-| `--backend-only` | Skip the watcher and serve whatever's on disk. |
-| `--with-vite` | Opt out of from-build and run the legacy Vite-HMR dev loop. |
-| `--backend-host`, `--backend-port` | ASGI bind host / port (defaults `0.0.0.0:8000`). |
-| `--frontend-port` | Vite port when `--with-vite` is active (default `3000`). |
-| `--loglevel` | Uvicorn log level (`debug`, `info`, `warning`, `error`). |
+| `python manage.py run_reflex` | Dev server: build the SPA, run uvicorn, watch for changes, restart on edit. |
+| `python manage.py export_reflex` | Build the SPA bundle for production (CI). |
 
-### Examples
-
-```bash
-# Default dev loop: auto-export + watch + restart on every .py change
-python manage.py run_reflex
-
-# Fast iteration: skip the re-export on each restart
-python manage.py run_reflex --skip-rebuild
-
-# Production smoke test: build once and serve on a custom port
-python manage.py run_reflex --env prod --backend-port 9000
-
-# Build the SPA and exit (useful in CI / pre-deploy)
-python manage.py run_reflex --frontend-only
-
-# Legacy Vite HMR (no auto-export, Vite reverse-proxied through Django)
-python manage.py run_reflex --with-vite
-```
-
-### Reload precedence (highest wins)
-
-1. `--env prod` → no reload, no auto-export.
-2. `--no-reload` → no reload, but auto-export still runs once at boot.
-3. `--with-vite` → in-process uvicorn reload + Vite HMR (legacy loop).
-4. Default → parent-side watch loop drives clean re-export + uvicorn restart.
-
----
-
-## `manage.py export_reflex`
-
-```bash
-python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
-```
-
-Builds the Reflex SPA bundle using Reflex's `export` utilities while keeping the reflex-django integration installed (so `rxconfig.py` is synthesised in memory and your `urls.py` provides the runtime config). The compiled output lands in `.web/build/client/` (SSR layout) or `.web/_static/` (legacy layout).
-
-### Flags
-
-| Flag | Effect |
-|:---|:---|
-| `--frontend-only` | Build only the frontend assets. Skip the backend export. |
-| `--backend-only` | Build only the backend artifacts. Skip the frontend bundle. |
-| `--no-zip` | Don't zip the output. Useful when you're staging files directly. |
-| `--zip-dest-dir <path>` | Custom destination for the zipped output. |
-| `--no-ssr` | Disable Reflex's SSR pre-rendering. |
-| `--stage-to-static-root` | Copy the compiled SPA into `STATIC_ROOT/_reflex/` (or `--stage-target`). |
-| `--stage-target <path>` | Override the staging path (default `STATIC_ROOT/_reflex`). |
-| `--env <name>` | Reflex environment label passed through to the exporter. |
-
-### Typical CI sequence
-
-```bash
-python manage.py migrate
-python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
-python manage.py collectstatic --noinput
-# Boot the ASGI server pointed at reflex_django.asgi_entry:application
-```
-
----
-
-## Standard Django commands
-
-All work unchanged:
+Plus everything you already use:
 
 ```bash
 python manage.py migrate
 python manage.py makemigrations
 python manage.py createsuperuser
 python manage.py shell
-python manage.py collectstatic --noinput
-python manage.py test
+python manage.py collectstatic
 ```
 
-`run_reflex` is the only command that owns the ASGI server lifecycle. `runserver` is **not** the right choice for full-stack development — it lacks the outer dispatcher, so Reflex WebSockets and the SPA catch-all would bypass the reflex-django integration.
+Nothing changes about those.
 
 ---
 
-## What `run_reflex` boots, end to end
+## `manage.py run_reflex` — the dev server
 
-1. `install_reflex_django_integration()` — patches `reflex.config.get_config` to read from `reflex_mount()`.
-2. `configure_django()` — `django.setup()` so apps, models, and middleware are ready.
-3. `refresh_get_config_bindings()` — re-resolves any cached config references.
-4. Imports `ROOT_URLCONF`; `reflex_mount()` registers the in-memory `rx.Config`.
-5. `reflex_django.django_led_app` imports `{app}/views.py` for each `INSTALLED_APPS` entry.
-6. `rx.App()` is instantiated; `@template` / `@page` decorators register routes.
-7. `manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` runs in-process.
-8. `uvicorn` subprocess starts at `reflex_django.asgi_entry:application`.
-9. `watchfiles` watches `BASE_DIR` for `.py` changes and drives the rebuild + restart loop.
+This is the one you'll run all day. It does three things:
+
+1. **Build the SPA.** Auto-runs `export_reflex` (frontend-only, no zip, staged to `STATIC_ROOT/_reflex/`) before starting.
+2. **Start uvicorn** as a subprocess on port 8000 (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`.
+3. **Watch** the project for `.py` changes. Each change cleanly stops uvicorn, re-runs the build, and starts a fresh uvicorn.
+
+```bash
+python manage.py run_reflex
+```
+
+That's the default. Open `http://localhost:8000/` and you have your admin at `/admin/`, the SPA at `/`, and the Reflex WebSocket on `/_event`.
+
+### Flags
+
+| Flag | Effect |
+|:---|:---|
+| `--skip-rebuild` | Skip the SPA build before starting. Good for "I only edited a Django model" iterations. |
+| `--no-reload` | Don't watch for changes. The server runs once and exits when you Ctrl+C. |
+| `--env prod` | Set `REFLEX_ENV` to `prod` (changes a few default toggles — see Reflex's docs). |
+| `--frontend-only` | Only build the SPA frontend; don't start the server. |
+| `--backend-only` | Only run uvicorn; don't build the SPA. (Assumes the bundle is already on disk.) |
+| `--with-vite` | Use the Vite hot-reload dev server proxied through Django. Hot-module reload on Reflex page edits. |
+| `--port N` | Override the backend port. |
+
+Common combos:
+
+```bash
+# Fast iteration on Django code only (skip SPA rebuilds)
+python manage.py run_reflex --skip-rebuild
+
+# Hot-module reload for Reflex page edits
+python manage.py run_reflex --with-vite
+
+# Build only, don't serve (useful in CI to verify)
+python manage.py run_reflex --frontend-only
+```
+
+### What it boots, in order
+
+```text
+1. install_reflex_django_integration()
+     - configures Django, patches reflex.config.get_config, builds in-memory rxconfig
+2. (unless --skip-rebuild)
+     export_reflex --frontend-only --no-zip --stage-to-static-root
+3. uvicorn subprocess
+     reflex_django.asgi_entry:application on port 8000
+4. parent process: watchfiles loop
+     - on .py change: stop uvicorn, re-export, start fresh uvicorn
+```
+
+Open the browser, the page loads, the WebSocket connects, you're in.
+
+### Common warnings, easily fixed
+
+**"DJANGO_SETTINGS_MODULE not set"**
+Set it in your shell: `export DJANGO_SETTINGS_MODULE=config.settings`. The auto-discovery via `manage.py` usually catches this, but if it can't, set it explicitly.
+
+**"Could not find compiled SPA"**
+The build hasn't run yet, or `STATIC_ROOT` isn't writable. Run `python manage.py run_reflex` once without `--skip-rebuild`.
+
+**Restart loop on every file**
+You're probably saving files in a watched directory that gets modified by the rebuild itself (`.web/`). Make sure your editor's "save" doesn't also touch generated files.
 
 ---
 
-## When to use the Reflex CLI directly
+## `manage.py export_reflex` — build the SPA bundle
 
-`reflex-django` wraps Reflex's own CLI for everything end-users need (`run`, `export`). You should not need `reflex run`, `reflex export`, or `reflex init` directly — those commands look for `rxconfig.py` on disk, which `reflex-django` deliberately does not require.
+For CI and production. Builds the compiled SPA and stages it where the runtime needs it.
 
-If you really want to use the Reflex CLI, set `REFLEX_DJANGO_URL_ROUTING=reflex_led` to fall back to the legacy two-port layout where Reflex runs the show and Django is a sub-application. That mode is supported for backwards compatibility but not the default.
+```bash
+python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+```
+
+That's the canonical invocation for a one-process production deploy.
+
+### Flags
+
+| Flag | Effect |
+|:---|:---|
+| `--frontend-only` | Only build the React/Vite frontend. Skip the backend bundle. |
+| `--backend-only` | The opposite. Rare. |
+| `--no-zip` | Don't zip the output. (Zipping is the old Reflex deploy format; you don't want it here.) |
+| `--stage-to-static-root` | Copy the build into `STATIC_ROOT/_reflex/`, where `ReflexMountView` serves it from. |
+| `--zip-dest PATH` | If you do want a zip, where to put it. |
+
+### Typical CI sequence
+
+```bash
+uv sync --frozen
+python manage.py migrate --noinput
+python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+python manage.py collectstatic --noinput
+# now start the ASGI server pointed at reflex_django.asgi_entry:application
+```
+
+The first two are standard Django. The third builds the SPA. The fourth picks up the SPA assets (plus your admin static files) into `STATIC_ROOT`. Your reverse proxy then serves `/static/` directly from disk.
 
 ---
 
-## Troubleshooting
+## Reload precedence
+
+When you save a file in dev:
+
+1. `watchfiles` notices the change.
+2. If it's a `.py` file inside the project (not in `.web/`, `.venv/`, etc.), the watcher triggers a restart.
+3. The watcher sends SIGTERM to uvicorn; uvicorn shuts down its workers.
+4. The watcher re-runs the export (unless `--skip-rebuild`).
+5. The watcher starts a fresh uvicorn subprocess.
+
+If you used `--with-vite`, edits to Reflex components hot-reload through Vite without restarting the Python process. Edits to states or non-page code still trigger a restart.
+
+---
+
+## Customizing what's watched
+
+By default, `run_reflex` watches `BASE_DIR/**/*.py`. To restrict or extend:
+
+```python
+# settings.py
+REFLEX_DJANGO_WATCH_PATHS = [
+    BASE_DIR / "config",
+    BASE_DIR / "shop",
+    BASE_DIR / "blog",
+]
+```
+
+Or to ignore specific directories:
+
+```python
+REFLEX_DJANGO_IGNORE_PATHS = [
+    BASE_DIR / "data",
+    BASE_DIR / "uploads",
+]
+```
+
+(These setting names are illustrative — check your installed version. The defaults usually work.)
+
+---
+
+## The `reflex django ...` CLI entry point
+
+There's also a `reflex django` command-line entry point that mirrors `manage.py`:
+
+```bash
+uv run reflex django migrate
+uv run reflex django run_reflex
+uv run reflex django collectstatic --noinput
+```
+
+It's a thin proxy that auto-discovers `DJANGO_SETTINGS_MODULE` from `manage.py`. Use whichever feels natural. For Django-first projects, `python manage.py ...` reads more naturally to most teams.
+
+---
+
+## Troubleshooting matrix
 
 | Symptom | Likely cause | Fix |
 |:---|:---|:---|
-| `WatchFiles detected changes ... Reloading...` hangs | You're running with `--with-vite` and uvicorn's in-process reloader hit a re-import deadlock. | Drop `--with-vite` and use the default from-build watch loop. |
-| `manage.py run_reflex` exits immediately with "Could not locate the built SPA directory" | Reflex's exporter produced an unexpected layout, or `--frontend-only` was disabled by environment overrides. | Run `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` manually and check the output paths. |
-| `rxconfig.py not found` from a Reflex CLI subcommand | You're calling `reflex run` / `reflex export` directly. | Use `manage.py run_reflex` / `manage.py export_reflex` — they synthesise the config in memory. |
-| `SynchronousOnlyOperation` on `request.user` | Your code reads `request.user` from an async context without the bridge. | Use `self.user` (the bridge already eager-resolves it via `aget_user`). |
-| Uvicorn boots but `/` returns 404 | SPA bundle wasn't built / wasn't staged. | `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root` then re-run. |
+| Port already in use | Old uvicorn from a previous run still listening | `pkill -f uvicorn` or use `--port N` |
+| Hot-reload stops working | Watcher process died silently | Restart `run_reflex` |
+| `AppRegistryNotReady` on start | Model import at module top level | Move the import inside event handlers |
+| `ModuleNotFoundError: rxconfig` | Old stub file present | Delete `rxconfig.py`; `reflex_mount()` is the only config |
+| Browser shows white page | SPA bundle missing | Run without `--skip-rebuild`, or run `export_reflex --frontend-only --stage-to-static-root` |
+| `Vite manifest not found` (under `--with-vite`) | Vite didn't start | Check the parent process logs; try without `--with-vite` |
 
 ---
 
-**Navigation:** [← Best practices](best_practices.md) | [Testing →](testing.md)
+**Next:** [Testing →](testing.md)

@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <em>Django ORM, admin, and sessions — plus Reflex reactive UI — in one Python process.</em>
+  <em>Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.</em>
 </p>
 
 <p align="center">
@@ -24,104 +24,107 @@
 
 ---
 
-## What is reflex-django?
+## Hi, welcome.
 
-**reflex-django** is a **Django-first** integration layer for [Reflex](https://reflex.dev). Django and Reflex run as **one ASGI application on one port**. You configure Reflex in **`urls.py`** with `reflex_mount()`, define pages in **`{app}/views.py`**, and run **`python manage.py run_reflex`**.
+You're probably here because you love Django — the ORM, the admin, the migrations, the way it just works — but you also want a modern, reactive frontend without writing React, Vue, or shipping a separate Node app.
 
-- **Django** is the outer ASGI app — it handles `/admin`, `/api`, ORM, migrations, sessions, and serves the compiled SPA from disk.
-- **Reflex** is mounted under Django — Socket.IO event channel (`/_event`), upload endpoint, health probes, and the SPA shell.
-- **Full middleware chain** runs on every Reflex event — `request.user`, `session`, `messages`, `csrf_token`, and your custom middleware are bound to every `@rx.event` handler.
-- **`django_led_app`** replaces `{app}/{app}.py` — no extra Reflex package boilerplate.
-- **One Python process, one port, one origin.** No CORS, no token bridge, no second dev server.
+That's exactly what **reflex-django** is for.
+
+You keep writing Django. You write your UI in Python using [Reflex](https://reflex.dev). They run as **one program, on one port**, and your Django session is the same session your buttons see. No CORS, no token gymnastics, no second dev server in another terminal.
 
 ---
 
-## Choose your path
+## What you'll actually write
 
-<div class="path-grid">
-  <a href="quickstart/" class="path-card">
-    <h3>🚀 New project</h3>
-    <p>Django project + shop/views.py pages + run_reflex in ~15 minutes.</p>
-  </a>
-  <a href="existing_django_project/" class="path-card">
-    <h3>🔌 Existing Django app</h3>
-    <p>Add reflex_mount() and views.py pages without touching your models.</p>
-  </a>
-</div>
+Three files. That's the whole shape of a `reflex-django` project:
 
----
-
-## Install
-
-```bash
-uv add django reflex reflex-django
+```python
+# config/settings.py — register reflex_django like any other app
+INSTALLED_APPS = [..., "reflex_django", "shop"]
 ```
 
 ```python
-# settings.py — INSTALLED_APPS includes "reflex_django"
+# config/urls.py — one line wires Reflex in
+from reflex_django.urls import reflex_mount
 
-# urls.py
-urlpatterns += [
-    reflex_mount(app_name="myapp", rx_config={"backend_port": 8000}),
-]
-
-# config/asgi.py — single ASGI entry point
-import os
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application  # noqa: E402,F401
+urlpatterns = [path("admin/", admin.site.urls)]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
+
+```python
+# shop/views.py — your pages live here, next to your models
+import reflex as rx
+from reflex_django import template
+from reflex_django.state import AppState
+
+class HomeState(AppState):
+    @rx.event
+    async def on_load(self):
+        if self.request.user.is_authenticated:
+            self.greeting = f"Hi, {self.request.user.get_username()}!"
+
+@template(route="/", title="Home")
+def index() -> rx.Component:
+    return rx.heading(HomeState.greeting)
+```
+
+Then:
 
 ```bash
 python manage.py run_reflex
 ```
 
----
-
-## Core guides
-
-| Topic | Guide |
-|:---|:---|
-| Concepts | [Introduction](introduction.md) |
-| Install | [Installation](installation.md) |
-| **`reflex_mount()` & settings** | [Configuration](configuration.md) |
-| Tutorial | [Quickstart](quickstart.md) |
-| Runtime architecture | [Architecture](architecture.md) |
-| Single-port reference | [Single-port architecture](single_port_django_outer.md) |
-| Routing | [Routing & dispatching](routing.md) |
-| `/_event` & WebSockets | [WebSocket event pipeline](websocket_event_pipeline.md) |
-| Pages & `@template` | [Pages in views.py](pages_in_views.md) |
-| ASGI streaming | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
-| Brownfield | [Existing Django project](existing_django_project.md) |
-| Folder layout | [Project structure](project_structure.md) |
-| URLs & `django_led_app` | [Django-led URL routing](django_urls.md) |
-| CLI | [CLI](cli.md) |
+That's it. Open `http://localhost:8000/`. Your admin is at `/admin/`. Your reactive UI is at `/`. They share cookies, sessions, and the same Python process.
 
 ---
 
-## Learning path
+## Pick a path
 
-1. **Start here** — [Introduction](introduction.md) → [Installation](installation.md) → [Quickstart](quickstart.md)
-2. **Routing & pages** — [Django-led URL routing](django_urls.md) → [Pages in views.py](pages_in_views.md)
-3. **State & auth** — [State management](state_management.md) → [Authentication](authentication.md)
-4. **Data** — [Database integration](database_integration.md) → [Reactive ModelState](reactive_model_state.md)
-5. **Ship** — [Deployment](deployment.md) → [FAQ](faq.md)
+<div class="path-grid">
+  <a href="why_reflex_django/" class="path-card">
+    <h3>I want to understand first</h3>
+    <p>Read why reflex-django exists, how Django and Reflex actually work, and where they meet. ~10 minutes, no code.</p>
+  </a>
+  <a href="quickstart/" class="path-card">
+    <h3>Just show me the code</h3>
+    <p>Build a small todo app from scratch in about 15 minutes. You'll touch pages, state, auth, and the database.</p>
+  </a>
+  <a href="existing_django_project/" class="path-card">
+    <h3>I have a Django app already</h3>
+    <p>Add a reflex-django page to a real, brownfield Django project without touching your models.</p>
+  </a>
+</div>
 
 ---
 
-## Task index
+## A suggested reading order
+
+If you're new and you'd like a guided tour, this is the path most people find easiest:
+
+1. **[Why reflex-django exists](why_reflex_django.md)** — the one-page story
+2. **[How Django works in 5 minutes](how_django_works.md)** — skip this if Django is your day job
+3. **[How Reflex works in 5 minutes](how_reflex_works.md)** — skip this if Reflex is your day job
+4. **[How the two fit together](how_they_fit.md)** — the bridge, in plain English
+5. **[Install](installation.md)** and **[Your first app](quickstart.md)**
+6. **[The Essentials](configuration.md)** — pages, state, the database, auth
+
+Then drop into the build guides when you actually need them — CRUD pages, forms, i18n, deployment.
+
+---
+
+## Looking for something specific?
 
 | I want to… | Read |
 |:---|:---|
-| Set ports and app name | [Configuration](configuration.md) |
-| Understand how Django + Reflex compose | [Architecture](architecture.md) |
-| See the dispatcher routing rules | [Routing & dispatching](routing.md) |
-| Trace a `/_event` WebSocket end-to-end | [WebSocket event pipeline](websocket_event_pipeline.md) |
-| Put pages in Django apps | [Pages in views.py](pages_in_views.md) |
-| Fix admin streaming warnings | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
-| Use `request.user` / messages / CSRF in events | [Authentication](authentication.md) |
-| Build the SPA bundle | [CLI](cli.md) |
-| Deploy one process | [Deployment](deployment.md) |
+| Configure ports, app name, prefixes | [Configuration](configuration.md) |
+| Put pages next to my Django models | [Pages live in views.py](pages_in_views.md) |
+| Read `request.user` inside a button handler | [AppState: your bridge to Django](state_management.md) |
+| Build a list/edit/delete page fast | [CRUD with ModelState](reactive_model_state.md) |
+| Understand the WebSocket plumbing | [The WebSocket event pipeline](websocket_event_pipeline.md) |
+| Deploy to one container | [Deployment](deployment.md) |
+| Look up a `REFLEX_DJANGO_*` setting | [Settings reference](settings_reference.md) |
+| See every public symbol | [Public API at a glance](public_api.md) |
 
 ---
 
-**Navigation:** [Introduction →](introduction.md)
+**Next:** [Why reflex-django exists →](why_reflex_django.md)

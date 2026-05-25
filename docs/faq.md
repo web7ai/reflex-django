@@ -1,140 +1,339 @@
-# Frequently Asked Questions (FAQ)
+# FAQ
 
-Here is a comprehensive compilation of frequently asked questions and troubleshooting scenarios compiled by the `reflex-django` developer community.
-
----
-
-## 1. Core Architecture
-
-### What exactly is reflex-django?
-`reflex-django` is a high-performance integration engine that runs a **fully-featured Django backend** alongside a **Reflex reactive web application** within a **single, unified ASGI process**. 
-
-It provides:
-1. An **ASGI Path Dispatcher** that intercepts incoming traffic, forwarding admin panel and HTTP API requests to Django while routing client UI and WebSocket channels (`/_event`) to Reflex.
-2. A secure **Event Bridge** that bridges request session cookies, authenticated users, and context variables over persistent WebSocket channels into your Reflex state event handlers.
-3. A declarative, class-based **Reactive CRUD Engine** (`ModelState` and `ModelCRUDView`) that generates serializers, state variables, and event handlers automatically.
+Short answers to the questions that come up most often. Each one links to the longer treatment if you want detail.
 
 ---
 
-## 2. Authentication & Request Sessions
+## Getting started
 
-### Why is `self.request.user` returning AnonymousUser inside my event handlers?
-This commonly happens for one of three reasons:
-1. **Event Bridge Disabled**: Ensure `install_event_bridge=True` is active inside your `ReflexDjangoPlugin` configuration options in `rxconfig.py`.
-2. **Missing Session Cookies**: The user's browser has not established a session cookie yet. Ensure the user is properly logged in or check their browser cookie state.
-3. **Mismatched WebSocket Cookies**: When authenticating users, always synchronize browser session cookies to ensure the Socket.IO persistent connection aligns with the dynamic HTTP context.
+### Do I need to know Reflex before using this?
 
----
+No. If you're a Django developer, [How Reflex works in 5 minutes](how_reflex_works.md) gives you enough to read the rest of these docs. The official Reflex docs at [reflex.dev](https://reflex.dev) are excellent for deeper learning.
 
-### Why doesn't my custom Django middleware run when users click buttons?
-Reflex events are **not standard HTTP requests**. When a user interacts with a Reflex page, the client browser communicates with the server via a persistent Socket.IO WebSocket channel. 
+### Do I need to know Django?
 
-As a result, Django's standard HTTP middleware stack does not run. To solve this, `reflex-django` exposes a dedicated **`DjangoEventBridge`** which executes context setups (resolving users, sessions, and request profiles) specifically for WebSocket channels.
+A little helps. [How Django works in 5 minutes](how_django_works.md) is enough for the rest of these docs. If you've used FastAPI or Flask, the concepts are familiar.
 
----
+### Can I use this with an existing Django project?
 
-### Can I trust `DjangoUserState.is_authenticated` for security access controls?
-**No. Never rely on client state variables for security.** 
+Yes — that's a primary use case. See [Add to an existing Django project](existing_django_project.md). You don't change your models or your `urls.py` structure; you add one line to `urls.py` and start dropping pages into any app's `views.py`.
 
-Variables like `is_authenticated` or `username` are sent to the client browser and can be modified or spoofed. Use them exclusively for UI styling (e.g. wrapping a sidebar inside `rx.cond`). For any database mutations or private data queries, **always validate permissions on the server** inside your event handlers using `self.request.user` or by applying the `@login_required` decorator.
+### What versions do I need?
+
+Python 3.12+, Django 6.0+, Reflex 0.9.2+. Older Reflex versions don't have the plugin hooks we depend on.
 
 ---
 
-## 3. Configuration & Routing
+## Architecture and routing
 
-### Why do my Django Admin or HTTP API endpoints return 404 errors?
-This indicates a path prefix mismatch. The URL paths configured in your `ReflexDjangoPlugin` configuration must exactly match the prefixes declared inside your Django `urls.py` routing file:
+### Is this just running two servers behind a reverse proxy?
+
+No. It's one Python process listening on one port. Both Django and Reflex's ASGI internals live in the same process. The outer dispatcher decides per-scope whether to send a request to Django or to Reflex's inner ASGI. ([Details](architecture.md).)
+
+### What about CORS?
+
+You don't need it. The SPA, the API, the admin, and the WebSocket all share an origin. The browser sees them as the same site.
+
+### Can I still use Django Channels?
+
+`reflex-django` doesn't use Channels. Reflex owns the one WebSocket on `/_event`. If you need additional WebSocket protocols (chat, multiplayer game state, etc.) and the Reflex event model doesn't fit, Channels is fine to add alongside — but you'll need to route its WebSocket scopes around the outer dispatcher. Most projects don't need this.
+
+### Why is there no `rxconfig.py`?
+
+`reflex_mount()` in `urls.py` plus `REFLEX_DJANGO_*` settings provide everything `rxconfig.py` used to. Keeping the config in `urls.py` means there's only one place to look. If you have legacy tooling that reads `rxconfig.py`, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it in.
+
+### Why is there no `{app}/{app}.py`?
+
+The `rx.App()` instance is built by `reflex_django.django_led_app`, which auto-discovers pages from `{app}/views.py` in every entry of `INSTALLED_APPS`. You write pages; the library writes the boilerplate.
+
+---
+
+## State and the request
+
+### Why don't I see `self.request.user` in my handler?
+
+Three things to check:
+
+1. Does your state subclass `AppState` (not plain `rx.State`)?
+2. Is `SessionMiddleware` in `MIDDLEWARE`?
+3. Is `AuthenticationMiddleware` in `MIDDLEWARE`?
+
+Without all three, the bridge can't populate the user. ([State Management](state_management.md).)
+
+### Can I read `request.user` from a plain `rx.State`?
+
+Yes — use the module-level proxy:
 
 ```python
-# In rxconfig.py
-plugin = ReflexDjangoPlugin(
-    admin_prefix="/admin/",
-    backend_prefix="/api/",
-)
-```
+from reflex_django import request
 
-```python
-# In django_project/urls.py
-urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/", include("shop.urls")),
-]
-```
-
----
-
-### Why is the `settings_module` plugin parameter being ignored?
-In `reflex-django`, **system environment variables always take precedence**. If you have `DJANGO_SETTINGS_MODULE` defined in your active environment shell (e.g. by running a terminal command), it will override the `settings_module` parameter declared in your `rxconfig.py` plugin configuration.
-
----
-
-## 4. CRUD Engine & States
-
-### What is the difference between `ModelState` and `ModelCRUDView`?
-Both components execute the exact same reactive CRUD pipeline under the hood, but they are configured differently to support different project setups:
-
-| Feature / Paradigm | `ModelState` (Recommended) | `ModelCRUDView` (Explicit) |
-|:---|:---|:---|
-| **Authentication Base** | Inherits `AppState` automatically. | Requires explicit inheritance from `AppState`. |
-| **Data Schema** | Automatically builds a serializer from `model` and `fields`. | Requires an explicit `serializer_class` definition. |
-| **Active List Variable** | `self.data` (Generic list) | Pluralized name (e.g. `self.posts`, `self.products`). |
-| **Default Handlers** | Generic canonical methods (`load`, `save`, `refresh`, etc.). | Pluralized legacy handlers (`save_post`, `on_load_posts`). |
-| **Best Used For** | Rapidly building new CRUD administration screens. | Integrating existing DRF schemas or custom relational joins. |
-
----
-
-### Is pagination built into the CRUD engine?
-**Yes, as an opt-in feature.** 
-
-Simply declare `Meta.paginate_by = X` on your State class body. This automatically registers:
-* Active pagination variables: `page`, `page_size`, `total_count`, and `page_count`.
-* Event handlers: `next_page`, `prev_page`, and `paginate(page=X)` to handle page queries automatically.
-
----
-
-### How do I access the Django `HttpRequest` inside an AppState subclass?
-Subclass `AppState` (or `ModelState`) and call **`self.request`** inside any `@rx.event` handler. The engine provides three request variables:
-
-```python
-class MyState(AppState):
+class FilterState(rx.State):
     @rx.event
-    async def process_data(self):
-        # 1. Access the authenticated user
-        user = self.request.user
-        
-        # 2. Access query parameters
-        page_num = self.request.GET.get("page", "1")
-        
-        # 3. Access cookie values
-        theme = self.request.COOKIES.get("theme", "light")
+    async def apply(self):
+        if request.user.is_authenticated:
+            ...
 ```
 
-* **`self.request.user`**: The active authenticated Django user (used for permissions and row-level scoping).
-* **`self.request`**: A synthetic `HttpRequest` object populated with active browser router data (headers, pathnames, and queries).
-* **`self.django_request`**: The raw, un-wrapped Django `HttpRequest` (useful when third-party libraries require a native Django request instance).
+Or the functional helpers (`current_user()`, `current_request()`). All return the same per-event request. ([Details](state_management.md#reading-the-request).)
+
+### `self.is_authenticated` vs `self.request.user.is_authenticated` — which one?
+
+`self.is_authenticated` is a reactive snapshot, safe for UI rendering. `self.request.user.is_authenticated` is the live server-side check, the one to use for authorization. Never base security decisions on the snapshot alone. ([Live vs snapshot rule](authentication.md#the-live-vs-snapshot-rule-read-this-once).)
+
+### Why is `self.request` `None` in my test?
+
+Outside an event, there's no request. In tests, set one up:
+
+```python
+from reflex_django.context import begin_event_request, end_event_request
+
+token = begin_event_request(user=test_user)
+try:
+    await state.my_handler()
+finally:
+    end_event_request(token)
+```
+
+([Testing](testing.md).)
+
+### Why is `self.request.user` `AnonymousUser` even though I'm logged in?
+
+Most likely: the SPA opened its WebSocket before you logged in, with the *anonymous* session cookie. After login, the browser has the new cookie, but the WebSocket is still using the old one. Either:
+
+- Use the built-in login flow (`add_auth_pages()`) — it handles the cookie sync.
+- After your custom login, redirect through an HTTP response that carries the fresh `Set-Cookie` header. ([Details](authentication.md#a-note-on-cookie-sync-after-login).)
 
 ---
 
-## 5. Development & Operations
+## CRUD
 
-### Should I use `manage.py` or `reflex django`?
-**Django-first projects:** use `python manage.py` for migrations and `python manage.py run_reflex` for the dev server. Settings come from `manage.py` automatically.
+### `ModelState` or `ModelCRUDView` — which one?
 
-**Dev server:** use `python manage.py run_reflex`. Configure ports and `app_name` on `reflex_mount()` in `urls.py`.
+`ModelState` for new projects. It's shorter and auto-builds the serializer. Reach for `ModelCRUDView` when you want explicit serializer classes (e.g. sharing with DRF) or verb-noun handler names (`save_post` instead of `save`). ([Side by side](model_state_and_crud_view.md).)
 
-Both paths resolve `DJANGO_SETTINGS_MODULE` from the environment, `manage.py` discovery, or your plugin configuration.
+### Can I mix `ModelState` and manual `AppState` handlers in the same project?
+
+Absolutely. Use `ModelState` for standard CRUD pages, plain `AppState` for unusual workflows. They share the same Django context, the same auth, the same everything.
+
+### How do I scope a list to the current user?
+
+Three options, all in `ModelState`/`ModelCRUDView`:
+
+1. Override `get_queryset`, `get_object_lookup`, `get_create_kwargs` manually.
+2. Add `UserScopedMixin` and set `Meta.owner_field = "owner"`.
+3. In a manual handler, filter with `Model.objects.filter(owner=self.request.user)`.
+
+([Details](reactive_model_state.md#user-scoped-crud-only-show-my-rows).)
+
+### Why isn't my list refreshing after save?
+
+Three common causes:
+
+1. `class Meta: list_var = "..."` is missing — the default name is `data`.
+2. You're using `ModelCRUDView` but didn't call `on_load=YourState.on_load_<list_var>` on the page.
+3. You overrode `save` without calling `super()` or `self.dispatch(ACTION_SAVE)`.
 
 ---
 
-### How do I troubleshoot unstyled Django Admin pages in production?
-If the Django Admin panel boots but is missing CSS and JS styles, you have not compiled your static assets. Run the compilation command in your deployment pipeline before starting the web server:
+## Forms and validation
+
+### Where do I add custom validation?
+
+Three stages in order: `clean_<field>` for per-field, `validate_state` for cross-field, `run_model_validation = True` for Django's own validators (`unique=True`, `validators=[...]`). ([Details](forms_and_validation.md).)
+
+### Why doesn't my form clear after save?
+
+You need both `Meta.reset_after_save = True` (default) **and** `key=YourState.form_reset_key` on the `<rx.form>` element. The `key` triggers a React remount, which resets uncontrolled input state.
+
+### My field-level errors aren't showing
+
+Two things:
+
+1. `Meta.structured_errors = True` (defaults to `True` on `ModelState`/`ModelCRUDView`).
+2. Bind to `YourState.<list_var>_field_errors[field_name]` — not `YourState.error`.
+
+---
+
+## Auth
+
+### Does CSRF protect Reflex events?
+
+CSRF is intentionally skipped on Reflex WebSocket events. CSRF protects HTML form submissions where a third-party site could trigger a request with the user's cookies. WebSockets opened by your own SPA don't have that attack shape. For mutations, prefer `@login_required`, `@permission_required`, and server-side ownership checks. ([Details](authentication.md#what-about-csrf-on-reflex-events).)
+
+### Can I use `django-allauth` or OAuth?
+
+Yes. `reflex-django` builds on Django sessions. Once your OAuth flow completes, `request.user.is_authenticated` is `True` for both HTTP requests and Reflex events. No special setup is needed — wire up `django-allauth` (or `social-auth-app-django`) as you normally would.
+
+### Can I use JWT instead of sessions?
+
+Not for the SPA. The bridge is session-based — `request.user` is resolved from the session cookie. You can absolutely have a JWT endpoint alongside (for your mobile app); the SPA just uses the session.
+
+### How do I gate a whole page?
+
+Wrap the page function:
+
+```python
+from reflex_django.auth import login_required
+
+@template(route="/account")
+@login_required
+def account() -> rx.Component:
+    ...
+```
+
+For permission-based gating, use `permission_required("app.codename")`.
+
+---
+
+## Performance
+
+### Is the per-event middleware chain slow?
+
+The bridge runs your full `settings.MIDDLEWARE` for each Reflex event. For most apps that's microseconds of overhead per event (session lookup, user resolution). If you have expensive custom middleware that doesn't apply to events, add it to `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+
+### Can I have multiple ASGI workers?
+
+Yes. Default rule of thumb: `2 * cores + 1`. State is stored per-process by default, so enable sticky session affinity on your load balancer, or point Reflex at Redis for shared state:
+
+```python
+rx_config={"redis_url": os.environ["REDIS_URL"]}
+```
+
+### Why is my page slow on first load?
+
+The compiled SPA might not be on disk yet, so `manage.py run_reflex` is building it. After the first build, reloads are fast. In production, the SPA is built in CI and shipped in the container.
+
+---
+
+## Development workflow
+
+### Hot reload doesn't work for Reflex page edits
+
+Use `python manage.py run_reflex --with-vite` for hot module reload on Reflex components. Without it, every save triggers a full uvicorn restart.
+
+### Can I edit a Django model without rebuilding the SPA?
+
+Yes — use `--skip-rebuild`:
 
 ```bash
-uv run reflex django collectstatic --noinput
+python manage.py run_reflex --skip-rebuild
 ```
 
-Ensure your reverse proxy (like Nginx) is configured to serve the `/static/` location directly from your compiled `STATIC_ROOT` folder.
+The uvicorn server still restarts on Python changes, but the slow SPA export step is skipped.
+
+### Where does the compiled SPA live?
+
+`STATIC_ROOT/_reflex/` in production. In development, `manage.py run_reflex` builds and stages it there automatically. The source bundle lives in `.web/` (gitignored).
 
 ---
 
-**Navigation:** [← Best Practices](best_practices.md) | [Docs Index](index.md)
+## Deployment
+
+### One container or two?
+
+One. The whole point of `reflex-django` is single-process: Django and Reflex live in the same uvicorn worker. Your deploy is one ASGI app.
+
+### Can I deploy to Heroku / Railway / Fly / ECS / Cloud Run?
+
+Yes — anywhere that supports WebSockets and an ASGI server (uvicorn / granian / hypercorn / gunicorn-uvicorn-worker). See platform-specific notes in the [Deployment guide](deployment.md).
+
+### Does the SPA need to be rebuilt for every deploy?
+
+Yes — but only once, in CI, not at every container boot:
+
+```bash
+python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+python manage.py collectstatic --noinput
+```
+
+Bake those into your image build. The runtime container then serves the pre-built bundle.
+
+### How long should the WebSocket idle timeout be on my proxy?
+
+At least 300 seconds. The SPA holds the WebSocket open for the user's whole session. Default Nginx 60s timeout drops the connection too aggressively.
+
+---
+
+## Errors and debugging
+
+### `AppRegistryNotReady`
+
+You're touching a Django model at module import time (in a class-level default, a module-level query, or the top of a file imported very early). Move the model import inside an event handler:
+
+```python
+@rx.event
+async def load(self):
+    from shop.models import Product
+    ...
+```
+
+### `SynchronousOnlyOperation`
+
+You used a sync ORM call in an async event handler. Replace with `aget`, `acreate`, `asave`, `adelete`, `async for`. ([Database integration](database_integration.md).)
+
+### `ModuleNotFoundError: shop.shop`
+
+A leftover `rxconfig.py` is pointing at the old layout. Delete `rxconfig.py`. `reflex_mount()` in `urls.py` is the only configuration you need.
+
+### `Could not find compiled SPA`
+
+The SPA hasn't been built yet. Run `python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root`, or just `python manage.py run_reflex` and let it build automatically.
+
+### Browser console: `dispatch is not a function`
+
+The compiled SPA's state dispatcher is out of sync with your live state classes (usually after a major change to your state shape). Stop the server, delete `.web/`, restart `run_reflex`. Next build will regenerate everything.
+
+### Tasks/middleware silently doesn't run on events
+
+You probably set `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False` somewhere (or your middleware is in `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`). Remove the override.
+
+---
+
+## Comparisons
+
+### How is this different from running Django + a React SPA?
+
+You don't write React. You don't write JSX. You don't run a Node build server. Pages, state, and event handlers are all in Python. The SPA still exists — it's just compiled for you.
+
+### How is this different from htmx / Unpoly?
+
+htmx and Unpoly add reactivity to *server-rendered HTML* by intercepting form submissions and link clicks. `reflex-django` ships a real React SPA backed by a persistent WebSocket. Different trade-off: htmx is lighter and works with any backend; `reflex-django` is heavier but gives you a fully reactive client without writing JavaScript.
+
+### How is this different from Django Channels + a separate SPA?
+
+Channels gives you WebSocket *plumbing*, but you still write the SPA yourself. `reflex-django` gives you the SPA, the WebSocket, the state management, and the bridge — all in Python.
+
+### Why not just use `django-htmx` or live-reload?
+
+If those fit your needs, use them. They're great for adding selective interactivity to a server-rendered Django app. `reflex-django` makes sense when you want a *full SPA* but don't want to write React.
+
+---
+
+## Compatibility
+
+### Does this work with Django 5? Django 4?
+
+The library targets Django 6.0+. Django 5 may work but isn't officially supported. Django 4 won't work — we depend on async ORM features added in later versions.
+
+### Does this work with PyPy?
+
+Untested. CPython 3.12+ is what we test against.
+
+### Does this work with SQLite?
+
+For development, yes. For production, prefer Postgres (or MySQL). SQLite's locking model becomes a bottleneck under any concurrent load.
+
+---
+
+## Where to learn more
+
+If you can't find your question here:
+
+- [Glossary](glossary.md) — definitions of every term in these docs.
+- [Public API at a glance](public_api.md) — every importable symbol.
+- [Architecture overview](architecture.md) — the full plumbing picture.
+- [GitHub](https://github.com/mohannadirshedat/reflex-django) — issues and discussions.
+
+---
+
+**Next:** [Glossary →](glossary.md)

@@ -7,7 +7,7 @@
 <h1 align="center">reflex-django</h1>
 
 <p align="center">
-  <strong>Django + Reflex in one process — configure in urls.py, pages in views.py.</strong>
+  <strong>Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.</strong>
 </p>
 
 <p align="center">
@@ -25,30 +25,28 @@
 
 ---
 
-## What it does
+## What is it?
 
-- **Django** — `/admin`, `/api`, ORM, migrations, sessions
-- **Reflex** — SPA UI, client routes, WebSocket events
-- **One port, one command** — `python manage.py run_reflex` serves everything on `http://localhost:8000/`
-- **Full `settings.MIDDLEWARE` chain** runs on every Reflex event
-- **`self.request`, `self.response`, `self.messages`, `self.csrf_token`** available inside `AppState`
-- **No `myapp/myapp.py`** — pages in `myapp/views.py`, app loaded via `django_led_app`
+You love Django — the ORM, the admin, migrations, the way it just *works*. You also want a modern, reactive UI written in Python, not React.
 
-Reflex settings go in **`reflex_mount()`** in `urls.py`, not in a large `rxconfig.py`. ASGI deployments use `reflex_django.asgi_entry:application` as the ASGI callable.
+`reflex-django` runs Django and [Reflex](https://reflex.dev) as **one ASGI app on one port**. Configuration lives in `urls.py`. Pages live in `views.py`. The Django session you got from `/admin/login/` is the same session your Reflex button handlers see.
 
-See [Single-port Django-outer architecture](docs/single_port_django_outer.md) and [Migration guide](docs/migration_django_outer.md).
+- **Same port** — Django at `8000`, Reflex at `8000`. No CORS, no token bridge, no second dev server.
+- **Same cookies** — log in once at `/admin/`, every Reflex event sees `self.request.user`.
+- **Same middleware** — your full `settings.MIDDLEWARE` chain runs on every Reflex event.
+- **One command** — `python manage.py run_reflex`.
 
 ---
 
-## Minimal setup (copy-paste)
+## Minimal setup
 
-### Install
+Install:
 
 ```bash
 uv add django reflex reflex-django
 ```
 
-### `config/settings.py`
+`config/settings.py`:
 
 ```python
 INSTALLED_APPS = [
@@ -59,7 +57,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "reflex_django",
-    "shop",  # your app
+    "shop",
 ]
 
 MIDDLEWARE = [
@@ -70,13 +68,11 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",  # ASGI streaming
+    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
 ]
-
-ROOT_URLCONF = "config.urls"
 ```
 
-### `config/urls.py`
+`config/urls.py`:
 
 ```python
 from django.contrib import admin
@@ -84,17 +80,20 @@ from django.urls import path
 from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-
 urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin",),
-        rx_config={"frontend_port": 3000, "backend_port": 8000},
-    ),
+    reflex_mount(app_name="shop", django_prefix=("/admin",)),
 ]
 ```
 
-### `shop/views.py` — pages + AppState
+`config/asgi.py`:
+
+```python
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+from reflex_django.asgi_entry import application  # noqa: E402,F401
+```
+
+`shop/views.py`:
 
 ```python
 import reflex as rx
@@ -103,102 +102,94 @@ from reflex_django.state import AppState
 
 
 class HomeState(AppState):
-    message: str = "Hello"
-
     @rx.event
     async def on_load(self):
-        if self.request.user.is_authenticated:
-            self.message = f"Hello, {self.request.user.get_username()}"
-        else:
-            self.message = "Hello, guest"
+        user = self.request.user
+        self.greeting = (
+            f"Hi, {user.get_username()}!"
+            if user.is_authenticated
+            else "Hello, guest. Log in at /admin/."
+        )
 
 
-@template(route="/", title="Home")
+@template(route="/", title="Home", on_load=HomeState.on_load)
 def index() -> rx.Component:
     return rx.vstack(
-        rx.heading("Home"),
-        rx.text(HomeState.message),
+        rx.heading("My Shop"),
+        rx.text(HomeState.greeting),
     )
 ```
 
-### Run
+Run:
 
 ```bash
 python manage.py migrate
 python manage.py run_reflex
 ```
 
-Open http://localhost:3000/ — admin at http://localhost:3000/admin/
+Open <http://localhost:8000/>. Admin at <http://localhost:8000/admin/>.
 
-Full walkthrough: [Quickstart](https://mohannadirshedat.github.io/reflex-django/quickstart/)
+That's it.
 
 ---
 
-## Three files to remember
+## Why it exists
 
-| File | You configure |
+Reflex sends UI events over a **WebSocket** on `/_event`. Django middleware doesn't run on WebSockets. So `request.user`, sessions, messages, and CSRF aren't available inside `@rx.event` handlers by default — and the SPA usually wants its own port, which breaks cookie sharing.
+
+`reflex-django` builds a synthetic `HttpRequest` for every event, runs your full `settings.MIDDLEWARE` chain on it, and binds `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` onto your `AppState` handler. One process. One port. Same auth as your admin.
+
+Full explanation: [Why reflex-django exists](https://mohannadirshedat.github.io/reflex-django/why_reflex_django/).
+
+---
+
+## Three files, three jobs
+
+| File | What you configure |
 |:---|:---|
-| **settings.py** | `INSTALLED_APPS`, `MIDDLEWARE` (incl. `AsyncStreamingMiddleware`) |
-| **urls.py** | `reflex_mount(app_name=..., django_prefix=..., rx_config={...})` |
-| **{app}/views.py** | `@template(route=...)` pages and `AppState` subclasses |
+| `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE` (incl. `AsyncStreamingMiddleware`), `REFLEX_DJANGO_*` |
+| `urls.py` | `reflex_mount(app_name=..., django_prefix=..., rx_config={...})` |
+| `{app}/views.py` | `@template`-decorated pages and `AppState` subclasses |
+
+No `rxconfig.py`. No `{app}/{app}.py`. No separate frontend.
 
 ---
 
-## AppState in one minute
+## Versions
 
-Subclass `AppState` when a page needs the Django user or session:
-
-```python
-from reflex_django.state import AppState
-
-class MyState(AppState):
-    @rx.event
-    async def on_load(self):
-        user = self.request.user          # Django User
-        if user.is_authenticated:
-            ...
-        self.request.session["key"] = "value"
-        await self.request.session.asave()
-```
-
-The event bridge attaches `self.request` on every WebSocket event (same cookies as `/admin/`).
-
----
-
-## Why reflex-django?
-
-Reflex uses **WebSockets** for UI events — Django middleware does not run there by default. reflex-django adds an **event bridge** so `self.request.user` and sessions work in `@rx.event` handlers.
-
-| Django | Python |
+| | Version |
 |:---|:---|
-| 6.0.x | 3.12+ |
+| Python | 3.12+ |
+| Django | 6.0+ |
+| Reflex | 0.9.2+ |
 
 ---
 
 ## Documentation
 
-| Topic | Link |
-|:---|:---|
-| Quickstart (step-by-step) | [quickstart.md](docs/quickstart.md) |
-| `reflex_mount()` reference | [configuration.md](docs/configuration.md) |
-| `AsyncStreamingMiddleware` | [async_streaming_middleware.md](docs/async_streaming_middleware.md) |
-| Pages in `views.py` | [pages_in_views.md](docs/pages_in_views.md) |
-| URLs & `django_led_app` | [django_urls.md](docs/django_urls.md) |
-| Brownfield Django | [existing_django_project.md](docs/existing_django_project.md) |
-| Auth & permissions | [authentication.md](docs/authentication.md) |
+The full docs walk you through the *why*, the *how*, and every knob:
 
-**Site:** https://mohannadirshedat.github.io/reflex-django/
+- **[Why reflex-django exists](https://mohannadirshedat.github.io/reflex-django/why_reflex_django/)** — the one-page story
+- **[How Django works in 5 minutes](https://mohannadirshedat.github.io/reflex-django/how_django_works/)**
+- **[How Reflex works in 5 minutes](https://mohannadirshedat.github.io/reflex-django/how_reflex_works/)**
+- **[How the two fit together](https://mohannadirshedat.github.io/reflex-django/how_they_fit/)**
+- **[Your first app — a 15-minute todo list](https://mohannadirshedat.github.io/reflex-django/quickstart/)**
+- **[Add to an existing Django project](https://mohannadirshedat.github.io/reflex-django/existing_django_project/)**
+
+Site: <https://mohannadirshedat.github.io/reflex-django/>
 
 ---
 
-## Commands
+## Common commands
 
 ```bash
-python manage.py run_reflex      # dev server
+python manage.py run_reflex            # dev server (auto-rebuild + watch)
+python manage.py run_reflex --skip-rebuild   # faster reloads for pure Python edits
+python manage.py export_reflex         # build the SPA bundle (for CI / deploy)
 python manage.py migrate
 python manage.py createsuperuser
 ```
 
 ---
 
-**Author:** Mohannad Irshedat · [GitHub](https://github.com/mohannadirshedat/reflex-django)
+**Author:** Mohannad Irshedat · [GitHub](https://github.com/mohannadirshedat/reflex-django) · [Docs](https://mohannadirshedat.github.io/reflex-django/)
