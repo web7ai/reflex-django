@@ -118,6 +118,11 @@ def get_mount_rx_config_overrides() -> dict[str, Any]:
     return kwargs
 
 
+def has_mount_rx_config() -> bool:
+    """Return whether :func:`reflex_django.urls.reflex_mount` has registered config."""
+    return bool(_REGISTRATIONS)
+
+
 def clear_mount_rx_config() -> None:
     """Clear mount-time config (tests only)."""
     global _URLCONF_IMPORTED

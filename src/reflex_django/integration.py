@@ -73,6 +73,7 @@ def _rebind_get_config_imports(patched_get_config: Callable[..., Config]) -> Non
 def _ensure_runtime_event_patches() -> None:
     """Apply hooks so ``self.request`` works on handler substates (idempotent)."""
     _patch_process_event()
+    _patch_event_context_emit_delta()
 
 
 def install_reflex_django_integration() -> None:
@@ -102,6 +103,7 @@ def install_reflex_django_integration() -> None:
         ensure_django_led_app_ready()
 
     _patch_reflex_compile()
+    _patch_reflex_page()
     _patch_apply_decorated_pages()
     _patch_assert_in_reflex_dir()
     _patch_needs_reinit()
@@ -189,9 +191,13 @@ def _patch_apply_decorated_pages() -> None:
         )
         from reflex_django.mount_config import resolve_app_name
 
+        if getattr(self, "_reflex_django_decorated_pages_applied", False):
+            return
+
         migrate_decorated_pages_app_name(resolve_app_name())
         original(self)
         apply_page_registry_to_app(self)
+        self._reflex_django_decorated_pages_applied = True  # type: ignore[attr-defined]
 
     reflex_app_module.App._apply_decorated_pages = _apply_decorated_pages
     reflex_app_module.App._reflex_django_apply_pages_patched = True
@@ -221,6 +227,84 @@ def _patch_process_event() -> None:
     bsp._reflex_django_process_event_original = original
 
 
+def _patch_event_context_emit_delta() -> None:
+    """Filter emitted deltas to substates present in ``.web/utils/context.js``."""
+    try:
+        from reflex_base.event.context import EventContext
+    except ImportError:
+        return
+
+    if getattr(EventContext, "_reflex_django_emit_delta_patched", False):
+        return
+
+    original_emit_delta = EventContext.emit_delta
+
+    async def emit_delta(
+        self: Any,
+        delta: Any,
+    ) -> None:
+        from reflex_django.compile_validate import filter_delta_to_compiled_dispatch_keys
+
+        if not delta:
+            return
+        filtered = filter_delta_to_compiled_dispatch_keys(dict(delta))
+        if not filtered:
+            return
+        await original_emit_delta(self, filtered)
+
+    EventContext.emit_delta = emit_delta  # type: ignore[method-assign]
+    EventContext._reflex_django_emit_delta_patched = True
+    EventContext._reflex_django_emit_delta_original = original_emit_delta
+
+
+def _patch_reflex_page() -> None:
+    """Bucket ``@page`` / ``@template`` under the mount ``app_name``, not ``""``."""
+    try:
+        import reflex.page as page_module
+    except ImportError:
+        return
+
+    if getattr(page_module, "_reflex_django_page_patched", False):
+        return
+
+    original_page = page_module.page
+
+    def patched_page(*args: Any, **kwargs: Any) -> Any:
+        def decorator(render_fn: Any) -> Any:
+            from reflex_base.config import get_config
+
+            page_kwargs: dict[str, Any] = {}
+            if args:
+                page_kwargs["route"] = args[0]
+            page_kwargs.update(kwargs)
+            if "route" in page_kwargs and page_kwargs["route"] is None:
+                page_kwargs.pop("route", None)
+
+            bucket = _resolve_decorated_pages_app_name()
+            page_module.DECORATED_PAGES[bucket].append((render_fn, page_kwargs))
+            return render_fn
+
+        return decorator
+
+    page_module.page = patched_page  # type: ignore[assignment]
+    page_module._reflex_django_page_patched = True
+    page_module._reflex_django_page_original = original_page
+
+
+def _resolve_decorated_pages_app_name() -> str:
+    """Return the ``DECORATED_PAGES`` key for Django-first page registration."""
+    from reflex_base.config import get_config
+
+    try:
+        from reflex_django.mount_config import has_mount_rx_config, resolve_app_name
+
+        if has_mount_rx_config():
+            return resolve_app_name()
+    except ImportError:
+        pass
+    return str(get_config().app_name or "")
+
+
 def _patch_reflex_compile() -> None:
     """Compile in-process and restore the Vite Django dev proxy after compile."""
     try:
@@ -234,13 +318,38 @@ def _patch_reflex_compile() -> None:
     original_compile = reflex_module._compile_app
 
     def _compile_app(*, avoid_dirty_check: bool = True) -> None:
-        result = original_compile(avoid_dirty_check=False)
-        from reflex_django.compile_validate import warn_if_frontend_dispatchers_out_of_sync
+        from reflex_django.app_factory import load_app_factory, prepare_pages_for_compile
+        from reflex_django.compile_validate import (
+            expected_dispatch_keys_from_app,
+            invalidate_stale_context_js,
+            missing_frontend_dispatchers,
+            warn_if_frontend_dispatchers_out_of_sync,
+        )
         from reflex_django.vite_proxy import ensure_vite_django_dev_proxy_from_config
 
+        prepare_pages_for_compile()
+        app = load_app_factory()
+        expected = expected_dispatch_keys_from_app(app)
+        if missing_frontend_dispatchers(expected_keys=expected, app=app):
+            invalidate_stale_context_js()
+            if hasattr(app, "_reflex_django_decorated_pages_applied"):
+                delattr(app, "_reflex_django_decorated_pages_applied")
+            prepare_pages_for_compile()
+            expected = expected_dispatch_keys_from_app(app)
+        original_compile(avoid_dirty_check=False)
         ensure_vite_django_dev_proxy_from_config()
-        warn_if_frontend_dispatchers_out_of_sync()
-        return result
+        missing = missing_frontend_dispatchers(expected_keys=expected, app=app)
+        if missing:
+            invalidate_stale_context_js()
+            if hasattr(app, "_reflex_django_decorated_pages_applied"):
+                delattr(app, "_reflex_django_decorated_pages_applied")
+            prepare_pages_for_compile()
+            expected = expected_dispatch_keys_from_app(app)
+            original_compile(avoid_dirty_check=False)
+            ensure_vite_django_dev_proxy_from_config()
+            missing = missing_frontend_dispatchers(expected_keys=expected, app=app)
+        warn_if_frontend_dispatchers_out_of_sync(expected_keys=expected, app=app)
+        return None
 
     reflex_module._compile_app = _compile_app  # type: ignore[assignment]
     reflex_module._reflex_django_compile_patched = True
@@ -278,6 +387,24 @@ def reset_integration_for_tests() -> None:
         if original_pe is not None:
             bsp.process_event = original_pe
             bsp._reflex_django_process_event_patched = False
+    except ImportError:
+        pass
+    try:
+        from reflex_base.event.context import EventContext
+
+        original_ed = getattr(EventContext, "_reflex_django_emit_delta_original", None)
+        if original_ed is not None:
+            EventContext.emit_delta = original_ed
+            EventContext._reflex_django_emit_delta_patched = False
+    except ImportError:
+        pass
+    try:
+        import reflex.page as page_module
+
+        original_page = getattr(page_module, "_reflex_django_page_original", None)
+        if original_page is not None:
+            page_module.page = original_page
+            page_module._reflex_django_page_patched = False
     except ImportError:
         pass
     _INSTALLED = False

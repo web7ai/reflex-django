@@ -180,6 +180,10 @@ Only one process should bind the Reflex backend port (default 8000). Use `run_re
 
 `run_reflex` does not create `rxconfig.py`. If an old auto-generated stub remains, delete it — config comes from `reflex_mount()` only.
 
+**`dispatch is not a function` (AppState pages)**
+
+The frontend `.web/utils/context.js` dispatch map is out of sync with your page substates (common on `HomeState(AppState)` with `on_load` and auth auto-sync). Ensure `reflex_mount(app_name="your_app")` matches the package that contains `views.py`. Stop the dev server, run `python manage.py run_reflex` from the Django project root, then hard-refresh the browser. If it persists, delete `.web/` and run `run_reflex` again. Temporary workaround: set `REFLEX_DJANGO_AUTH_AUTO_SYNC = False` and call `await YourState.sync_from_django()` inside `on_load`.
+
 ---
 
 ## Next steps

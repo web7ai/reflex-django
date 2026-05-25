@@ -162,6 +162,26 @@ def resolve_page_packages() -> list[str]:
     return discover_page_modules()
 
 
+def prepare_pages_for_compile() -> None:
+    """Import page modules and bucket decorated pages under the mount ``app_name``.
+
+    Call before Reflex compile so ``DECORATED_PAGES`` and backend substates match
+    the compiled ``.web/utils/context.js`` dispatch map (avoids
+    ``dispatch is not a function`` in the browser).
+    """
+    from reflex_django.mount_config import resolve_app_name
+
+    migrate_decorated_pages_app_name(resolve_app_name())
+    import_page_packages()
+    app = load_app_factory()
+    if hasattr(app, "_reflex_django_decorated_pages_applied"):
+        delattr(app, "_reflex_django_decorated_pages_applied")
+    if hasattr(app, "_apply_decorated_pages"):
+        migrate_decorated_pages_app_name(resolve_app_name())
+        app._apply_decorated_pages()
+    sync_page_load_events(app)
+
+
 def migrate_decorated_pages_app_name(app_name: str | None = None) -> str:
     """Move pages registered under the wrong ``DECORATED_PAGES`` key to *app_name*.
 
@@ -182,23 +202,45 @@ def migrate_decorated_pages_app_name(app_name: str | None = None) -> str:
     if not target:
         return target
 
+    target_pages = DECORATED_PAGES[target]
+    seen_routes: set[str | None] = {
+        kwargs.get("route") for _render, kwargs in target_pages
+    }
+
     for key in list(DECORATED_PAGES.keys()):
         if key == target:
             continue
         for entry in DECORATED_PAGES.pop(key, []):
-            DECORATED_PAGES[target].append(entry)
+            route = entry[1].get("route")
+            if route in seen_routes:
+                continue
+            target_pages.append(entry)
+            seen_routes.add(route)
+
+    deduped: list[tuple[Any, dict[str, Any]]] = []
+    seen_routes.clear()
+    for entry in target_pages:
+        route = entry[1].get("route")
+        if route in seen_routes:
+            continue
+        deduped.append(entry)
+        seen_routes.add(route)
+    DECORATED_PAGES[target] = deduped
 
     return target
 
 
 def apply_page_registry_to_app(app: Any) -> None:
     """Register :data:`~reflex_django.decorators.PAGE_REGISTRY` pages on *app*."""
+    from reflex.utils import format as route_format
     from reflex_django.decorators import PAGE_REGISTRY
 
     for registration in PAGE_REGISTRY:
         route = registration.route or registration.kwargs.get("route")
-        if route and route in getattr(app, "_unevaluated_pages", {}):
-            continue
+        if route:
+            formatted = route_format.format_route(str(route))
+            if formatted in getattr(app, "_unevaluated_pages", {}):
+                continue
         app.add_page(registration.render_fn, **registration.kwargs)
 
 
@@ -333,6 +375,9 @@ def ensure_django_led_app_ready() -> Any:
 def reset_app_factory_cache() -> None:
     """Clear cached app instance (tests only)."""
     global _APP_INSTANCE
+    if _APP_INSTANCE is not None:
+        if hasattr(_APP_INSTANCE, "_reflex_django_decorated_pages_applied"):
+            delattr(_APP_INSTANCE, "_reflex_django_decorated_pages_applied")
     _APP_INSTANCE = None
     _IMPORTED_VIEW_MODULES.clear()
     import reflex_django.django_led_app as django_led_app

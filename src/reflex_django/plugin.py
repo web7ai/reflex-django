@@ -102,7 +102,11 @@ class ReflexDjangoPlugin(Plugin):
         return self._prefix_config().backend_prefixes_for_asgi()
 
     def pre_compile(self, **context: Any) -> None:
-        """Inject Vite dev-server proxy rules for Django path prefixes."""
+        """Import pages and inject Vite dev-server proxy rules for Django prefixes."""
+        from reflex_django.app_factory import prepare_pages_for_compile
+
+        prepare_pages_for_compile()
+
         from reflex_base import constants
         from reflex_base.config import get_config
 

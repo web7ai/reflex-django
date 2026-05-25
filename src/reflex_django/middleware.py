@@ -478,10 +478,16 @@ class DjangoEventBridge(Middleware):
                     )
 
                     mirror_auth_cookies_to_state_tree(state, sk)
-            await maybe_sync_app_state_auth(state)
+            await maybe_sync_app_state_auth(
+                state,
+                handler_state_cls=getattr(event, "state_cls", None),
+            )
             from reflex_django.state.auth_bridge import maybe_sync_django_context_state
 
-            await maybe_sync_django_context_state(state)
+            await maybe_sync_django_context_state(
+                state,
+                handler_state_cls=getattr(event, "state_cls", None),
+            )
         return None
 
     async def postprocess(

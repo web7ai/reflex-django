@@ -250,6 +250,8 @@ No `rxconfig.py` required — `run_reflex` loads config from `reflex_mount()` in
 | `ModuleNotFoundError: shop.shop` | Do not add `shop/shop.py`; use `app_name="shop"` on `reflex_mount()` |
 | Admin warnings in console | Add `AsyncStreamingMiddleware` at end of `MIDDLEWARE` |
 | Context processors empty | Ensure `REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True` and template or explicit processors are configured |
+| `dispatch is not a function` in browser | `reflex_mount(app_name=...)` must match the app package with `views.py`; stop server, run `python manage.py run_reflex` from project root, hard-refresh `http://localhost:3000/` (Ctrl+Shift+R); if needed delete `.web/` once and restart |
+| Same error on `AppState` `on_load` | Reinstall editable `reflex-django`, restart `run_reflex`; optional `REFLEX_DJANGO_AUTH_AUTO_SYNC = False` and `await HomeState.sync_from_django()` in `on_load` |
 
 ---
 

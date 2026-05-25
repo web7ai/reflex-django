@@ -102,11 +102,15 @@ def _auth_snapshot_owner(state: Any) -> Any:
 
 
 def _mark_inherited_auth_snapshot_dirty(state: Any) -> None:
-    """Mark inherited auth fields dirty on substates (e.g. ``DjangoAuthState``).
+    """Mark inherited auth fields dirty on *state* and all descendant substates."""
+    _mark_auth_snapshot_dirty_subtree(state)
 
-    Reflex routes inherited assignments to the parent and does not mark the
-    child substate dirty, so ``rx.cond(DjangoAuthState.is_authenticated, ...)``
-    does not re-render unless we flag the child explicitly.
+
+def _mark_auth_snapshot_dirty_subtree(root_node: Any) -> None:
+    """Mark inherited auth fields dirty on *root_node* and its descendants only.
+
+    Used for page handler branches so we do not walk unrelated substates (which
+    can emit deltas for dispatch keys the browser never compiled).
     """
     def visit(node: Any) -> None:
         for field in _AUTH_SNAPSHOT_FIELDS:
@@ -115,10 +119,12 @@ def _mark_inherited_auth_snapshot_dirty(state: Any) -> None:
         mark_dirty = getattr(node, "_mark_dirty", None)
         if callable(mark_dirty):
             mark_dirty()
-        for child in (getattr(node, "substates", None) or {}).values():
-            visit(child)
+        substates = getattr(node, "substates", None) or {}
+        if isinstance(substates, dict):
+            for child in substates.values():
+                visit(child)
 
-    visit(state)
+    visit(root_node)
 
 
 def _mark_auth_ui_dirty(state: Any) -> None:
@@ -146,6 +152,101 @@ def _sync_django_auth_substates(root: Any) -> None:
     visit(root)
 
 
+def _can_assign_auth_field_on_owner(owner: Any, field: str) -> bool:
+    """Return whether *field* can be assigned on *owner* (not inherited without parent)."""
+    if field not in getattr(owner, "inherited_vars", {}):
+        return True
+    return getattr(owner, "parent_state", None) is not None
+
+
+def _owner_matches_auth_snapshot(owner: Any, snap: dict[str, Any]) -> bool:
+    """Return whether *owner* already reflects *snap* (skip redundant deltas)."""
+    try:
+        from reflex_django.auth.state import DjangoAuthState
+    except ImportError:
+        DjangoAuthState = None  # type: ignore[misc, assignment]
+    skip_auth_flag = DjangoAuthState is not None and isinstance(owner, DjangoAuthState)
+    checks: list[tuple[str, Any]] = [
+        ("user_id", snap["id"]),
+        ("username", snap["username"]),
+        ("email", snap["email"]),
+        ("first_name", snap["first_name"]),
+        ("last_name", snap["last_name"]),
+        ("is_staff", snap["is_staff"]),
+        ("is_superuser", snap["is_superuser"]),
+        ("group_names", snap["group_names"]),
+    ]
+    if not skip_auth_flag:
+        checks.append(("is_authenticated", snap["is_authenticated"]))
+    for field, expected in checks:
+        if not _can_assign_auth_field_on_owner(owner, field):
+            continue
+        if getattr(owner, field, None) != expected:
+            return False
+    return True
+
+
+async def _write_auth_snapshot_to_owner(
+    owner: Any,
+    snap: dict[str, Any],
+) -> None:
+    """Assign snapshot fields onto the substate that owns auth vars."""
+    try:
+        from reflex_django.auth.state import DjangoAuthState
+    except ImportError:
+        DjangoAuthState = None  # type: ignore[misc, assignment]
+    skip_auth_flag = DjangoAuthState is not None and isinstance(owner, DjangoAuthState)
+    if _can_assign_auth_field_on_owner(owner, "user_id"):
+        owner.user_id = snap["id"]
+    if _can_assign_auth_field_on_owner(owner, "username"):
+        owner.username = snap["username"]
+    if _can_assign_auth_field_on_owner(owner, "email"):
+        owner.email = snap["email"]
+    if _can_assign_auth_field_on_owner(owner, "first_name"):
+        owner.first_name = snap["first_name"]
+    if _can_assign_auth_field_on_owner(owner, "last_name"):
+        owner.last_name = snap["last_name"]
+    if not skip_auth_flag and _can_assign_auth_field_on_owner(owner, "is_authenticated"):
+        owner.is_authenticated = snap["is_authenticated"]
+    if _can_assign_auth_field_on_owner(owner, "is_staff"):
+        owner.is_staff = snap["is_staff"]
+    if _can_assign_auth_field_on_owner(owner, "is_superuser"):
+        owner.is_superuser = snap["is_superuser"]
+    if _can_assign_auth_field_on_owner(owner, "group_names"):
+        owner.group_names = snap["group_names"]
+
+
+async def apply_auth_snapshot_for_event_handler(
+    handler: Any,
+    *,
+    include_groups: bool | None = None,
+) -> None:
+    """Update auth snapshots for a page handler without walking the full state tree.
+
+    Used from :func:`~reflex_django.state.auth_bridge.maybe_sync_app_state_auth`
+    when ``HomeState(AppState).on_load`` runs. Writes on the handler's field owner
+    (usually a parent ``DjangoUserState`` substate) and only marks the handler branch
+    dirty when values change, so anonymous guests do not emit redundant parent
+    substates deltas that can trigger ``dispatch is not a function``.
+    """
+    if not isinstance(handler, DjangoUserState):
+        return
+
+    owner = _auth_snapshot_owner(handler)
+    if not isinstance(owner, DjangoUserState):
+        return
+    user = current_user()
+    want_groups = (
+        _settings_include_groups() if include_groups is None else include_groups
+    )
+    groups = await _group_names_for_user(user) if want_groups else None
+    snap = user_snapshot(user, group_names=groups if want_groups else [])
+    if _owner_matches_auth_snapshot(owner, snap):
+        return
+    await _write_auth_snapshot_to_owner(owner, snap)
+    _mark_auth_snapshot_dirty_subtree(handler)
+
+
 async def apply_auth_snapshot_to_state(
     state: DjangoUserState,
     *,
@@ -168,21 +269,7 @@ async def apply_auth_snapshot_to_state(
     )
     groups = await _group_names_for_user(user) if want_groups else None
     snap = user_snapshot(user, group_names=groups if want_groups else [])
-    try:
-        from reflex_django.auth.state import DjangoAuthState
-    except ImportError:
-        DjangoAuthState = None  # type: ignore[misc, assignment]
-    skip_auth_flag = DjangoAuthState is not None and isinstance(owner, DjangoAuthState)
-    owner.user_id = snap["id"]
-    owner.username = snap["username"]
-    owner.email = snap["email"]
-    owner.first_name = snap["first_name"]
-    owner.last_name = snap["last_name"]
-    if not skip_auth_flag:
-        owner.is_authenticated = snap["is_authenticated"]
-    owner.is_staff = snap["is_staff"]
-    owner.is_superuser = snap["is_superuser"]
-    owner.group_names = snap["group_names"]
+    await _write_auth_snapshot_to_owner(owner, snap)
     _mark_inherited_auth_snapshot_dirty(owner)
     root = owner._get_root_state() if hasattr(owner, "_get_root_state") else owner
     _sync_django_auth_substates(root)
@@ -230,7 +317,10 @@ class DjangoUserState(AuthBridgeMixin, rx.State):
 __all__ = [
     "DjangoUserState",
     "_auth_snapshot_owner",
+    "_mark_auth_snapshot_dirty_subtree",
     "_mark_auth_ui_dirty",
+    "_mark_inherited_auth_snapshot_dirty",
+    "apply_auth_snapshot_for_event_handler",
     "apply_auth_snapshot_to_state",
     "user_snapshot",
 ]

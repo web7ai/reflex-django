@@ -299,12 +299,63 @@ def _resolve_substate_node(root: Any, state_cls: type) -> Any | None:
         return None
 
 
-async def _sync_auth_snapshots_in_tree(
-    state: Any,
+def _is_django_user_handler_cls(handler_state_cls: type | None) -> bool:
+    """Return whether *handler_state_cls* is a user-defined ``DjangoUserState`` handler."""
+    if handler_state_cls is None:
+        return False
+    from reflex_django.auth_state import DjangoUserState
+
+    try:
+        return issubclass(handler_state_cls, DjangoUserState)
+    except TypeError:
+        return False
+
+
+def _handler_state_class_chain(handler_state_cls: type) -> list[type]:
+    """Return handler class and ancestors up to (but not including) root ``State``."""
+    import reflex as rx
+
+    chain: list[type] = []
+    cls: type | None = handler_state_cls
+    while cls is not None:
+        if cls is rx.State or cls.__name__ == "State":
+            break
+        chain.append(cls)
+        cls = cls.get_parent_state()
+    chain.reverse()
+    return chain
+
+
+async def _sync_auth_snapshots_on_handler_branch(
+    root: Any,
+    handler_state_cls: type,
     *,
     include_groups: bool | None = None,
 ) -> None:
-    """Refresh auth snapshot vars on every :class:`~reflex_django.auth_state.DjangoUserState` substate."""
+    """Refresh auth snapshots for the page handler only (guest or authenticated)."""
+    if not _is_django_user_handler_cls(handler_state_cls):
+        return
+
+    from reflex_django.auth_state import apply_auth_snapshot_for_event_handler
+
+    try:
+        handler = await root.get_state(handler_state_cls)
+    except Exception:
+        handler = _resolve_substate_node(root, handler_state_cls)
+    if handler is not None:
+        await apply_auth_snapshot_for_event_handler(
+            handler,
+            include_groups=include_groups,
+        )
+
+
+async def _sync_auth_snapshots_in_tree(
+    state: Any,
+    *,
+    handler_state_cls: type | None = None,
+    include_groups: bool | None = None,
+) -> None:
+    """Refresh auth snapshot vars on ``DjangoUserState`` substates for the active branch."""
     from reflex_django.auth_state import (
         DjangoUserState,
         _auth_snapshot_owner,
@@ -312,6 +363,14 @@ async def _sync_auth_snapshots_in_tree(
     )
 
     root = state._get_root_state() if hasattr(state, "_get_root_state") else state
+
+    if handler_state_cls is not None:
+        await _sync_auth_snapshots_on_handler_branch(
+            root,
+            handler_state_cls,
+            include_groups=include_groups,
+        )
+        return
 
     owners_seen: set[int] = set()
     nodes_seen: set[int] = set()
@@ -349,16 +408,29 @@ async def _sync_auth_snapshots_in_tree(
     await visit_instance_tree(root)
 
 
-async def maybe_sync_app_state_auth(state: Any) -> None:
-    """Refresh auth snapshot vars on all ``DjangoUserState`` substates when auto-sync is enabled."""
+async def maybe_sync_app_state_auth(
+    state: Any,
+    *,
+    handler_state_cls: type | None = None,
+) -> None:
+    """Refresh auth snapshot vars on the event handler branch when auto-sync is enabled."""
     from django.conf import settings
 
     if not getattr(settings, "REFLEX_DJANGO_AUTH_AUTO_SYNC", True):
         return
-    await _sync_auth_snapshots_in_tree(state)
+    if not _is_django_user_handler_cls(handler_state_cls):
+        return
+    await _sync_auth_snapshots_in_tree(
+        state,
+        handler_state_cls=handler_state_cls,
+    )
 
 
-async def maybe_sync_django_context_state(state: Any) -> None:
+async def maybe_sync_django_context_state(
+    state: Any,
+    *,
+    handler_state_cls: type | None = None,
+) -> None:
     """Copy bridged context onto :class:`~reflex_django.reflex_context.DjangoContextState` substates."""
     import json
 
@@ -379,8 +451,21 @@ async def maybe_sync_django_context_state(state: Any) -> None:
         if isinstance(node, DjangoContextState):
             node.django_context = merged
             node.django_context_json = payload
-        for child in (getattr(node, "substates", None) or {}).values():
-            visit(child)
+        substates = getattr(node, "substates", None) or {}
+        if isinstance(substates, dict):
+            for child in substates.values():
+                visit(child)
+
+    if handler_state_cls is not None:
+        if not _is_django_user_handler_cls(handler_state_cls):
+            return
+        try:
+            handler = await root.get_state(handler_state_cls)
+        except Exception:
+            handler = _resolve_substate_node(root, handler_state_cls)
+        if handler is not None:
+            visit(handler)
+        return
 
     visit(root)
 
@@ -388,7 +473,10 @@ async def maybe_sync_django_context_state(state: Any) -> None:
 __all__ = [
     "AuthBridgeMixin",
     "SessionProxy",
+    "_handler_state_class_chain",
+    "_is_django_user_handler_cls",
     "_sync_auth_snapshots_in_tree",
+    "_sync_auth_snapshots_on_handler_branch",
     "maybe_sync_app_state_auth",
     "maybe_sync_django_context_state",
     "session_async_save",

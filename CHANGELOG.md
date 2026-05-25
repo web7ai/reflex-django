@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- ``dispatch is not a function``: patch ``reflex.page`` to bucket decorators under
+  ``reflex_mount()`` ``app_name``; run ``prepare_pages_for_compile()`` before compile
+  (and recompile once when ``.web/utils/context.js`` dispatchers are stale); dedupe
+  ``DECORATED_PAGES`` by route; skip duplicate ``_apply_decorated_pages`` on cached apps.
+- ``dispatch is not a function`` on ``AppState`` pages (e.g. ``HomeState.on_load`` with
+  ``self.request``): ``prepare_pages_for_compile()`` re-applies pages before each compile;
+  compile validation compares ``context.js`` to the live app state tree (not the global
+  state registry); stale ``context.js`` is removed and compile retried on mismatch; auth
+  auto-sync is scoped to the event handler substate branch instead of every
+  ``DjangoUserState`` / ``DjangoAuthState`` class in the process.
+- Auth auto-sync no longer runs for Reflex internal events (e.g.
+  ``OnLoadInternalState``), fixing ``SetUndefinedStateVarError`` on ``user_id`` during
+  ``on_load_internal``.
+- Guest / unauthenticated ``on_load``: auth auto-sync uses
+  :func:`~reflex_django.auth_state.apply_auth_snapshot_for_event_handler` so snapshot
+  updates only mark the handler branch dirty (avoids deltas for unrelated substates);
+  stale ``context.js`` is invalidated before compile when dispatch keys are already missing.
+- Guest ``on_load``: skip auth snapshot writes when values are already the anonymous
+  defaults (no redundant parent-substate deltas).
+- Runtime: filter WebSocket deltas to substates compiled into ``.web/utils/context.js``
+  (covers ``hydrate`` and handler events); auth auto-sync runs only for
+  ``DjangoUserState`` page handlers, never for root/internal Reflex events.
+
 ## [0.4.0] - 2026-05-24
 
 ### Changed

@@ -37,6 +37,24 @@ def test_migrate_decorated_pages_moves_empty_key_to_mount_app_name() -> None:
     assert DECORATED_PAGES.get("orphan", []) == []
     assert len(DECORATED_PAGES.get("shop", [])) == 1
 
+
+def test_migrate_decorated_pages_dedupes_same_route() -> None:
+    clear_page_registry()
+    clear_mount_rx_config()
+    reset_app_factory_cache()
+    DECORATED_PAGES.clear()
+
+    register_mount_rx_config(app_name="shop", rx_config={"app_name": "shop"})
+
+    @page(route="/", title="Home")
+    def index() -> rx.Component:
+        return rx.text("hi")
+
+    DECORATED_PAGES[""].append(DECORATED_PAGES["shop"].pop())
+    migrate_decorated_pages_app_name("shop")
+
+    assert len(DECORATED_PAGES.get("shop", [])) == 1
+
     clear_page_registry()
     clear_mount_rx_config()
     DECORATED_PAGES.clear()
