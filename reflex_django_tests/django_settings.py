@@ -18,6 +18,11 @@ INSTALLED_APPS = [
     "django.contrib.admin",
 ]
 
+# Tests assume the legacy Vite-HMR default for ``run_reflex``. The library
+# default is now ``True`` (from-build on by default) — individual tests that
+# need the new behaviour set it explicitly via ``monkeypatch.setattr``.
+REFLEX_DJANGO_SERVE_FROM_BUILD = False
+
 MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

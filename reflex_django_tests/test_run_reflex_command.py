@@ -50,3 +50,269 @@ def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured_argv[:2] == ["reflex", "run"]
     assert "--frontend-port" in captured_argv
     assert "3005" in captured_argv
+
+
+# ---------------------------------------------------------------------------
+# --from-build flag (auto-export + serve-from-disk in dev)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _stub_asgi_server(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
+    """Replace ``_run_asgi_server`` with a no-op recorder.
+
+    We do not want the test to actually start uvicorn — only verify the
+    pre-serve orchestration (auto-export, env var flipping, Vite spawn
+    decisions).
+    """
+    server = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_asgi_server",
+        server,
+    )
+    return server
+
+
+@pytest.fixture
+def _force_django_outer_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the routing mode to DJANGO_OUTER for these tests."""
+    monkeypatch.setattr(
+        "reflex_django.routing.resolve_url_routing",
+        lambda: UrlRoutingMode.DJANGO_OUTER,
+    )
+    monkeypatch.setattr(
+        "reflex_django.integration.install_reflex_django_integration",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.integration.refresh_get_config_bindings",
+        mock.MagicMock(),
+    )
+
+
+def test_from_build_triggers_export_and_disables_vite_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--from-build`` re-exports the SPA AND sets REFLEX_DJANGO_DEV_PROXY=0."""
+    export_call = mock.MagicMock()
+    monkeypatch.setattr(
+        "django.core.management.call_command", export_call
+    )
+    # Don't spawn a real Vite child.
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        mock.MagicMock(),
+    )
+    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+
+    Command().handle(from_build=True, skip_rebuild=False)
+
+    # Export ran with the canonical --frontend-only --no-zip --stage-to-static-root flags.
+    export_call.assert_called_once()
+    name, *_ = export_call.call_args.args
+    assert name == "export_reflex"
+    kwargs = export_call.call_args.kwargs
+    assert kwargs.get("frontend_only") is True
+    assert kwargs.get("no_zip") is True
+    assert kwargs.get("stage_to_static_root") is True
+
+    # Dev-proxy explicitly turned off so the catch-all view serves from disk.
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+
+
+def test_from_build_skip_rebuild_does_not_re_export(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--from-build --skip-rebuild`` uses the existing bundle on disk."""
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+
+    Command().handle(from_build=True, skip_rebuild=True)
+
+    export_call.assert_not_called()
+    # Still flips the dev-proxy off so the user gets the disk SPA.
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+
+
+def test_setting_serve_from_build_implies_from_build(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``settings.REFLEX_DJANGO_SERVE_FROM_BUILD = True`` enables the flag globally.
+
+    Saves users from passing ``--from-build`` on every command invocation.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+    monkeypatch.delenv("REFLEX_DJANGO_SERVE_FROM_BUILD", raising=False)
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True, raising=False
+    )
+
+    Command().handle()
+
+    export_call.assert_called_once()
+
+
+def test_from_build_does_not_spawn_vite(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--from-build`` must not spawn a Vite child process."""
+    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    vite_spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        vite_spawn,
+    )
+
+    Command().handle(from_build=True, skip_rebuild=True)
+
+    vite_spawn.assert_not_called()
+
+
+def test_env_prod_still_serves_from_disk_without_export(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--env prod`` is unchanged: serve from disk, do NOT auto-export.
+
+    Auto-export is reserved for ``--from-build`` so prod boots are still
+    deterministic (build separately in CI, then run the server).
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+
+    Command().handle(env="prod")
+
+    export_call.assert_not_called()
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+
+
+def test_env_prod_ignores_serve_from_build_setting(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--env prod`` wins over ``REFLEX_DJANGO_SERVE_FROM_BUILD=True``.
+
+    Prod is a deterministic CI-build-then-deploy contract. The server must
+    not silently rebuild at boot just because the dev default leaks into
+    production settings.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True, raising=False
+    )
+
+    Command().handle(env="prod")
+
+    export_call.assert_not_called()
+
+
+def test_default_is_from_build_when_setting_true(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """Plain ``python manage.py run_reflex`` defaults to from-build.
+
+    With the new default ``REFLEX_DJANGO_SERVE_FROM_BUILD = True`` the
+    user does not have to pass ``--from-build`` — the export runs
+    automatically before serving.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+    monkeypatch.delenv("REFLEX_DJANGO_SERVE_FROM_BUILD", raising=False)
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True, raising=False
+    )
+
+    Command().handle()  # no flags at all
+
+    export_call.assert_called_once()
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+
+
+def test_with_vite_opts_out_of_from_build(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--with-vite`` overrides ``REFLEX_DJANGO_SERVE_FROM_BUILD=True``.
+
+    Users who want the legacy Vite-HMR loop pass ``--with-vite`` (alias
+    ``--no-from-build``); we must skip the auto-export AND spawn Vite.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    vite_spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        vite_spawn,
+    )
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True, raising=False
+    )
+
+    Command().handle(with_vite=True)
+
+    export_call.assert_not_called()
+    vite_spawn.assert_called_once()
+
+
+def test_explicit_from_build_beats_with_vite(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """If the user passes both ``--from-build`` and ``--with-vite`` (silly), the
+    explicit ``--from-build`` wins.
+
+    Asserting the precedence in tests so a future refactor doesn't silently
+    swap which flag wins.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    vite_spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        vite_spawn,
+    )
+
+    Command().handle(from_build=True, with_vite=True)
+
+    export_call.assert_called_once()
+    vite_spawn.assert_not_called()

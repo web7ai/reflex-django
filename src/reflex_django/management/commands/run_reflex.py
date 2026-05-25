@@ -21,6 +21,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
@@ -83,6 +84,40 @@ class Command(BaseCommand):
             help="Disable ASGI server auto-reload on file changes.",
         )
         parser.add_argument(
+            "--from-build",
+            "--serve-build",
+            action="store_true",
+            dest="from_build",
+            help=(
+                "Skip Vite entirely. Re-export the SPA bundle (frontend-only, "
+                "no zip, staged into STATIC_ROOT/_reflex) before starting the "
+                "ASGI server, then serve it from disk. Re-run the command to "
+                "rebuild after Reflex page changes. This is the default "
+                "(controlled by REFLEX_DJANGO_SERVE_FROM_BUILD = True); pass "
+                "--with-vite to opt out and use the legacy Vite-HMR dev loop."
+            ),
+        )
+        parser.add_argument(
+            "--with-vite",
+            "--no-from-build",
+            action="store_true",
+            dest="with_vite",
+            help=(
+                "Opt out of the default from-build dev loop and spawn Vite "
+                "for hot-module reload, like the legacy `reflex run` workflow."
+            ),
+        )
+        parser.add_argument(
+            "--skip-rebuild",
+            action="store_true",
+            dest="skip_rebuild",
+            help=(
+                "When --from-build is active, do NOT re-export before serving "
+                "(use the existing bundle on disk). Useful for fast restarts "
+                "after only Python changes."
+            ),
+        )
+        parser.add_argument(
             "reflex_args",
             nargs="*",
             help="Additional arguments forwarded to ``reflex run`` (prefix with --).",
@@ -131,27 +166,81 @@ class Command(BaseCommand):
         loglevel = options.get("loglevel") or "info"
         frontend_only = bool(options.get("frontend_only"))
         backend_only = bool(options.get("backend_only"))
+        skip_rebuild = bool(options.get("skip_rebuild"))
+
+        # Resolve from-build mode (default for dev now). Precedence, highest first:
+        #   1. ``--env prod``                       → False (prod is its own contract:
+        #                                              build separately in CI, then run)
+        #   2. ``--with-vite`` / ``--no-from-build``→ False (explicit Vite opt-out)
+        #   3. ``--from-build``                     → True  (explicit opt-in)
+        #   4. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default True)
+        with_vite = bool(options.get("with_vite"))
+        explicit_from_build = bool(options.get("from_build"))
+        if is_prod:
+            from_build = False
+        elif with_vite and not explicit_from_build:
+            from_build = False
+        elif explicit_from_build:
+            from_build = True
+        else:
+            from_build = self._setting_serve_from_build()
 
         os.environ.setdefault("REFLEX_DJANGO_FRONTEND_PORT", str(frontend_port))
         os.environ.setdefault("REFLEX_DJANGO_BACKEND_PORT", str(backend_port))
 
-        if is_prod:
-            # Explicitly turn off the dev Vite reverse-proxy: in prod the SPA
-            # is served from disk (STATIC_ROOT / .web/_static), so the catch-
-            # all view must NOT try to proxy "/" to Vite — there is no Vite
-            # running. We also signal "production" to the default settings
-            # block so DEBUG defaults to False for users who rely on those
-            # defaults.
+        # ``--env prod`` and ``--from-build`` both serve the SPA from disk and
+        # must not try to reach Vite. We treat them uniformly here: no Vite
+        # spawn, no dev proxy, and a pre-flight SPA check. ``--env prod``
+        # additionally flips DEBUG off so the default settings stop honoring
+        # development conveniences.
+        serve_from_disk = is_prod or from_build
+        if serve_from_disk:
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+        if is_prod:
             os.environ.setdefault("REFLEX_DJANGO_DEBUG", "0")
+
+        # Print an up-front banner BEFORE the (potentially slow) auto-export
+        # kicks in so the user sees what mode they are in. Plain
+        # ``manage.py run_reflex`` (no flags) lands here in the from-build
+        # branch by default.
+        if from_build:
+            mode_label = (
+                "--from-build (explicit)"
+                if explicit_from_build
+                else "from-build (default)"
+            )
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(
+                    f"reflex-django: {mode_label} — Django will auto-export the "
+                    "SPA and serve the compiled bundle from disk. No Vite, no HMR.\n"
+                    "    Pass --with-vite for the legacy Vite-HMR dev loop, or "
+                    "--skip-rebuild to reuse the existing bundle on disk."
+                )
+            )
+
+        if from_build and not skip_rebuild:
+            # Rebuild the SPA before serving so the user sees the latest
+            # Reflex page tree on every ``manage.py run_reflex``.
+            self._auto_export_for_build_mode()
+        if serve_from_disk:
             self._warn_if_spa_missing()
 
         if frontend_only:
+            if from_build:
+                # ``--from-build --frontend-only`` reduces to "just rebuild
+                # the bundle and exit" — useful in CI/pre-deploy steps.
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        "reflex-django: --from-build --frontend-only finished. "
+                        "Bundle is staged; start the ASGI server when ready."
+                    )
+                )
+                return
             self._spawn_vite_blocking(frontend_port)
             return
 
         vite_proc: subprocess.Popen[bytes] | None = None
-        if not is_prod and not backend_only:
+        if not serve_from_disk and not backend_only:
             vite_proc = self._spawn_vite_background(frontend_port)
             self.stdout.write(
                 self.style.NOTICE(
@@ -164,6 +253,15 @@ class Command(BaseCommand):
                 self.style.SUCCESS(
                     f"reflex-django: production mode — serving compiled SPA "
                     f"from disk (no Vite). ASGI server on port {backend_port}."
+                )
+            )
+        elif from_build:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"reflex-django: serving freshly-staged SPA from disk "
+                    f"(no Vite). ASGI server on port {backend_port}.\n"
+                    "    Re-run `python manage.py run_reflex` to rebuild after "
+                    "any Reflex page change. Python/Django edits auto-reload."
                 )
             )
 
@@ -187,6 +285,87 @@ class Command(BaseCommand):
                     vite_proc.wait(timeout=5)
                 except Exception:  # noqa: BLE001
                     vite_proc.kill()
+
+    def _setting_serve_from_build(self) -> bool:
+        """Return whether ``settings.REFLEX_DJANGO_SERVE_FROM_BUILD`` is on.
+
+        Honours the env var ``REFLEX_DJANGO_SERVE_FROM_BUILD`` as well so
+        operators can toggle the behaviour without editing ``settings.py``.
+
+        The library default is ``True`` (from-build is the canonical dev
+        story for the Django-outer architecture); if the setting is missing
+        entirely we still return ``True`` so a fresh project that hasn't
+        added the key yet gets the new default behaviour.
+        """
+        env = os.environ.get("REFLEX_DJANGO_SERVE_FROM_BUILD")
+        if env is not None:
+            return str(env).strip().lower() not in {"0", "false", "no"}
+        try:
+            from django.conf import settings
+
+            return bool(getattr(settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True))
+        except Exception:  # noqa: BLE001
+            return True
+
+    def _auto_export_for_build_mode(self) -> None:
+        """Run the export command in-process before serving the SPA.
+
+        Equivalent to running:
+
+        .. code-block:: bash
+
+            python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+
+        but stays inside the current Python process so the Reflex/Django
+        integration patches are reused — no second interpreter bootstrap.
+
+        Failures are not fatal: if the export crashes we fall back to whatever
+        is already on disk (``ReflexMountView`` returns 404 with a helpful
+        message if nothing is there). This means an HMR-less dev loop is
+        still recoverable when one component breaks the build — re-run with
+        ``--from-build --skip-rebuild`` to use the previous good bundle.
+        """
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        self.stdout.write(
+            self.style.NOTICE(
+                "reflex-django: auto-exporting Reflex SPA "
+                "(frontend-only, no-zip, staged into STATIC_ROOT/_reflex)..."
+            )
+        )
+        start = time.monotonic()
+        try:
+            call_command(
+                "export_reflex",
+                frontend_only=True,
+                no_zip=True,
+                stage_to_static_root=True,
+                env="prod",
+            )
+        except CommandError as exc:
+            self.stdout.write(
+                self.style.ERROR(
+                    f"reflex-django: auto-export failed: {exc}\n"
+                    "    Falling back to the existing bundle on disk (if any). "
+                    "Re-run with --skip-rebuild to suppress this attempt."
+                )
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            self.stdout.write(
+                self.style.ERROR(
+                    f"reflex-django: auto-export crashed: {exc!r}\n"
+                    "    Falling back to the existing bundle on disk (if any)."
+                )
+            )
+            return
+        elapsed = time.monotonic() - start
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"reflex-django: auto-export finished in {elapsed:.1f}s."
+            )
+        )
 
     def _warn_if_spa_missing(self) -> None:
         """Print a clear warning when ``--env prod`` cannot find a compiled SPA.
