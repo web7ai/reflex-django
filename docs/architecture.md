@@ -333,4 +333,4 @@ Once that completes, the process is ready to serve. Every subsequent request flo
 
 ---
 
-**Navigation:** [← Project Structure](project_structure.md) | [Routing →](routing.md) | [Single-port reference →](single_port_django_outer.md)
+**Navigation:** [← Project Structure](project_structure.md) | [Routing →](routing.md) | [WebSocket event pipeline →](websocket_event_pipeline.md) | [Single-port reference →](single_port_django_outer.md)

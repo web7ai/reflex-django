@@ -136,6 +136,8 @@ Every WebSocket connection lands on the outer dispatcher:
 
 Django itself never sees a WebSocket scope, so your `urls.py` does not need to know about WebSockets at all.
 
+For an end-to-end trace of what happens when a Reflex event arrives on `/_event` — Socket.IO handshake, the synthetic `HttpRequest`, the middleware chain, and how `request.user` is bound to your handler — see [WebSocket event pipeline](websocket_event_pipeline.md).
+
 ---
 
 ## 6. Common pitfalls

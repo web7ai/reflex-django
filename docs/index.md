@@ -88,6 +88,7 @@ python manage.py run_reflex
 | Runtime architecture | [Architecture](architecture.md) |
 | Single-port reference | [Single-port architecture](single_port_django_outer.md) |
 | Routing | [Routing & dispatching](routing.md) |
+| `/_event` & WebSockets | [WebSocket event pipeline](websocket_event_pipeline.md) |
 | Pages & `@template` | [Pages in views.py](pages_in_views.md) |
 | ASGI streaming | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
 | Brownfield | [Existing Django project](existing_django_project.md) |
@@ -114,6 +115,7 @@ python manage.py run_reflex
 | Set ports and app name | [Configuration](configuration.md) |
 | Understand how Django + Reflex compose | [Architecture](architecture.md) |
 | See the dispatcher routing rules | [Routing & dispatching](routing.md) |
+| Trace a `/_event` WebSocket end-to-end | [WebSocket event pipeline](websocket_event_pipeline.md) |
 | Put pages in Django apps | [Pages in views.py](pages_in_views.md) |
 | Fix admin streaming warnings | [AsyncStreamingMiddleware](async_streaming_middleware.md) |
 | Use `request.user` / messages / CSRF in events | [Authentication](authentication.md) |
