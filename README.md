@@ -27,12 +27,16 @@
 
 ## What it does
 
-- **Django** — `/admin`, `/api`, ORM, migrations, sessions  
-- **Reflex** — SPA UI, client routes, WebSocket events  
-- **One command** — `python manage.py run_reflex`  
+- **Django** — `/admin`, `/api`, ORM, migrations, sessions
+- **Reflex** — SPA UI, client routes, WebSocket events
+- **One port, one command** — `python manage.py run_reflex` serves everything on `http://localhost:8000/`
+- **Full `settings.MIDDLEWARE` chain** runs on every Reflex event
+- **`self.request`, `self.response`, `self.messages`, `self.csrf_token`** available inside `AppState`
 - **No `myapp/myapp.py`** — pages in `myapp/views.py`, app loaded via `django_led_app`
 
-Reflex settings go in **`reflex_mount()`** in `urls.py`, not in a large `rxconfig.py`.
+Reflex settings go in **`reflex_mount()`** in `urls.py`, not in a large `rxconfig.py`. ASGI deployments use `reflex_django.asgi_entry:application` as the ASGI callable.
+
+See [Single-port Django-outer architecture](docs/single_port_django_outer.md) and [Migration guide](docs/migration_django_outer.md).
 
 ---
 

@@ -138,6 +138,75 @@ def _json_serializable(value: Any) -> bool:
     return True
 
 
+def _snapshot_messages(val: Any) -> list[dict[str, Any]]:
+    """Convert a Django messages storage object into a JSON-safe list.
+
+    Args:
+        val: Either an iterable of :class:`django.contrib.messages.storage.base.Message`
+            instances or any iterable convertible to dicts with the same shape.
+
+    Returns:
+        A list of plain dicts with ``level``, ``level_tag``, ``message``,
+        ``tags``, and ``extra_tags`` keys. Returns ``[]`` on any error.
+    """
+    out: list[dict[str, Any]] = []
+    try:
+        iterator = iter(val)
+    except TypeError:
+        return out
+    for msg in iterator:
+        try:
+            out.append(
+                {
+                    "level": int(getattr(msg, "level", 0) or 0),
+                    "level_tag": str(getattr(msg, "level_tag", "") or ""),
+                    "message": str(getattr(msg, "message", "") or msg),
+                    "tags": str(getattr(msg, "tags", "") or ""),
+                    "extra_tags": str(getattr(msg, "extra_tags", "") or ""),
+                }
+            )
+        except Exception:
+            continue
+    return out
+
+
+def _snapshot_perms(val: Any) -> dict[str, Any]:
+    """Convert a :class:`django.contrib.auth.context_processors.PermWrapper` to JSON.
+
+    The template-side ``perms`` object is lazy and not JSON-serializable, but
+    its underlying ``user`` exposes ``get_all_permissions()`` and
+    ``get_group_permissions()``. We surface those as plain lists so handlers
+    and UI can introspect them cheaply.
+
+    Returns:
+        A dict with ``all`` and ``groups`` lists (sorted, deduped) and a
+        ``modules`` mapping of ``app_label`` → ``True`` for quick lookup.
+        Returns an empty dict on any error.
+    """
+    user = getattr(val, "user", None) or getattr(val, "_user", None)
+    if user is None:
+        return {}
+    snap: dict[str, Any] = {"all": [], "groups": [], "modules": {}}
+    try:
+        getter = getattr(user, "get_all_permissions", None)
+        if callable(getter):
+            snap["all"] = sorted({str(p) for p in (getter() or ())})
+    except Exception:
+        snap["all"] = []
+    try:
+        getter = getattr(user, "get_group_permissions", None)
+        if callable(getter):
+            snap["groups"] = sorted({str(p) for p in (getter() or ())})
+    except Exception:
+        snap["groups"] = []
+    try:
+        modules = {p.split(".", 1)[0] for p in snap["all"] if "." in p}
+        snap["modules"] = {m: True for m in sorted(modules)}
+    except Exception:
+        snap["modules"] = {}
+    return snap
+
+
 def _sanitize_template_context_chunk(
     chunk: dict[str, Any],
     *,
@@ -145,13 +214,19 @@ def _sanitize_template_context_chunk(
 ) -> dict[str, Any]:
     """Make one template context-processor dict safe for Reflex JSON state.
 
+    Most values pass straight through when JSON-serializable. ``user`` is
+    snapshotted (see :func:`reflex_django.auth_state.user_snapshot`). ``request``
+    is dropped (the bridged request is always available via ``self.request``).
+    ``messages`` and ``perms`` — historically dropped because they are not
+    JSON-serializable — are now snapshotted into plain lists/dicts so handlers
+    and UI bindings (e.g. ``State.django_context["messages"]``) can use them.
+
     Args:
         chunk: Raw mapping from a Django template context processor.
-        request: The active request (unused; reserved for future use).
+        request: The active request (used to filter the ``request`` key).
 
     Returns:
-        A shallow mapping with non-serializable template keys removed or
-        adapted.
+        A shallow mapping safe for ``json.dumps``.
     """
     del request
     from django.http import HttpRequest
@@ -164,7 +239,11 @@ def _sanitize_template_context_chunk(
             continue
         if key == "request" and isinstance(val, HttpRequest):
             continue
-        if key in {"perms", "messages"}:
+        if key == "messages":
+            out[key] = _snapshot_messages(val)
+            continue
+        if key == "perms":
+            out[key] = _snapshot_perms(val)
             continue
         if _json_serializable(val):
             out[key] = val

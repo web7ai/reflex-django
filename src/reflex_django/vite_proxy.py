@@ -273,13 +273,26 @@ def ensure_vite_django_dev_proxy(
 
 
 def ensure_vite_django_dev_proxy_from_config() -> bool:
-    """Patch ``.web/vite.config.js`` using the active Reflex config and plugin."""
+    """Patch ``.web/vite.config.js`` using the active Reflex config and plugin.
+
+    In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
+    Django serves ``/`` directly and reverse-proxies it to Vite via
+    :class:`reflex_django.views.mount.ReflexMountView`; the browser never talks
+    to Vite at ``localhost:<frontend_port>`` itself, so Vite does not need
+    Django-aware ``server.proxy`` rules. The patch is a no-op in that mode.
+    """
     from reflex.utils import prerequisites
     from reflex_base.config import get_config
     from reflex_base.utils import console
 
     from reflex_django.plugin import ReflexDjangoPlugin
     from reflex_django.routing import UrlRoutingMode, resolve_url_routing
+
+    routing_mode = resolve_url_routing()
+    if routing_mode == UrlRoutingMode.DJANGO_OUTER:
+        # Django is the outer ASGI app; Vite is reverse-proxied through Django.
+        # Patching Vite to proxy backend paths would create a request loop.
+        return False
 
     web_dir = Path(prerequisites.get_web_dir())
     if not web_dir.is_dir():
@@ -297,7 +310,7 @@ def ensure_vite_django_dev_proxy_from_config() -> bool:
     if not prefixes:
         return False
 
-    django_led = resolve_url_routing() == UrlRoutingMode.DJANGO_LED
+    django_led = routing_mode == UrlRoutingMode.DJANGO_LED
     changed = ensure_vite_django_dev_proxy(
         web_dir,
         target=config.api_url.rstrip("/"),

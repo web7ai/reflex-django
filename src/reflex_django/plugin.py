@@ -178,17 +178,26 @@ class ReflexDjangoPlugin(Plugin):
 
         self._warn_if_using_auto_settings(active_settings)
 
-        from reflex_django.asgi import django_asgi_application
+        routing_mode = resolve_url_routing()
 
-        django_asgi = django_asgi_application()
-        transformer = make_dispatcher(
-            django_asgi,
-            backend_prefixes=self._all_prefixes(),
-            routing_mode=resolve_url_routing(),
-        )
+        # In ``DJANGO_OUTER`` mode Django is the outer ASGI app
+        # (:mod:`reflex_django.asgi_entry`) and the Reflex Starlette is mounted
+        # under it via :class:`~reflex_django.django_outer_dispatcher.DjangoOuterDispatcher`.
+        # The legacy Reflex-led dispatcher must NOT be attached as an
+        # ``api_transformer`` because it would try to mount Django *inside* Reflex,
+        # causing infinite-recursion-style routing collisions.
+        if routing_mode != UrlRoutingMode.DJANGO_OUTER:
+            from reflex_django.asgi import django_asgi_application
 
-        existing = _as_sequence(app.api_transformer)
-        app.api_transformer = (*existing, transformer)
+            django_asgi = django_asgi_application()
+            transformer = make_dispatcher(
+                django_asgi,
+                backend_prefixes=self._all_prefixes(),
+                routing_mode=routing_mode,
+            )
+
+            existing = _as_sequence(app.api_transformer)
+            app.api_transformer = (*existing, transformer)
 
         if self.install_event_bridge:
             from reflex_django.middleware import DjangoEventBridge

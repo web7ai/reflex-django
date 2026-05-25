@@ -90,6 +90,10 @@ _AUTH_SNAPSHOT_FIELDS: tuple[str, ...] = (
     "is_staff",
     "is_superuser",
     "group_names",
+    "messages",
+    "csrf_token",
+    "language",
+    "language_bidi",
 )
 
 
@@ -178,12 +182,69 @@ def _owner_matches_auth_snapshot(owner: Any, snap: dict[str, Any]) -> bool:
     ]
     if not skip_auth_flag:
         checks.append(("is_authenticated", snap["is_authenticated"]))
+
+    # Mirror fields are populated per-event from the bridged middleware chain;
+    # include them in the match check so a new flash message (or a fresh CSRF
+    # token, or a language switch) reliably triggers a UI delta.
+    mirror = _collect_middleware_mirror_snapshot()
+    for field, expected in (
+        ("messages", mirror["messages"]),
+        ("csrf_token", mirror["csrf_token"]),
+        ("language", mirror["language"]),
+        ("language_bidi", mirror["language_bidi"]),
+    ):
+        if _can_assign_auth_field_on_owner(owner, field):
+            checks.append((field, expected))
+
     for field, expected in checks:
         if not _can_assign_auth_field_on_owner(owner, field):
             continue
         if getattr(owner, field, None) != expected:
             return False
     return True
+
+
+def _collect_middleware_mirror_snapshot() -> dict[str, Any]:
+    """Snapshot middleware-side data (messages, CSRF, language) for the UI.
+
+    Each item is opt-out via a per-setting flag so users can disable mirroring
+    individually (saves event payload size on apps that do not need it).
+    """
+    from django.conf import settings
+
+    snap: dict[str, Any] = {
+        "messages": [],
+        "csrf_token": "",
+        "language": "",
+        "language_bidi": False,
+    }
+
+    if getattr(settings, "REFLEX_DJANGO_MIRROR_MESSAGES", True):
+        try:
+            from reflex_django.context import current_messages
+
+            snap["messages"] = current_messages()
+        except Exception:
+            snap["messages"] = []
+
+    if getattr(settings, "REFLEX_DJANGO_MIRROR_CSRF", True):
+        try:
+            from reflex_django.context import current_csrf_token
+
+            snap["csrf_token"] = current_csrf_token()
+        except Exception:
+            snap["csrf_token"] = ""
+
+    if getattr(settings, "REFLEX_DJANGO_MIRROR_LANGUAGE", True):
+        try:
+            from django.utils import translation
+
+            snap["language"] = str(translation.get_language() or "")
+            snap["language_bidi"] = bool(translation.get_language_bidi())
+        except Exception:
+            snap["language"] = ""
+            snap["language_bidi"] = False
+    return snap
 
 
 async def _write_auth_snapshot_to_owner(
@@ -214,6 +275,16 @@ async def _write_auth_snapshot_to_owner(
         owner.is_superuser = snap["is_superuser"]
     if _can_assign_auth_field_on_owner(owner, "group_names"):
         owner.group_names = snap["group_names"]
+
+    mirror = _collect_middleware_mirror_snapshot()
+    if _can_assign_auth_field_on_owner(owner, "messages"):
+        owner.messages = mirror["messages"]
+    if _can_assign_auth_field_on_owner(owner, "csrf_token"):
+        owner.csrf_token = mirror["csrf_token"]
+    if _can_assign_auth_field_on_owner(owner, "language"):
+        owner.language = mirror["language"]
+    if _can_assign_auth_field_on_owner(owner, "language_bidi"):
+        owner.language_bidi = mirror["language_bidi"]
 
 
 async def apply_auth_snapshot_for_event_handler(
@@ -276,9 +347,15 @@ async def apply_auth_snapshot_to_state(
 
 
 class DjangoUserState(AuthBridgeMixin, rx.State):
-    """Snapshot of ``request.user`` for Reflex UI (navbar, conditional layout).
+    """Snapshot of ``request.user`` and middleware state for the Reflex UI.
 
-    Call :meth:`sync_from_django` from ``on_load`` or after login/logout.
+    Auth fields (``username``, ``is_authenticated``, …) and middleware mirrors
+    (``messages``, ``csrf_token``, ``language``) are populated automatically
+    by the event bridge after the full ``settings.MIDDLEWARE`` chain runs.
+    Use these in your UI (e.g. ``rx.cond(State.is_authenticated, ...)``,
+    ``rx.foreach(State.messages, render_message)``).
+
+    Call :meth:`sync_from_django` from ``on_load`` to force a refresh.
     """
 
     user_id: int | None = None
@@ -290,6 +367,10 @@ class DjangoUserState(AuthBridgeMixin, rx.State):
     is_staff: bool = False
     is_superuser: bool = False
     group_names: list[str] = []
+    messages: list[dict[str, Any]] = []
+    csrf_token: str = ""
+    language: str = ""
+    language_bidi: bool = False
 
     @rx.event
     async def sync_from_django(

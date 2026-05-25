@@ -245,6 +245,46 @@ def install_rxconfig_module(config: Config) -> None:
     mod.config = config  # type: ignore[attr-defined]
 
 
+def _apply_built_with_reflex_default(config: Config) -> Config:
+    """Force the "Built with Reflex" badge off unless the user opted in.
+
+    Reflex's upstream default for ``show_built_with_reflex`` is ``True``.
+    Django-first reflex-django projects almost always ship their own
+    branding, so we flip the default to ``False``. The flip is gated by the
+    Django setting :data:`REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` (default
+    ``False``) and only applies when:
+
+    - The user has not already set ``show_built_with_reflex`` to ``False``
+      explicitly (we leave their ``False`` alone — same outcome).
+    - The user has not explicitly set it to ``True`` via
+      ``reflex_mount(rx_config={"show_built_with_reflex": True})`` AND the
+      setting is also ``True`` (in which case they explicitly opted in).
+
+    In effect: by default everyone sees ``show_built_with_reflex=False``;
+    flipping the Django setting to ``True`` restores Reflex's upstream
+    default for that project.
+    """
+    settings = _django_settings()
+    desired = bool(
+        getattr(settings, "REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX", False)
+    )
+    # Respect a user who has explicitly opted in via reflex_mount(rx_config=...)
+    # by checking the mount overrides — if they passed it through there,
+    # honor that. Otherwise our default wins.
+    from reflex_django.mount_config import get_mount_rx_config_overrides
+
+    overrides = get_mount_rx_config_overrides()
+    if "show_built_with_reflex" in overrides:
+        return config  # already merged in by ``apply_django_rx_config`` caller
+    try:
+        setattr(config, "show_built_with_reflex", desired)
+    except Exception:  # noqa: BLE001
+        # ``rx.Config`` may make this attribute read-only in future versions
+        # — log silently rather than blocking config assembly.
+        pass
+    return config
+
+
 def apply_django_rx_config(config: Config) -> Config:
     """Apply ``reflex_mount()`` rx settings onto *config*."""
     from reflex_django.mount_config import get_mount_rx_config_overrides
@@ -253,6 +293,7 @@ def apply_django_rx_config(config: Config) -> Config:
     merged = merge_rx_config(config, mount_overrides, override=True)
     merged = _merge_mount_plugins(merged)
     merged = ensure_reflex_django_plugin(merged)
+    merged = _apply_built_with_reflex_default(merged)
     install_rxconfig_module(merged)
     return merged
 

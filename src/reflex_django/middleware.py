@@ -33,10 +33,15 @@ from typing import TYPE_CHECKING, Any
 
 from reflex.middleware import Middleware
 from reflex_django.conf import configure_django
-from reflex_django.context import begin_event_request, end_event_request
+from reflex_django.context import (
+    begin_event_request,
+    begin_event_response,
+    end_event_request,
+    end_event_response,
+)
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest
+    from django.http import HttpRequest, HttpResponse
     from reflex_base.event import Event
     from starlette.requests import Request
 
@@ -177,8 +182,99 @@ def _resolve_router_data(event: Event, state: BaseState | None) -> dict[str, Any
     return state_rd
 
 
+def _split_host_port(host_header: str) -> tuple[str, str]:
+    """Return ``(server_name, server_port)`` parsed from a ``Host:`` header."""
+    if not host_header:
+        return ("localhost", "80")
+    host = host_header.strip()
+    if host.startswith("["):  # IPv6
+        end = host.find("]")
+        if end == -1:
+            return (host, "80")
+        name = host[: end + 1]
+        port_part = host[end + 1 :].lstrip(":")
+        return (name, port_part or "80")
+    if ":" in host:
+        name, _, port = host.partition(":")
+        return (name or "localhost", port or "80")
+    return (host, "80")
+
+
+def _scheme_from_headers(headers: dict[str, str]) -> str:
+    proto = (
+        headers.get("x-forwarded-proto")
+        or headers.get("X-Forwarded-Proto")
+        or ""
+    )
+    if proto:
+        return str(proto).strip().lower().split(",")[0]
+    return "http"
+
+
+def _resolve_url_match(path: str) -> Any | None:
+    """Best-effort URL resolution for the synthetic event request.
+
+    When ``ROOT_URLCONF`` is set we run :func:`django.urls.resolve` to
+    populate ``request.resolver_match`` — handy for middleware that
+    inspects view kwargs or namespaces (e.g. login-required gates).
+    Failures are swallowed so anonymous-event paths or pages that no
+    longer exist do not break event processing.
+    """
+    try:
+        from django.urls import resolve
+    except Exception:
+        return None
+    try:
+        return resolve(path)
+    except Exception:
+        return None
+
+
+def _populate_post_from_payload(
+    request: HttpRequest,
+    router_data: dict[str, Any],
+) -> None:
+    """Optionally feed event payload kwargs into ``request.POST``.
+
+    Off by default. Opt in with
+    ``REFLEX_DJANGO_EVENT_POST_FROM_PAYLOAD = True`` so middleware that
+    treats POST like a form (rare for Reflex events) sees the same data
+    the handler will.
+    """
+    try:
+        from django.conf import settings
+    except Exception:
+        return
+    if not getattr(settings, "REFLEX_DJANGO_EVENT_POST_FROM_PAYLOAD", False):
+        return
+
+    payload = router_data.get("payload")
+    if not isinstance(payload, dict):
+        return
+
+    from django.http import QueryDict
+
+    qd = QueryDict(mutable=True)
+    for key, value in payload.items():
+        if value is None:
+            continue
+        try:
+            qd[str(key)] = str(value)
+        except Exception:
+            continue
+    request.POST = qd  # pyright: ignore[reportAttributeAccessIssue]
+
+
 def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
-    """Build a Django HttpRequest from Reflex ``router_data``.
+    """Build a fully-populated Django HttpRequest from Reflex ``router_data``.
+
+    The request mirrors what an HTTP request to the same path would look
+    like: ``method``, ``path``, ``GET``, ``COOKIES``, ``META`` (including
+    ``HTTP_*`` headers, ``REMOTE_ADDR``, ``SERVER_NAME``, ``SERVER_PORT``,
+    ``wsgi.url_scheme``), ``scheme`` (and the matching ``is_secure()``
+    semantics via ``META[HTTP_X_FORWARDED_PROTO]``), and a best-effort
+    ``resolver_match``. The ``method`` defaults to ``POST`` for Socket.IO
+    events but is overridable via ``router_data["method"]``.
 
     Args:
         router_data: Cookie/header/IP/path information for the synthetic request.
@@ -186,7 +282,7 @@ def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
     Returns:
         A populated :class:`django.http.HttpRequest`.
     """
-    from django.http import HttpRequest
+    from django.http import HttpRequest, QueryDict
 
     headers: dict[str, str] = dict(router_data.get("headers") or {})
     cookie_header = headers.get("cookie", "")
@@ -198,7 +294,7 @@ def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
         path = path_raw
         qs_from_path = ""
 
-    from django.http import QueryDict
+    method = str(router_data.get("method") or "POST").upper()
 
     get = QueryDict(mutable=True)
     if qs_from_path:
@@ -210,14 +306,12 @@ def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
                 get[str(key)] = str(value)
 
     request = HttpRequest()
-    request.method = "GET"  # pyright: ignore[reportAttributeAccessIssue]
+    request.method = method  # pyright: ignore[reportAttributeAccessIssue]
     request.path = path
     request.path_info = path
     request.GET = get  # pyright: ignore[reportAttributeAccessIssue]
     request._reflex_django_headers = headers  # noqa: SLF001 — for request.headers proxy
 
-    # Translate the cookie header into request.COOKIES the way Django does
-    # for HTTP requests.
     from http.cookies import SimpleCookie
 
     cookie_jar: SimpleCookie = SimpleCookie()
@@ -228,17 +322,33 @@ def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
             cookie_jar = SimpleCookie()
     request.COOKIES = {key: morsel.value for key, morsel in cookie_jar.items()}
 
-    # Populate META with the headers Django code typically inspects.
+    host_header = headers.get("host", "") or headers.get("Host", "")
+    server_name, server_port = _split_host_port(host_header)
+    scheme = _scheme_from_headers(headers)
+
     request.META = {
         "REMOTE_ADDR": client_ip or "127.0.0.1",
         "PATH_INFO": path,
         "QUERY_STRING": get.urlencode(),
-        "REQUEST_METHOD": "GET",
+        "REQUEST_METHOD": method,
         "HTTP_COOKIE": cookie_header,
+        "SERVER_NAME": server_name,
+        "SERVER_PORT": server_port,
+        "wsgi.url_scheme": scheme,
+        "HTTP_X_FORWARDED_PROTO": scheme,
     }
     for name, value in headers.items():
         meta_key = "HTTP_" + name.upper().replace("-", "_")
         request.META.setdefault(meta_key, value)
+
+    # Mirror Django's HttpRequest.scheme/_get_scheme behavior.
+    request.META.setdefault("HTTP_HOST", host_header or f"{server_name}:{server_port}")
+
+    _populate_post_from_payload(request, router_data)
+
+    match = _resolve_url_match(path)
+    if match is not None:
+        request.resolver_match = match  # pyright: ignore[reportAttributeAccessIssue]
 
     return request
 
@@ -262,83 +372,94 @@ def _build_request_from_event(
     return _build_request_from_router_data(router_data)
 
 
-def _attach_session(request: HttpRequest) -> None:
-    """Load the Django session from ``request.COOKIES`` onto ``request.session``.
-
-    Args:
-        request: The synthetic request to mutate.
-    """
-    from importlib import import_module
-
-    from django.conf import settings
-    from django.contrib.sessions.backends.base import SessionBase
-
-    engine = import_module(settings.SESSION_ENGINE)
-    cookie_name = getattr(settings, "SESSION_COOKIE_NAME", "sessionid")
-    session_key = request.COOKIES.get(cookie_name)
-    session: SessionBase = engine.SessionStore(session_key)
-    request.session = session  # pyright: ignore[reportAttributeAccessIssue]
-
-
-def _activate_i18n_for_request(request: HttpRequest) -> None:
-    """Run Django locale negotiation and ``translation.activate`` on ``request``.
-
-    Mirrors :meth:`django.middleware.locale.LocaleMiddleware.process_request`
-    so Reflex event handlers see the same active language as Django HTTP.
-
-    Args:
-        request: Synthetic request with ``session`` and ``META`` already set.
-    """
-    from django.conf import settings
-
-    if not getattr(settings, "USE_I18N", False):
-        return
-    if not getattr(settings, "REFLEX_DJANGO_I18N_EVENT_BRIDGE", True):
-        return
+def _attach_anonymous_user(request: HttpRequest) -> None:
+    """Set ``request.user = AnonymousUser`` so middleware fallbacks are safe."""
     try:
-        from django.middleware.locale import LocaleMiddleware
-
-        LocaleMiddleware(lambda _req: None).process_request(request)
-    except Exception:
-        return
-
-
-async def _attach_user(request: HttpRequest) -> None:
-    """Populate ``request.user`` from the request session (auth backend).
-
-    Resolves the user via :func:`django.contrib.auth.aget_user` (the async
-    variant). The sync ``get_user`` does the same work but hits Django's
-    sync ORM on every authenticated session load, which raises
-    :class:`SynchronousOnlyOperation` from inside Reflex's event loop and
-    would silently fall back to ``AnonymousUser``.
-
-    Args:
-        request: The synthetic request to mutate. Must already have
-            ``request.session`` set by :func:`_attach_session`.
-    """
-    try:
-        from django.contrib.auth import aget_user
-    except ImportError:
-        return
-
-    try:
-        request.user = await aget_user(  # pyright: ignore[reportAttributeAccessIssue]
-            request
-        )
-    except Exception:
         from django.contrib.auth.models import AnonymousUser
 
         request.user = AnonymousUser()  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception:
+        pass
+
+
+async def _eagerly_resolve_lazy_user(request: HttpRequest) -> None:
+    """Replace any :class:`~django.utils.functional.SimpleLazyObject` user with a real one.
+
+    Django's :class:`~django.contrib.auth.middleware.AuthenticationMiddleware`
+    sets ``request.user = SimpleLazyObject(lambda: get_user(request))``. The
+    underlying ``get_user`` issues a synchronous database query against the
+    session row, which raises :class:`~django.core.exceptions.SynchronousOnlyOperation`
+    if our async event handler later does even ``request.user.is_authenticated``.
+
+    We resolve the user eagerly with :func:`django.contrib.auth.aget_user` so
+    every subsequent access in the Reflex event flow is plain attribute
+    access on an :class:`~django.contrib.auth.models.AbstractBaseUser`
+    instance. On failure (no session middleware, no auth app installed, etc.)
+    we leave the request alone — the existing ``AnonymousUser`` fallback set
+    by :func:`_attach_anonymous_user` keeps things working.
+    """
+    try:
+        from django.contrib.auth import aget_user
+        from django.utils.functional import SimpleLazyObject
+    except ImportError:
+        return
+
+    user = getattr(request, "user", None)
+    if user is None:
+        return
+    if not isinstance(user, SimpleLazyObject):
+        return
+    try:
+        resolved = await aget_user(request)
+    except Exception:
+        return
+    if resolved is not None:
+        request.user = resolved  # pyright: ignore[reportAttributeAccessIssue]
+
+
+async def _run_full_middleware_chain(
+    request: HttpRequest,
+) -> HttpResponse | None:
+    """Run ``settings.MIDDLEWARE`` against the synthetic request.
+
+    Returns the :class:`~django.http.HttpResponse` produced by the chain
+    (either the terminal empty 200 or a short-circuit) or ``None`` when
+    the middleware chain is disabled via
+    ``REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False``.
+    """
+    from django.conf import settings
+
+    if not getattr(settings, "REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN", True):
+        return None
+
+    from reflex_django.event_handler import run_middleware_chain
+
+    try:
+        return await run_middleware_chain(request)
+    except Exception:
+        from reflex_base.utils import console
+
+        console.warn(
+            "reflex-django event-bridge middleware chain raised; "
+            "continuing without a middleware response."
+        )
+        return None
 
 
 async def bridge_request_for_state(
     state: Any,
     event: Event | None = None,
-) -> HttpRequest | None:
-    """Build a synthetic Django request from *event* and/or *state* ``router_data``.
+) -> tuple[HttpRequest, HttpResponse | None] | None:
+    """Build the synthetic request and run ``settings.MIDDLEWARE`` against it.
 
-    Used when middleware ``preprocess`` did not run but a handler still needs
-    ``self.request`` (fallback from the patched ``process_event`` hook).
+    Args:
+        state: Reflex state used to recover ``router_data`` when the event omits it.
+        event: The incoming Reflex event, or ``None`` to bridge from state only.
+
+    Returns:
+        ``(request, response)`` when bridging succeeds. ``response`` is the
+        middleware-chain output, or ``None`` if the chain is disabled.
+        Returns ``None`` when no usable ``router_data`` is available.
     """
     try:
         if event is not None:
@@ -348,21 +469,28 @@ async def bridge_request_for_state(
             if not router_data:
                 return None
             request = _build_request_from_router_data(router_data)
-        _attach_session(request)
-        _activate_i18n_for_request(request)
-        try:
-            await _attach_user(request)
-        except Exception:
-            from django.contrib.auth.models import AnonymousUser
-
-            request.user = AnonymousUser()  # pyright: ignore[reportAttributeAccessIssue]
-        try:
-            await _attach_reflex_context(request)
-        except Exception:
-            pass
-        return request
     except Exception:
         return None
+
+    # Default to AnonymousUser so middleware that touches ``request.user``
+    # before AuthenticationMiddleware (e.g. custom request-logging) does not
+    # ``AttributeError``.
+    _attach_anonymous_user(request)
+
+    response = await _run_full_middleware_chain(request)
+
+    # Async-safety: ``AuthenticationMiddleware`` leaves a ``SimpleLazyObject``
+    # in ``request.user`` that triggers a sync DB query on first access.
+    # Resolve it now (in async context) so handlers can safely use
+    # ``self.user`` / ``self.request.user`` without a SynchronousOnlyOperation.
+    await _eagerly_resolve_lazy_user(request)
+
+    try:
+        await _attach_reflex_context(request)
+    except Exception:
+        pass
+
+    return request, response
 
 
 async def bind_django_request_for_handler_state(
@@ -381,9 +509,11 @@ async def bind_django_request_for_handler_state(
             root = handler_state._get_root_state()  # noqa: SLF001
         except (AttributeError, TypeError):
             pass
-        http = await bridge_request_for_state(root, event)
-        if http is not None:
+        bridged = await bridge_request_for_state(root, event)
+        if bridged is not None:
+            http, response = bridged
             begin_event_request(http)
+            begin_event_response(response)
     bind_request_on_state(handler_state, http)
 
 
@@ -431,39 +561,63 @@ class DjangoEventBridge(Middleware):
         state: BaseState,
         event: Event,
     ) -> StateUpdate | None:
-        """Bind a synthetic Django request to the current async task.
+        """Bind a synthetic Django request + response to the current async task.
+
+        Steps:
+
+        1. Build a Django :class:`~django.http.HttpRequest` from
+           ``event.router_data`` (cookies, headers, client IP, optional POST
+           payload).
+        2. Run ``settings.MIDDLEWARE`` (filtered by
+           ``REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP``) against it through
+           :class:`reflex_django.event_handler.EventMiddlewareHandler`. This is
+           where ``SessionMiddleware``, ``AuthenticationMiddleware``,
+           ``MessageMiddleware``, ``LocaleMiddleware``, ``MaintenanceMode``,
+           and any custom middleware run for the event.
+        3. Bind ``request`` and ``response`` to the per-task ContextVars and
+           onto the state tree (so ``self.request`` / ``self.response`` work
+           inside the handler).
+        4. If the middleware chain short-circuited with a 3xx redirect and
+           ``REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE`` is enabled,
+           translate it into a Reflex :func:`reflex.redirect` and return
+           that as the event result.
 
         Args:
             app: The Reflex application (unused).
-            state: The client state; used to recover ``router_data`` when upload
-                events omit cookies (see :func:`_resolve_router_data`).
-            event: The incoming Reflex event whose ``router_data`` carries the
-                cookie/header/IP information needed to rebuild a Django
-                request.
+            state: The client state; used to recover ``router_data`` when
+                upload events omit cookies (see :func:`_resolve_router_data`).
+            event: The incoming Reflex event.
 
         Returns:
-            Always ``None`` — the bridge never short-circuits the event.
+            ``None`` to let the event run, or a Reflex
+            :class:`~reflex.state.StateUpdate` that short-circuits the event
+            with a redirect derived from the middleware response.
         """
         end_event_request()
-        request = await bridge_request_for_state(state, event)
-        if request is None:
+        end_event_response()
+        bridged = await bridge_request_for_state(state, event)
+        if bridged is None:
             from reflex_base.utils import console
 
             console.warn(
                 "reflex-django event bridge could not build Django request for this event"
             )
             return None
+        request, response = bridged
 
         begin_event_request(request)
+        begin_event_response(response)
         from reflex.state import BaseState as _BaseState
         from reflex_django.state.auth_bridge import maybe_sync_app_state_auth
         from reflex_django.state.request_binding import (
             bind_request_on_state,
             bind_request_on_state_tree,
+            bind_response_on_state_tree,
         )
 
         if isinstance(state, _BaseState):
             bind_request_on_state_tree(state, request)
+            bind_response_on_state_tree(state, response)
             try:
                 handler_state = await state.get_state(event.state_cls)
                 bind_request_on_state(handler_state, request)
@@ -471,7 +625,8 @@ class DjangoEventBridge(Middleware):
                 pass
             user = getattr(request, "user", None)
             if getattr(user, "is_authenticated", False):
-                sk = getattr(request.session, "session_key", None) or ""
+                session = getattr(request, "session", None)
+                sk = getattr(session, "session_key", None) or ""
                 if sk:
                     from reflex_django.session_js import (
                         mirror_auth_cookies_to_state_tree,
@@ -488,7 +643,56 @@ class DjangoEventBridge(Middleware):
                 state,
                 handler_state_cls=getattr(event, "state_cls", None),
             )
+
+        short_circuit = self._maybe_short_circuit_redirect(response)
+        if short_circuit is not None:
+            return short_circuit
         return None
+
+    @staticmethod
+    def _maybe_short_circuit_redirect(
+        response: HttpResponse | None,
+    ) -> StateUpdate | None:
+        """Translate a 3xx middleware response into a Reflex redirect.
+
+        Args:
+            response: The middleware-chain response, possibly ``None``.
+
+        Returns:
+            A :class:`~reflex.state.StateUpdate` that issues
+            :func:`reflex.redirect` to the response's ``Location``, or
+            ``None`` when the response is missing, not a redirect, or
+            auto-translation is disabled by
+            ``REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False``.
+        """
+        if response is None:
+            return None
+        try:
+            from django.conf import settings
+        except Exception:
+            return None
+        if not getattr(
+            settings,
+            "REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE",
+            True,
+        ):
+            return None
+
+        status = getattr(response, "status_code", 200)
+        if not (300 <= status < 400):
+            return None
+        location = response.get("Location") if hasattr(response, "get") else None
+        if not location:
+            return None
+
+        try:
+            import reflex as rx
+            from reflex.state import StateUpdate
+        except Exception:
+            return None
+
+        redirect_event = rx.redirect(location)
+        return StateUpdate(delta={}, events=[redirect_event])
 
     async def postprocess(
         self,
@@ -497,7 +701,7 @@ class DjangoEventBridge(Middleware):
         event: Event,
         update: StateUpdate,
     ) -> StateUpdate:
-        """Release the bound request after the event (when Reflex invokes this).
+        """Release the bound request/response after the event (when Reflex invokes this).
 
         Reflex's current event processor only runs ``preprocess``; we still
         clear stale bindings at the start of the next ``preprocess``. This
@@ -508,4 +712,5 @@ class DjangoEventBridge(Middleware):
         """
         del app, state, event
         end_event_request()
+        end_event_response()
         return update

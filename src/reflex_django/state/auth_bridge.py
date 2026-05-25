@@ -131,6 +131,53 @@ class AuthBridgeMixin:
         return current_request()
 
     @property
+    def response(self) -> Any | None:
+        """Middleware-chain :class:`django.http.HttpResponse` for the current event.
+
+        Returns the response produced by the full ``settings.MIDDLEWARE`` chain
+        when ``REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN`` is enabled. Most handlers
+        do not need this — middleware short-circuit redirects are already
+        translated into :func:`reflex.redirect` automatically — but it is
+        available for handlers that want to inspect or mutate the response
+        (set cookies, add headers) before returning.
+        """
+        from reflex_django.context import current_response
+
+        return current_response()
+
+    @property
+    def django_response(self) -> Any | None:
+        """Alias for :attr:`response`."""
+        from reflex_django.context import current_response
+
+        return current_response()
+
+    @property
+    def messages(self) -> list[dict[str, Any]]:
+        """JSON-safe Django messages for the current event.
+
+        Each entry has ``level``, ``level_tag``, ``message``, ``tags``, and
+        ``extra_tags`` (mirroring :class:`django.contrib.messages.storage.base.Message`).
+        Use ``messages.success(self.request, "...")`` etc. in your handler to add
+        new messages — they will appear in this list on the next event after
+        ``MessageMiddleware`` runs.
+        """
+        from reflex_django.context import current_messages
+
+        return current_messages()
+
+    @property
+    def csrf_token(self) -> str:
+        """CSRF token bound to the synthetic request (empty when unavailable).
+
+        Useful when you need to submit a CSRF-protected POST from the SPA to
+        a Django view (e.g. ``/admin``) without involving Reflex events.
+        """
+        from reflex_django.context import current_csrf_token
+
+        return current_csrf_token()
+
+    @property
     def user(self) -> Any:
         """Live Django user for the current event (not a Reflex var)."""
         return current_user()

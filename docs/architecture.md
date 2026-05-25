@@ -4,6 +4,8 @@ To successfully build and debug high-performance full-stack applications with **
 
 This document details the single-process ASGI dispatch model, the event bridge pipeline, and the runtime request lifecycles.
 
+> **New default (since v0.4)**: `reflex-django` runs Django as the outer ASGI app on a single port. See [Single-port Django-outer architecture](single_port_django_outer.md) for the recommended deployment and [Migration guide](migration_django_outer.md) for upgrading existing projects. The legacy Reflex-led routing modes (`reflex_led`, `django_led`) are still supported.
+
 ---
 
 ## The Three Architecture Pillars

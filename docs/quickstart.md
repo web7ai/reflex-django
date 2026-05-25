@@ -2,7 +2,9 @@
 
 A minimal **reflex-django** app in four steps: Django `settings.py`, `urls.py`, Reflex pages in `views.py`, and `AppState` for the logged-in user.
 
-**Time:** ~10 minutes · **Command:** `python manage.py run_reflex`
+**Time:** ~10 minutes · **Command:** `python manage.py run_reflex` · **Default port:** `8000` (Django + Reflex on one port)
+
+> **Heads up:** `reflex-django` now uses the *Django-outer, single-port architecture* by default. Django is the ASGI server; Reflex Socket.IO is mounted under it; Vite is invisibly reverse-proxied for HMR. See [Single-port Django-outer architecture](single_port_django_outer.md) for details. Use `REFLEX_DJANGO_URL_ROUTING=reflex_led` to opt out.
 
 ---
 

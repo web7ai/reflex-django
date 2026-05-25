@@ -20,13 +20,21 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
     from django.contrib.sessions.backends.base import SessionBase
-    from django.http import HttpRequest
+    from django.http import HttpRequest, HttpResponse
 
 
 REFLEX_DJANGO_CONTEXT_ATTR = "_reflex_django_context"
 
 _request_var: contextvars.ContextVar[HttpRequest | None] = contextvars.ContextVar(
     "reflex_django.current_request", default=None
+)
+
+# Response produced by the Django middleware chain for the active event.
+# Populated by :class:`~reflex_django.middleware.DjangoEventBridge` after it
+# runs ``settings.MIDDLEWARE`` against the synthetic request; reset when the
+# event finishes.
+_response_var: contextvars.ContextVar[HttpResponse | None] = contextvars.ContextVar(
+    "reflex_django.current_response", default=None
 )
 
 
@@ -83,6 +91,10 @@ _reset_token_var: contextvars.ContextVar[
     contextvars.Token[HttpRequest | None] | None
 ] = contextvars.ContextVar("reflex_django._request_reset_token", default=None)
 
+_response_reset_token_var: contextvars.ContextVar[
+    contextvars.Token[HttpResponse | None] | None
+] = contextvars.ContextVar("reflex_django._response_reset_token", default=None)
+
 
 def set_current_request(
     request: HttpRequest | None,
@@ -134,6 +146,60 @@ def begin_event_request(request: HttpRequest) -> None:
     end_event_request()
     token = set_current_request(request)
     _reset_token_var.set(token)
+
+
+def set_current_response(
+    response: HttpResponse | None,
+) -> contextvars.Token[HttpResponse | None]:
+    """Bind a Django response to the current async/sync task.
+
+    Args:
+        response: The :class:`django.http.HttpResponse` to bind, or ``None``
+            to clear.
+
+    Returns:
+        A reset token; pass it to :func:`reset_current_response` to undo.
+    """
+    return _response_var.set(response)
+
+
+def reset_current_response(
+    token: contextvars.Token[HttpResponse | None],
+) -> None:
+    """Undo a previous :func:`set_current_response` call."""
+    _response_var.reset(token)
+
+
+def end_event_response() -> None:
+    """Reset the bound Django response for the current task, if any."""
+    t = _response_reset_token_var.get()
+    if t is not None:
+        reset_current_response(t)
+        _response_reset_token_var.set(None)
+
+
+def begin_event_response(response: HttpResponse | None) -> None:
+    """Bind ``response`` for the current task and remember the reset token.
+
+    Args:
+        response: The middleware-chain response for this Reflex event, or
+            ``None`` if no middleware response should be exposed (e.g.
+            when ``REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN`` is disabled).
+    """
+    end_event_response()
+    token = set_current_response(response)
+    _response_reset_token_var.set(token)
+
+
+def current_response() -> HttpResponse | None:
+    """Return the Django response bound to the active Reflex event, if any.
+
+    Returns:
+        The :class:`django.http.HttpResponse` produced by
+        ``settings.MIDDLEWARE`` for the current event, or ``None`` when no
+        middleware chain has run.
+    """
+    return _response_var.get()
 
 
 def current_request() -> HttpRequest | None:
@@ -201,17 +267,88 @@ def current_language() -> str:
     return str(getattr(settings, "LANGUAGE_CODE", "en") or "en")
 
 
+def current_messages() -> list[dict[str, Any]]:
+    """Return a JSON-safe list of Django messages for the active event.
+
+    Reads :func:`django.contrib.messages.get_messages` against the current
+    request (after ``MessageMiddleware`` has populated the storage). Each
+    message becomes a dict with ``level`` (int), ``level_tag`` (str),
+    ``message`` (str), ``tags`` (str), and ``extra_tags`` (str).
+
+    Returns an empty list when no request is bound, when the messages
+    framework is not installed, or when reading the storage raises.
+    """
+    request = current_request()
+    if request is None:
+        return []
+    try:
+        from django.contrib.messages import get_messages
+    except ImportError:
+        return []
+    try:
+        storage = get_messages(request)
+    except Exception:
+        return []
+    out: list[dict[str, Any]] = []
+    for msg in storage:
+        try:
+            out.append(
+                {
+                    "level": int(getattr(msg, "level", 0) or 0),
+                    "level_tag": str(getattr(msg, "level_tag", "") or ""),
+                    "message": str(getattr(msg, "message", "") or ""),
+                    "tags": str(getattr(msg, "tags", "") or ""),
+                    "extra_tags": str(getattr(msg, "extra_tags", "") or ""),
+                }
+            )
+        except Exception:
+            continue
+    return out
+
+
+def current_csrf_token() -> str:
+    """Return the CSRF token bound to the active Reflex event request.
+
+    Calls :func:`django.middleware.csrf.get_token` against the bound
+    request, which both reads the existing cookie value and sets a fresh
+    one when missing. Useful when Reflex needs to surface a CSRF token to
+    the browser for non-Reflex form submissions or fetch calls.
+
+    Returns:
+        The CSRF token string, or an empty string when no request is bound
+        or CSRF support is not installed.
+    """
+    request = current_request()
+    if request is None:
+        return ""
+    try:
+        from django.middleware.csrf import get_token
+    except ImportError:
+        return ""
+    try:
+        return str(get_token(request) or "")
+    except Exception:
+        return ""
+
+
 __all__ = [
     "REFLEX_DJANGO_CONTEXT_ATTR",
     "anonymous_user",
     "begin_event_request",
+    "begin_event_response",
+    "current_csrf_token",
     "current_language",
+    "current_messages",
     "current_request",
+    "current_response",
     "current_session",
     "current_user",
     "end_event_request",
+    "end_event_response",
     "get_request_reflex_context",
     "reset_current_request",
+    "reset_current_response",
     "set_current_request",
+    "set_current_response",
     "set_request_reflex_context",
 ]

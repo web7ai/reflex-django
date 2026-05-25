@@ -108,7 +108,13 @@ def _db_config_from_url(url: str) -> dict[str, object]:
 # Marker for the plugin so it can warn users running with the bundled defaults.
 REFLEX_DJANGO_AUTO_SETTINGS = True
 
-# ASGI routing: "reflex_led" (default) or "django_led" (SPA catch-all).
+# ASGI routing mode for combining Reflex + Django:
+# - "django_outer" (default): Django is the outer ASGI app on one port,
+#   Reflex's Socket.IO/upload endpoints are mounted under Django, dev
+#   mode reverse-proxies "/" to Vite. Recommended for new projects.
+# - "reflex_led": Reflex is the outer ASGI app, Django is mounted by prefix.
+# - "django_led": Legacy alias preserved for backward compatibility.
+# - "auto": resolve from REFLEX_DJANGO_URL_ROUTING env or fall back to default.
 REFLEX_DJANGO_URL_ROUTING = os.environ.get("REFLEX_DJANGO_URL_ROUTING", "auto")
 
 # Catch-all mount prefix for :func:`reflex_django.urls.reflex_mount`.
@@ -180,10 +186,67 @@ REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS = False
 # :class:`~reflex_django.states.AppState` auth snapshot vars on every event.
 REFLEX_DJANGO_AUTH_AUTO_SYNC = True
 
-# When True and ``USE_I18N``, :class:`reflex_django.middleware.DjangoEventBridge`
-# runs :meth:`django.middleware.locale.LocaleMiddleware.process_request` on the
-# synthetic request so ``translation.activate`` matches Django HTTP behavior.
+# Deprecated. The full Django middleware chain (including LocaleMiddleware)
+# now runs on every Reflex event by default; this flag is preserved as a
+# no-op alias for users on older configurations.
 REFLEX_DJANGO_I18N_EVENT_BRIDGE = True
+
+# When True (default), :class:`reflex_django.middleware.DjangoEventBridge`
+# runs the full ``settings.MIDDLEWARE`` chain on every Reflex event via
+# :class:`reflex_django.event_handler.EventMiddlewareHandler`. Disable to
+# restore the legacy lightweight bridge (only session/auth/locale ran).
+REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN: bool = True
+
+# Middleware classes to skip when running the full chain on Reflex events.
+# CSRF cannot pass without a token and AsyncStreamingMiddleware is HTTP-only.
+REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP: tuple[str, ...] = (
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+)
+
+# When True (default), if a middleware short-circuits with a 3xx response,
+# the bridge converts it into a Reflex ``rx.redirect(...)`` event so the
+# browser navigates to the target. Disable to handle redirects manually.
+REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE: bool = True
+
+# When True, the event payload (handler kwargs) is fed into ``request.POST``
+# of the synthetic request. Off by default — Reflex events are RPC-style,
+# not form submissions, so most middleware does not look at POST.
+REFLEX_DJANGO_EVENT_POST_FROM_PAYLOAD: bool = False
+
+# Individual mirror toggles for the reactive ``DjangoUserState`` vars
+# populated from the middleware chain. Disable to save delta size on apps
+# that do not bind these in the UI.
+REFLEX_DJANGO_MIRROR_MESSAGES: bool = True
+REFLEX_DJANGO_MIRROR_CSRF: bool = True
+REFLEX_DJANGO_MIRROR_LANGUAGE: bool = True
+
+# When True (default), Django's catch-all view reverse-proxies "/" to the
+# Vite dev server in DEBUG mode. Set to False (or env REFLEX_DJANGO_DEV_PROXY=0)
+# to serve the compiled SPA directly even in DEBUG.
+REFLEX_DJANGO_DEV_PROXY: bool = True
+
+# When True (default), Django's catch-all view runs the Reflex SPA's
+# ``index.html`` through Django's template engine with
+# :class:`~django.template.RequestContext`. This makes ``{{ request.user }}``,
+# ``{{ csrf_token }}``, ``{{ messages }}``, ``{{ LANGUAGE_CODE }}`` and any
+# ``settings.TEMPLATES[0]["OPTIONS"]["context_processors"]`` keys usable
+# directly inside the SPA shell (both in dev and prod). Set to ``False`` to
+# serve the file verbatim. Non-HTML responses (JS bundles, CSS, source maps,
+# images) are always served verbatim regardless of this setting.
+REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE: bool = True
+
+# Whether the "Built with Reflex" badge is shown in the SPA. Reflex's
+# upstream default is True; reflex-django flips it to False because most
+# Django-first apps ship their own branding. To re-enable, set this to True
+# in your Django settings (or pass it via
+# ``reflex_mount(rx_config={"show_built_with_reflex": True})``).
+REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX: bool = False
+
+# Additional reserved Reflex path prefixes for the outer dispatcher
+# (advanced; usually not needed). Combined with the defaults in
+# :data:`reflex_django.django_outer_dispatcher.DEFAULT_RESERVED_REFLEX_PREFIXES`.
+REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES: tuple[str, ...] = ()
 
 # Static files (CSS, JavaScript, images) — served by ASGIStaticFilesHandler in
 # DEBUG mode, or from STATIC_ROOT (populated by ``reflex django collectstatic``)
