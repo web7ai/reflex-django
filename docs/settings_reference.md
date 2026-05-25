@@ -26,6 +26,50 @@ For *how* to use them in context, see [Configuration with `reflex_mount()`](conf
 
 ---
 
+## Frontend toolchain
+
+| Setting | Type | Default | Purpose |
+|:---|:---|:---|:---|
+| `REFLEX_DJANGO_VITE_VERSION` | `str \| None` | `None` | Override the `vite` devDependency Reflex writes into `.web/package.json`. When unset (the default), the version that ships with the installed `reflex_base` package is used as-is. Also readable from the env var of the same name; the Django setting wins if both are present. See [When to use it](#when-to-pin-vite) below. |
+
+### When to pin Vite
+
+You usually don't need this — the version `reflex_base` ships with is the version Reflex tested against. Reach for it when a Reflex release pins a Vite version that has a known frontend regression. The typical symptom is the SPA loading but throwing an exception inside the Reflex Socket.IO dispatcher or inside a third-party chart library:
+
+```
+[Reflex Frontend Exception] TypeError: t is not a function
+    at .../assets/es6-<hash>.js
+[Reflex Frontend Exception] TypeError: d is not a function
+    at Socket.<anonymous> (.../assets/theme-<hash>.js)
+```
+
+That pattern (single-letter local variable that should be a function, called inside a memoized factory wrapper) is the Rolldown CJS-interop bug shipped with Vite 8.0.x. Pin to the latest Rollup-based release (Vite 7.3.3) until upstream ships a fix:
+
+```python
+# settings.py
+REFLEX_DJANGO_VITE_VERSION = "7.3.3"
+```
+
+Or, equivalently, from the shell:
+
+```bash
+export REFLEX_DJANGO_VITE_VERSION=7.3.3
+python manage.py run_reflex
+```
+
+Then wipe and rebuild:
+
+```bash
+rm -rf .web staticfiles/_reflex
+python manage.py run_reflex
+```
+
+The override is applied during `install_reflex_django_integration()` — i.e. before Reflex regenerates `.web/package.json` — so the new version sticks across every `reflex export` / `reflex_mount` call in that process.
+
+> Stay within `@react-router/dev`'s supported peer range (currently `^5.1.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`). Vite 6 and 7 still use Rollup; Vite 5 is too old to honour the `unstable_optimizeDeps` flag `@react-router/dev` emits and breaks transitive-package resolution at build time.
+
+---
+
 ## Event middleware chain
 
 | Setting | Type | Default | Purpose |

@@ -168,17 +168,36 @@ def prepare_pages_for_compile() -> None:
     Call before Reflex compile so ``DECORATED_PAGES`` and backend substates match
     the compiled ``.web/utils/context.js`` dispatch map (avoids
     ``dispatch is not a function`` in the browser).
+
+    Adds only routes not already present on the app, so calling this after
+    :func:`ensure_django_led_app_ready` (or repeatedly during Reflex plugin
+    ``post_compile`` hooks) does not emit ``Page X is being redefined with
+    the same component.`` warnings from :meth:`reflex.app.App.add_page`.
     """
+    from reflex.utils import format as route_format
+
     from reflex_django.mount_config import resolve_app_name
 
     migrate_decorated_pages_app_name(resolve_app_name())
     import_page_packages()
     app = load_app_factory()
-    if hasattr(app, "_reflex_django_decorated_pages_applied"):
-        delattr(app, "_reflex_django_decorated_pages_applied")
-    if hasattr(app, "_apply_decorated_pages"):
-        migrate_decorated_pages_app_name(resolve_app_name())
-        app._apply_decorated_pages()
+    app_name = migrate_decorated_pages_app_name(resolve_app_name())
+    if hasattr(app, "add_page"):
+        try:
+            from reflex.page import DECORATED_PAGES
+        except ImportError:
+            DECORATED_PAGES = None  # type: ignore[assignment]
+        unevaluated = getattr(app, "_unevaluated_pages", {})
+        if DECORATED_PAGES is not None:
+            for render, kwargs in DECORATED_PAGES.get(app_name, ()):
+                route = kwargs.get("route")
+                if route is not None:
+                    formatted = route_format.format_route(str(route))
+                    if formatted in unevaluated:
+                        continue
+                app.add_page(render, **kwargs)
+        apply_page_registry_to_app(app)
+        app._reflex_django_decorated_pages_applied = True  # type: ignore[attr-defined]
     sync_page_load_events(app)
 
 
@@ -367,7 +386,6 @@ def ensure_django_led_app_ready() -> Any:
     if hasattr(app, "_apply_decorated_pages"):
         migrate_decorated_pages_app_name(resolve_app_name())
         app._apply_decorated_pages()
-        apply_page_registry_to_app(app)
     sync_page_load_events(app)
     return app
 

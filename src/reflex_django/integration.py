@@ -103,6 +103,7 @@ def install_reflex_django_integration() -> None:
         return
 
     _patch_get_config()
+    _patch_vite_dev_dependency()
 
     from reflex_django.cli_layout import ensure_reflex_cli_layout
     from reflex_django.mount_config import ensure_mount_config_loaded
@@ -140,6 +141,57 @@ def refresh_get_config_bindings() -> None:
     if patched is _ORIGINAL_GET_CONFIG:
         return
     _rebind_get_config_imports(patched)
+
+
+def _patch_vite_dev_dependency() -> None:
+    """Opt-in override for the ``vite`` devDependency Reflex pins.
+
+    Reflex pins a specific Vite version in
+    ``reflex_base.constants.installer.PackageJson.DEV_DEPENDENCIES`` and
+    regenerates ``.web/package.json`` from it on every compile. Some Vite
+    releases ship known frontend regressions (e.g. the Rolldown CJS-interop
+    bug in Vite 8.0.x that emits ``var r=r(), t=t(), n=n(), i=i();`` and
+    crashes ``recharts`` and Reflex's Socket.IO dispatcher with
+    ``TypeError: <var> is not a function``). When that happens you can pin a
+    known-good Vite without forking ``reflex-django``:
+
+    - Set ``REFLEX_DJANGO_VITE_VERSION = "7.3.3"`` in your Django settings, or
+    - Export ``REFLEX_DJANGO_VITE_VERSION=7.3.3`` in your shell environment.
+
+    The setting takes priority over the env var. When neither is set (the
+    default), :mod:`reflex_django` makes **no change** to the Vite version —
+    you get whatever the installed ``reflex_base`` package ships with.
+    """
+    desired: str | None = None
+
+    try:
+        from django.conf import settings as django_settings
+
+        candidate = getattr(django_settings, "REFLEX_DJANGO_VITE_VERSION", None)
+        if isinstance(candidate, str) and candidate.strip():
+            desired = candidate.strip()
+    except Exception:  # noqa: BLE001 — Django may not be configured yet.
+        pass
+
+    if desired is None:
+        env_value = os.environ.get("REFLEX_DJANGO_VITE_VERSION", "").strip()
+        if env_value:
+            desired = env_value
+
+    if desired is None:
+        return
+
+    try:
+        from reflex_base.constants.installer import PackageJson
+    except ImportError:
+        return
+
+    dev_deps = getattr(PackageJson, "DEV_DEPENDENCIES", None)
+    if not isinstance(dev_deps, dict):
+        return
+    if dev_deps.get("vite") == desired:
+        return
+    dev_deps["vite"] = desired
 
 
 def _patch_assert_in_reflex_dir() -> None:

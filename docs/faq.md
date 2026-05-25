@@ -225,6 +225,17 @@ The uvicorn server still restarts on Python changes, but the slow SPA export ste
 
 `STATIC_ROOT/_reflex/` in production. In development, `manage.py run_reflex` builds and stages it there automatically. The source bundle lives in `.web/` (gitignored).
 
+### The SPA loads but crashes with `TypeError: t is not a function` / `d is not a function`
+
+You're hitting a Vite/Rolldown bundler regression — usually a CJS-interop bug in Vite 8.0.x that emits `var r=r(), t=t(), n=n(), i=i();` inside memoized factory wrappers. Pin the last Rollup-based Vite from your Django settings:
+
+```python
+# settings.py
+REFLEX_DJANGO_VITE_VERSION = "7.3.3"
+```
+
+Then wipe `.web/` and `STATIC_ROOT/_reflex/` and rebuild. See [`REFLEX_DJANGO_VITE_VERSION`](settings_reference.md#frontend-toolchain) for the full rundown.
+
 ---
 
 ## Deployment

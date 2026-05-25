@@ -98,6 +98,15 @@ def _spa_root_candidates() -> Iterable[Path]:
 def _resolve_spa_asset(request_path: str) -> Path | None:
     """Return a real file path for ``request_path`` under one of the SPA roots.
 
+    Tries each SPA root in order; for every root, probes (in order) the
+    request path itself, then the pre-rendered route variants emitted by
+    Reflex SSR builds (``<path>.html`` and ``<path>/index.html``). The
+    ``.html``/``index.html`` fallbacks let SSR-built sites serve their
+    pre-rendered per-route HTML (for example ``profile.html`` for
+    ``/profile``) instead of unconditionally falling back to the root
+    ``index.html`` shell — which would show the wrong page on every
+    deep-link.
+
     Args:
         request_path: URL path including a leading slash (``/index.html``,
             ``/static/main.js``).
@@ -110,16 +119,25 @@ def _resolve_spa_asset(request_path: str) -> Path | None:
     if not rel or rel.endswith("/"):
         rel = (rel + "index.html").lstrip("/")
 
+    candidates_rel: list[str] = [rel]
+    if not rel.endswith(".html") and not rel.endswith("/index.html"):
+        candidates_rel.append(f"{rel}.html")
+        candidates_rel.append(f"{rel}/index.html")
+
     for root in _spa_root_candidates():
         try:
-            candidate = (root / rel).resolve()
             root_resolved = root.resolve()
         except OSError:
             continue
-        if root_resolved not in candidate.parents and candidate != root_resolved:
-            continue
-        if candidate.is_file():
-            return candidate
+        for candidate_rel in candidates_rel:
+            try:
+                candidate = (root / candidate_rel).resolve()
+            except OSError:
+                continue
+            if root_resolved not in candidate.parents and candidate != root_resolved:
+                continue
+            if candidate.is_file():
+                return candidate
     return None
 
 
