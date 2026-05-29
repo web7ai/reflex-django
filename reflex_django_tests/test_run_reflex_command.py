@@ -192,19 +192,24 @@ def test_from_build_does_not_spawn_vite(
     vite_spawn.assert_not_called()
 
 
-def test_env_prod_still_serves_from_disk_without_export(
+def test_env_prod_serves_existing_bundle_without_export(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """``--env prod`` is unchanged: serve from disk, do NOT auto-export.
+    """``--env prod`` with a pre-built bundle on disk does NOT re-export.
 
-    Auto-export is reserved for ``--from-build`` so prod boots are still
-    deterministic (build separately in CI, then run the server).
+    A bundle built in CI (``export_reflex`` + ``collectstatic``) must be
+    served as-is — prod boots stay deterministic.
     """
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
     monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+    # Pretend a compiled SPA is already present on disk.
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
+        lambda self: False,
+    )
 
     Command().handle(env="prod")
 
@@ -214,19 +219,76 @@ def test_env_prod_still_serves_from_disk_without_export(
     assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
 
 
+def test_env_prod_builds_spa_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--env prod`` with no bundle on disk builds it once so the run works.
+
+    This is the fix for "Reflex SPA bundle not found" on a fresh local
+    ``run_reflex --env prod``: rather than 404, we auto-export + stage the
+    SPA before serving.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
+        lambda self: True,
+    )
+    # Avoid the post-build warning path importing the real view repeatedly.
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._warn_if_spa_missing",
+        mock.MagicMock(),
+    )
+
+    Command().handle(env="prod")
+
+    export_call.assert_called_once()
+    name, *_ = export_call.call_args.args
+    assert name == "export_reflex"
+    assert export_call.call_args.kwargs.get("env") == "prod"
+
+
+def test_env_prod_skip_rebuild_never_builds(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--env prod --skip-rebuild`` never builds, even if the bundle is gone."""
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
+        lambda self: True,
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._warn_if_spa_missing",
+        mock.MagicMock(),
+    )
+
+    Command().handle(env="prod", skip_rebuild=True)
+
+    export_call.assert_not_called()
+
+
 def test_env_prod_ignores_serve_from_build_setting(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """``--env prod`` wins over ``REFLEX_DJANGO_SERVE_FROM_BUILD=True``.
+    """``--env prod`` with a present bundle ignores ``SERVE_FROM_BUILD=True``.
 
-    Prod is a deterministic CI-build-then-deploy contract. The server must
-    not silently rebuild at boot just because the dev default leaks into
-    production settings.
+    Prod must not take the from-build re-export-every-restart path just
+    because the dev default leaks into production settings; with a bundle on
+    disk it serves as-is.
     """
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
+        lambda self: False,
+    )
 
     from django.conf import settings
 

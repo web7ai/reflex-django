@@ -49,7 +49,7 @@ Because the backend stays up, edits to **states, event handlers, or other server
 | `--from-build` | Opt out of Vite. Auto-export the SPA and serve the compiled bundle from disk; the watcher re-exports + restarts uvicorn on every `.py` change. |
 | `--skip-rebuild` | (with `--from-build`) Skip the SPA build before starting. Good for "I only edited a Django model" iterations. |
 | `--no-reload` | Don't watch for changes. The server runs once and exits when you Ctrl+C. (In the default Vite mode this disables the frontend recompile loop too.) |
-| `--env prod` | Set `REFLEX_ENV` to `prod` and serve the compiled bundle from disk (no Vite). |
+| `--env prod` | Set `REFLEX_ENV` to `prod` and serve the compiled bundle from disk (no Vite). If no bundle is found, it builds one once (skip with `--skip-rebuild`); a pre-built bundle is served as-is. |
 | `--frontend-only` | Only run the Vite frontend (or, with `--from-build`, only build the bundle); don't start the server. |
 | `--backend-only` | Only run uvicorn; don't start Vite or build the SPA. (Assumes the bundle is already on disk.) |
 | `--port N` | Override the backend port. |

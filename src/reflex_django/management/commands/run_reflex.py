@@ -94,9 +94,9 @@ class Command(BaseCommand):
                 "Skip Vite entirely. Re-export the SPA bundle (frontend-only, "
                 "no zip, staged into STATIC_ROOT/_reflex) before starting the "
                 "ASGI server, then serve it from disk. Re-run the command to "
-                "rebuild after Reflex page changes. This is the default "
-                "(controlled by REFLEX_DJANGO_SERVE_FROM_BUILD = True); pass "
-                "--with-vite to opt out and use the legacy Vite-HMR dev loop."
+                "rebuild after Reflex page changes. Opt in here, or set "
+                "REFLEX_DJANGO_SERVE_FROM_BUILD = True; otherwise the default "
+                "is the Vite-HMR dev loop."
             ),
         )
         parser.add_argument(
@@ -105,8 +105,9 @@ class Command(BaseCommand):
             action="store_true",
             dest="with_vite",
             help=(
-                "Opt out of the default from-build dev loop and spawn Vite "
-                "for hot-module reload, like the legacy `reflex run` workflow."
+                "Spawn Vite for hot-module reload (the default dev loop). "
+                "Useful to force the Vite loop when "
+                "REFLEX_DJANGO_SERVE_FROM_BUILD = True is set in settings."
             ),
         )
         parser.add_argument(
@@ -237,6 +238,22 @@ class Command(BaseCommand):
         if from_build and not skip_rebuild:
             # Rebuild the SPA before serving so the user sees the latest
             # Reflex page tree on every ``manage.py run_reflex``.
+            self._auto_export_for_build_mode()
+        elif is_prod and not skip_rebuild and self._spa_index_missing():
+            # ``--env prod`` normally assumes the SPA was built in CI
+            # (``export_reflex`` + ``collectstatic``) before the server runs.
+            # When that bundle is absent — e.g. a fresh local
+            # ``run_reflex --env prod`` — the catch-all view 404s with
+            # "Reflex SPA bundle not found". Build it once now so the command
+            # works out of the box. A pre-built bundle is left untouched
+            # (deterministic CI), and ``--skip-rebuild`` opts out entirely.
+            self.stdout.write(
+                self.style.NOTICE(
+                    "reflex-django: --env prod — no compiled SPA found on "
+                    "disk; building it now (one-off). Pass --skip-rebuild to "
+                    "skip and serve an existing bundle instead."
+                )
+            )
             self._auto_export_for_build_mode()
         if serve_from_disk:
             self._warn_if_spa_missing()
@@ -423,6 +440,23 @@ class Command(BaseCommand):
                 f"reflex-django: auto-export finished in {elapsed:.1f}s."
             )
         )
+
+    def _spa_index_missing(self) -> bool:
+        """Return True when no compiled SPA ``index.html`` is on disk.
+
+        Uses the same discovery paths as
+        :class:`reflex_django.views.mount.ReflexMountView` so the pre-flight
+        check matches what the runtime view will actually find. Errors are
+        treated as "missing" so we err on the side of (re)building.
+        """
+        try:
+            from reflex_django.views.mount import _resolve_spa_index
+        except Exception:  # noqa: BLE001
+            return True
+        try:
+            return _resolve_spa_index() is None
+        except Exception:  # noqa: BLE001
+            return True
 
     def _warn_if_spa_missing(self) -> None:
         """Print a clear warning when ``--env prod`` cannot find a compiled SPA.
