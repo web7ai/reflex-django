@@ -77,8 +77,8 @@ class Product(models.Model):
 ```python
 # shop/views.py
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import ModelState
+from reflex_django.pages.decorators import page
+from reflex_django.states import ModelState
 from shop.models import Product
 
 
@@ -167,7 +167,7 @@ def product_row(row: dict) -> rx.Component:
     )
 
 
-@template(route="/products", title="Products", on_load=ProductState.refresh)
+@page(route="/products", title="Products", on_load=ProductState.refresh)
 def index() -> rx.Component:
     return products_page()
 ```

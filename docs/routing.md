@@ -136,7 +136,7 @@ If the bundle is missing, the view returns a 404 with a hint pointing at `manage
 
 ## Layer 3 — the Reflex client router
 
-Once the SPA is loaded, in-page navigation between `/`, `/about`, `/cart`, etc. happens **entirely in the browser**. Reflex generates a React router from your `@template(route=...)` declarations and intercepts link clicks.
+Once the SPA is loaded, in-page navigation between `/`, `/about`, `/cart`, etc. happens **entirely in the browser**. Reflex generates a React router from your `@page(route=...)` declarations and intercepts link clicks.
 
 The browser doesn't make an HTTP request to the server when the user clicks `<a href="/about">`. It just changes the URL and re-renders.
 
@@ -165,7 +165,7 @@ Everything happens on one port. Same origin. Same cookies. Same session.
 
 1. **Django routes go above `reflex_mount()`** in `urls.py`.
 2. **`django_prefix` must match real `path(...)` entries** above it.
-3. **Don't `path()` for SPA pages.** Use `@template(route=...)` in `views.py` instead.
+3. **Don't `path()` for SPA pages.** Use `@page(route=...)` in `views.py` instead.
 4. **Don't add Django routes under reserved Reflex prefixes.**
 
 If you stick to these, routing just works.

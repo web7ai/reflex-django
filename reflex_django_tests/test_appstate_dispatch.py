@@ -19,7 +19,7 @@ from reflex_django.compile_validate import (  # noqa: E402
     expected_dispatch_keys_from_app,
     missing_frontend_dispatchers,
 )
-from reflex_django.decorators import clear_page_registry, page
+from reflex_django.pages.decorators import clear_page_registry, page
 from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
 from reflex_django.state.auth_bridge import (  # noqa: E402
     _handler_state_class_chain,

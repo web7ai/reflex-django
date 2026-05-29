@@ -34,8 +34,9 @@ class BlogPostSerializer(ReflexDjangoModelSerializer):
 ```python
 # blog/views.py
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import ModelCRUDView, AppState
+from reflex_django.pages.decorators import page
+from reflex_django.state import ModelCRUDView
+from reflex_django.states import AppState
 from blog.models import BlogPost
 from blog.serializers import BlogPostSerializer
 
@@ -116,8 +117,9 @@ class BlogPostSerializer(ReflexDjangoModelSerializer):
 ```python
 # blog/views.py
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import ModelCRUDView, AppState
+from reflex_django.pages.decorators import page
+from reflex_django.state import ModelCRUDView
+from reflex_django.states import AppState
 from blog.models import BlogPost
 from blog.serializers import BlogPostSerializer
 
@@ -208,7 +210,7 @@ def post_row(row: dict) -> rx.Component:
     )
 
 
-@template(route="/blog", title="Blog", on_load=BlogPostState.on_load_posts)
+@page(route="/blog", title="Blog", on_load=BlogPostState.on_load_posts)
 def index() -> rx.Component:
     return blog_page()
 ```

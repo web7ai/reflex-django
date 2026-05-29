@@ -186,7 +186,7 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 
 ## AppState authentication bridge (agent reference)
 
-**Import:** `from reflex_django.state import AppState`  
+**Import:** `from reflex_django.states import AppState`  
 **Also:** `from reflex_django.auth import login_required, permission_required`
 
 `AppState` subclasses `DjangoUserState` + `AuthBridgeMixin`. Use for dashboards, auth-aware features, and `ModelCRUDView`.
@@ -266,7 +266,7 @@ Human docs: `docs/authentication.md`.
 
 ## ModelState — reactive ORM state (preferred)
 
-**Import:** `from reflex_django.state import ModelState`  
+**Import:** `from reflex_django.states import ModelState`  
 **Full doc:** `docs/reactive_model_state.md` (examples: Product CRUD page, BlogPost + UserScopedMixin, pagination, forms, hooks)  
 **Comparison (ModelState vs ModelCRUDView, migration, side-by-side UI):** `docs/model_state_and_crud_view.md`  
 **Requires:** event bridge on; includes **`AppState`** (auth).
@@ -314,7 +314,7 @@ class NoteState(ModelState, UserScopedMixin):
 
 ## ModelCRUDView — explicit serializer CRUD (legacy / advanced)
 
-**Import:** `from reflex_django.state import AppState, ModelCRUDView, ModelListView`  
+**Import:** `from reflex_django.states import AppState`; `from reflex_django.state import ModelCRUDView, ModelListView`  
 **Note:** `ModelState` is **not** an alias; it extends `AppState` + `ModelCRUDView` with `model` + `fields` shorthand.  
 **Comparison guide:** `docs/model_state_and_crud_view.md`  
 **Requires:** event bridge on; `@login_required` on most generated handlers by default.

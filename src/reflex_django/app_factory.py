@@ -251,9 +251,9 @@ def migrate_decorated_pages_app_name(app_name: str | None = None) -> str:
 
 
 def apply_page_registry_to_app(app: Any) -> None:
-    """Register :data:`~reflex_django.decorators.PAGE_REGISTRY` pages on *app*."""
+    """Register :data:`~reflex_django.pages.decorators.PAGE_REGISTRY` pages on *app*."""
     from reflex.utils import format as route_format
-    from reflex_django.decorators import PAGE_REGISTRY
+    from reflex_django.pages.decorators import PAGE_REGISTRY
 
     for registration in PAGE_REGISTRY:
         route = registration.route or registration.kwargs.get("route")

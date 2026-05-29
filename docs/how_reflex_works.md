@@ -81,7 +81,7 @@ Click the button → the browser sends an event over the WebSocket → `incremen
 
 ## Pages — components that get a URL
 
-A page is just a component decorated with `@rx.page` (or, in `reflex-django`, `@template`):
+A page is just a component decorated with `@rx.page` (or, in `reflex-django`, `@page`):
 
 ```python
 @rx.page(route="/counter", title="Counter")
@@ -95,9 +95,9 @@ In `reflex-django`, you put these page functions directly inside your Django app
 
 ```python
 # shop/views.py
-from reflex_django import template
+from reflex_django.pages.decorators import page
 
-@template(route="/", title="Home")
+@page(route="/", title="Home")
 def home() -> rx.Component:
     return rx.heading("Hello")
 ```
@@ -179,7 +179,7 @@ If the four bullets below feel obvious, you're ready for the rest of these docs:
 - A Reflex app is a compiled SPA that talks to the server over a WebSocket.
 - Components are Python functions returning `rx.Component`.
 - State is a Python class with reactive fields and `@rx.event` methods.
-- Pages are components with a `@rx.page` (or `@template`) decorator and a `route`.
+- Pages are components with a `@rx.page` (or `@page`) decorator and a `route`.
 
 The full official Reflex docs live at [reflex.dev](https://reflex.dev). For our purposes, the page above is plenty.
 

@@ -48,7 +48,7 @@ Three things to notice:
 | `config/urls.py` | Your Django routes, then `reflex_mount(...)` at the very bottom |
 | `config/asgi.py` | One import line pointing at `reflex_django.asgi_entry:application` |
 | `{app}/models.py` | Django ORM models (unchanged from any normal Django project) |
-| `{app}/views.py` | `@template`-decorated Reflex pages and `AppState` subclasses |
+| `{app}/views.py` | `@page`-decorated Reflex pages and `AppState` subclasses |
 | `{app}/serializers.py` | Optional `ReflexDjangoModelSerializer` classes |
 | `{app}/admin.py` | Django admin registrations (unchanged) |
 | `{app}/migrations/` | Django migrations (unchanged) |
@@ -79,7 +79,7 @@ staticfiles/
 
 ## How pages are discovered
 
-When the server boots, `reflex_django.django_led_app` walks every entry in `INSTALLED_APPS` and tries to import `{app}.views`. Any `@template` / `@page` decorators in those modules register their routes. There's nothing for you to wire up.
+When the server boots, `reflex_django.django_led_app` walks every entry in `INSTALLED_APPS` and tries to import `{app}.views`. Any `@page` decorators in those modules register their routes. There's nothing for you to wire up.
 
 The skip list: `django.*` apps and `reflex_django` itself are never scanned.
 
@@ -190,7 +190,7 @@ The [Deployment guide](deployment.md) has the full production setup.
 ## Where to go next
 
 - **[Configuration with reflex_mount()](configuration.md)** — every argument and every `REFLEX_DJANGO_*` setting.
-- **[Pages live in views.py](pages_in_views.md)** — how `@template` and route discovery work.
+- **[Pages live in views.py](pages_in_views.md)** — how `@page` and route discovery work.
 - **[Architecture](architecture.md)** — the runtime picture once everything is loaded.
 
 ---

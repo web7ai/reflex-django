@@ -83,8 +83,8 @@ from reflex_django.asgi_entry import application  # noqa: E402,F401
 
 ```python
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import AppState
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 
 
 class HomeState(AppState):
@@ -98,7 +98,7 @@ class HomeState(AppState):
         )
 
 
-@template(route="/", title="Home", on_load=HomeState.on_load)
+@page(route="/", title="Home", on_load=HomeState.on_load)
 def index() -> rx.Component:
     return rx.vstack(
         rx.heading("My Shop"),
@@ -135,7 +135,7 @@ Full explanation: [Why reflex-django exists](https://web7ai.github.io/reflex-dja
 |:---|:---|
 | `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE` (incl. `AsyncStreamingMiddleware`), `REFLEX_DJANGO_*` |
 | `urls.py` | `reflex_mount(app_name=..., django_prefix=..., rx_config={...})` |
-| `{app}/views.py` | `@template`-decorated pages and `AppState` subclasses |
+| `{app}/views.py` | `@page`-decorated pages and `AppState` subclasses |
 
 No `rxconfig.py`. No `{app}/{app}.py`. No separate frontend.
 

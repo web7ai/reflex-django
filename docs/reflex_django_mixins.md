@@ -266,7 +266,7 @@ The built-in login page uses a special mixin called `session_auth_mixin`:
 
 ```python
 from reflex_django.mixins import session_auth_mixin, SessionAuthConfig
-from reflex_django import DjangoUserState
+from reflex_django.states import DjangoUserState
 
 
 config = SessionAuthConfig(

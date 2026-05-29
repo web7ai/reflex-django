@@ -13,7 +13,7 @@ Good news: you don't have to touch your models or your existing views. You add `
 | `manage.py`, models, migrations, admin | `reflex_django` in `INSTALLED_APPS` |
 | Your existing `/api/` and templates | `reflex_mount(...)` in `urls.py` |
 | Your custom middleware | `AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE` |
-| Your DRF views, webhooks, command-line scripts | `@template` pages inside any app's `views.py` |
+| Your DRF views, webhooks, command-line scripts | `@page` pages inside any app's `views.py` |
 | Your `settings.py` (mostly) | A few `REFLEX_DJANGO_*` keys (optional) |
 
 You don't add an `rxconfig.py`. You don't add a `{app}/{app}.py`. You don't move things around. Promise.
@@ -104,8 +104,8 @@ Pick any Django app that's in `INSTALLED_APPS` (the same one you named in `app_n
 ```python
 # shop/views.py — your existing module
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import AppState
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 
 # ... your existing Django views can stay here, unchanged ...
 
@@ -122,7 +122,7 @@ class CatalogState(AppState):
         ]
 
 
-@template(route="/catalog", title="Catalog", on_load=CatalogState.load)
+@page(route="/catalog", title="Catalog", on_load=CatalogState.load)
 def catalog() -> rx.Component:
     return rx.vstack(
         rx.heading("Catalog"),

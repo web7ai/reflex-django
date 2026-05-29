@@ -376,12 +376,12 @@ def product_row(row: dict) -> rx.Component:
     )
 ```
 
-Register the page with `@template`:
+Register the page with `@page`:
 
 ```python
-from reflex_django import template
+from reflex_django.pages.decorators import page
 
-@template(route="/inventory", title="Inventory", on_load=InventoryState.load)
+@page(route="/inventory", title="Inventory", on_load=InventoryState.load)
 def index() -> rx.Component:
     return inventory_page()
 ```

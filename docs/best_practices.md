@@ -46,7 +46,7 @@ The patterns below are things you'll figure out yourself after a week or two. Re
 
 **Every prefix in `django_prefix` matches a real `path(...)` above.** Drift here is the #1 cause of 404s.
 
-**Don't add Django `path()` entries for SPA pages.** SPA routes live in `@template(route=...)`. Adding a Django path shadows them.
+**Don't add Django `path()` entries for SPA pages.** SPA routes live in `@page(route=...)`. Adding a Django path shadows them.
 
 **Don't add Django routes under reserved Reflex prefixes** (`/_event`, `/_upload`, `/_health`, `/ping`).
 

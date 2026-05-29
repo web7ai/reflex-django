@@ -175,7 +175,7 @@ rx.plugins.RadixThemesPlugin(
 reflex-django does not ship a theme toggle UI, but `AppState.session` persists arbitrary keys in the Django session. Store the user’s preference and drive `appearance`:
 
 ```python
-from reflex_django.state import AppState
+from reflex_django.states import AppState
 
 class SiteState(AppState):
     @rx.var

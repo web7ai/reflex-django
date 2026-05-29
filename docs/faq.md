@@ -175,7 +175,7 @@ Wrap the page function:
 ```python
 from reflex_django.auth import login_required
 
-@template(route="/account")
+@page(route="/account")
 @login_required
 def account() -> rx.Component:
     ...

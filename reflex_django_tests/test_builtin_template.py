@@ -1,11 +1,11 @@
-"""Tests for built-in :func:`reflex_django.template`."""
+"""Tests for built-in :func:`reflex_django.pages.decorators.templates.centered_template`."""
 
 from __future__ import annotations
 
 import pytest
 
-from reflex_django.decorators import PAGE_REGISTRY, clear_page_registry
-from reflex_django.ui.template import template
+from reflex_django.pages.decorators import PAGE_REGISTRY, clear_page_registry
+from reflex_django.pages.decorators.templates import centered_template as template
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +27,10 @@ def test_template_registers_pages_in_registry() -> None:
 
 
 def test_template_import_from_package() -> None:
-    from reflex_django import page, template as pkg_template
+    from reflex_django.pages.decorators import page
+    from reflex_django.pages.decorators.templates import (
+        centered_template as pkg_template,
+    )
 
     assert pkg_template is template
     assert page is not None

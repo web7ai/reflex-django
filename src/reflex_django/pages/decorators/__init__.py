@@ -1,4 +1,4 @@
-"""Optional decorators that register Reflex pages for Django-led projects."""
+"""Decorators that register Reflex pages for Django-led projects."""
 
 from __future__ import annotations
 

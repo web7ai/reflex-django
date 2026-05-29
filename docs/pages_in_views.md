@@ -2,7 +2,7 @@
 
 In `reflex-django`, a Reflex page is a Python function that returns an `rx.Component`, sitting in a Django app's `views.py` next to your models. There's nothing else to wire up — no `urls.py` entry per page, no separate `frontend/` folder.
 
-This page explains how pages get registered, how URLs are split between Django and Reflex, and the small `@template` / `@page` decorator API.
+This page explains how pages get registered, how URLs are split between Django and Reflex, and the small `@page` decorator API (plus the optional `centered_template` layout helper).
 
 ---
 
@@ -11,15 +11,15 @@ This page explains how pages get registered, how URLs are split between Django a
 ```python
 # shop/views.py
 import reflex as rx
-from reflex_django import template
+from reflex_django.pages.decorators import page
 
 
-@template(route="/", title="Home")
+@page(route="/", title="Home")
 def index() -> rx.Component:
     return rx.heading("Hello!")
 
 
-@template(route="/about", title="About")
+@page(route="/about", title="About")
 def about() -> rx.Component:
     return rx.text("This page lives in shop/views.py.")
 ```
@@ -32,7 +32,7 @@ That's it. Visit `http://localhost:8000/` and `/about` — both pages render. Yo
 
 ## How discovery works
 
-When the server starts, `reflex-django` walks every entry in `INSTALLED_APPS` and tries to import `{app}.views`. Any `@template` or `@page` decorators in those modules register their routes.
+When the server starts, `reflex-django` walks every entry in `INSTALLED_APPS` and tries to import `{app}.views`. Any `@page` (or `centered_template`) decorators in those modules register their routes.
 
 ```python
 INSTALLED_APPS = [
@@ -60,34 +60,35 @@ For most projects, the defaults are fine.
 
 ---
 
-## `@template` vs `@page`
+## `@page` and the centered layout helper
 
-Two decorators ship with `reflex-django`. Pick the one that fits.
+The primary decorator is `@page`. An optional `centered_template` helper is also available when you want a ready-made centered layout.
 
 | Decorator | What it does | When to use |
 |:---|:---|:---|
-| `@template(route, title=..., on_load=...)` | Registers the page **and** wraps content in a centered layout container. | Most pages. Good default. |
-| `@page(route, title=..., on_load=...)` | Registers the page with no layout wrapping. | When you need full control of the page's outer container. |
+| `@page(route, title=..., on_load=...)` | Registers the page with no layout wrapping. | The default. You own the page's outer container. |
+| `centered_template(route, title=..., on_load=...)` | Registers the page **and** wraps content in a centered layout container. | When you want a quick centered layout without writing one. |
 
 Both accept the standard Reflex page arguments: `route`, `title`, `description`, `image`, `meta`, `script_tags`, `on_load`, plus more. They're thin wrappers around `@rx.page`.
 
 ```python
-from reflex_django import template, page
-
-@template(route="/dashboard", title="Dashboard")
-def dashboard() -> rx.Component:
-    return rx.text("Inside the default layout wrapper")
-
+from reflex_django.pages.decorators import page
+from reflex_django.pages.decorators.templates import centered_template as template
 
 @page(route="/bare", title="Bare page")
 def bare() -> rx.Component:
     return rx.text("No layout — I own the outer container")
+
+
+@template(route="/dashboard", title="Dashboard")
+def dashboard() -> rx.Component:
+    return rx.text("Inside the centered layout wrapper")
 ```
 
 ### `on_load`: run code when the page is visited
 
 ```python
-@template(route="/cart", title="Cart", on_load=CartState.refresh)
+@page(route="/cart", title="Cart", on_load=CartState.refresh)
 def cart() -> rx.Component:
     return rx.foreach(CartState.items, cart_row)
 ```
@@ -116,7 +117,7 @@ Reflex client-side routing then handles navigation between SPA pages (`/`, `/abo
 
 1. **Django routes go above `reflex_mount()`** in `urls.py`.
 2. **Every prefix in `django_prefix=(...)`** must match a real `path(...)` line above.
-3. **Don't add a `path()` for an SPA page.** `path("about/", ...)` is wrong — use `@template(route="/about")` instead.
+3. **Don't add a `path()` for an SPA page.** `path("about/", ...)` is wrong — use `@page(route="/about")` instead.
 
 ```python
 # config/urls.py — correct shape
@@ -205,7 +206,7 @@ At startup, that module:
 
 1. Imports page modules from `INSTALLED_APPS`.
 2. Creates `rx.App()`.
-3. Applies the routes from all the `@template` / `@page` decorators it found.
+3. Applies the routes from all the `@page` decorators it found.
 
 You don't import it. You don't create it. It just makes "pages in `views.py`" work.
 

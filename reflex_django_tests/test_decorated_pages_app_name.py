@@ -13,7 +13,7 @@ from reflex_django.app_factory import (  # noqa: E402
     migrate_decorated_pages_app_name,
     reset_app_factory_cache,
 )
-from reflex_django.decorators import clear_page_registry, page
+from reflex_django.pages.decorators import clear_page_registry, page
 from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
 
 

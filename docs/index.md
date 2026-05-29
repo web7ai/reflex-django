@@ -44,8 +44,8 @@ urlpatterns += [reflex_mount(app_name="shop")]
 ```python
 # shop/views.py — your pages live here, next to your models
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import AppState
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 
 class HomeState(AppState):
     @rx.event
@@ -53,7 +53,7 @@ class HomeState(AppState):
         if self.request.user.is_authenticated:
             self.greeting = f"Hi, {self.request.user.get_username()}!"
 
-@template(route="/", title="Home")
+@page(route="/", title="Home")
 def index() -> rx.Component:
     return rx.heading(HomeState.greeting)
 ```

@@ -50,7 +50,7 @@ Most of the time, you only interact with four things:
 |:---|:---|:---|
 | **`reflex_mount()`** | One function call that wires Reflex into Django | `config/urls.py` |
 | **`AppState`** | Base class for Reflex states that need Django context | `{app}/views.py` |
-| **`@template`** | Decorator that registers a Reflex page with a URL | `{app}/views.py` |
+| **`@page`** | Decorator that registers a Reflex page with a URL | `{app}/views.py` |
 | **`asgi_entry.application`** | The ASGI callable that boots everything | `config/asgi.py` |
 
 Here they are in their natural habitat:
@@ -75,15 +75,15 @@ from reflex_django.asgi_entry import application
 ```python
 # shop/views.py
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import AppState
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 
 class HomeState(AppState):
     @rx.event
     async def on_load(self):
         self.greeting = f"Hi, {self.request.user.get_username() or 'guest'}"
 
-@template(route="/", title="Home")
+@page(route="/", title="Home")
 def home() -> rx.Component:
     return rx.heading(HomeState.greeting)
 ```
@@ -154,7 +154,7 @@ That module quietly does three things at startup:
 
 1. Imports `{app}/views.py` for every app in `INSTALLED_APPS`.
 2. Builds `rx.App()`.
-3. Registers any pages it found from `@template` / `@page` decorators.
+3. Registers any pages it found from `@page` decorators.
 
 You don't import it. You don't see it. It just makes "pages in `views.py`" work.
 

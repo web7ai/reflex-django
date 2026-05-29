@@ -1,9 +1,26 @@
-"""Base Reflex state classes for reflex-django apps."""
+"""Built-in Reflex state classes for reflex-django apps.
+
+This module is the canonical import location for every built-in State class::
+
+    from reflex_django.states import (
+        AppState,
+        DjangoUserState,
+        DjangoAuthState,
+        DjangoI18nState,
+        DjangoContextState,
+        ModelState,
+    )
+
+``AppState`` and ``DjangoUserState`` are available eagerly. The Django-heavy or
+dynamically built classes (``DjangoAuthState``, ``DjangoContextState``,
+``DjangoI18nState``, ``ModelState``) are resolved lazily on first attribute
+access to avoid circular imports and import-time ``django.setup()`` requirements.
+"""
 
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from reflex_base.vars.base import BaseStateMeta
 
@@ -14,7 +31,53 @@ from reflex_django.state.assembly import (
     register_state_class,
 )
 
-__all__ = ["AppState", "AppStateMeta"]
+if TYPE_CHECKING:
+    from reflex_django.auth.state import DjangoAuthState
+    from reflex_django.i18n_state import DjangoI18nState
+    from reflex_django.reflex_context import DjangoContextState
+    from reflex_django.state.model_state import ModelState
+
+__all__ = [
+    "AppState",
+    "AppStateMeta",
+    "DjangoAuthState",
+    "DjangoContextState",
+    "DjangoI18nState",
+    "DjangoUserState",
+    "ModelState",
+]
+
+_LAZY_STATES: dict[str, tuple[str, str]] = {
+    "DjangoAuthState": ("reflex_django.auth.state", "DjangoAuthState"),
+    "DjangoContextState": ("reflex_django.reflex_context", "DjangoContextState"),
+    "DjangoI18nState": ("reflex_django.i18n_state", "DjangoI18nState"),
+    "ModelState": ("reflex_django.state.model_state", "ModelState"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve lazy built-in State classes on first access.
+
+    Args:
+        name: The attribute requested on the ``reflex_django.states`` module.
+
+    Returns:
+        The resolved State class.
+
+    Raises:
+        AttributeError: If ``name`` is not a known built-in State.
+    """
+    target = _LAZY_STATES.get(name)
+    if target is None:
+        msg = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(msg)
+
+    from importlib import import_module
+
+    module = import_module(target[0])
+    value = getattr(module, target[1])
+    globals()[name] = value
+    return value
 
 
 class AppStateMeta(BaseStateMeta):

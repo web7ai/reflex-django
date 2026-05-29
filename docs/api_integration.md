@@ -237,8 +237,8 @@ A shop that exposes both HTTP and Reflex over the same data:
 import reflex as rx
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-from reflex_django import template
-from reflex_django.state import ModelState
+from reflex_django.pages.decorators import page
+from reflex_django.states import ModelState
 
 from shop.models import Order
 
@@ -254,7 +254,7 @@ class OrderState(ModelState):
         return Order.objects.filter(customer=self.request.user)
 
 
-@template(route="/orders", title="Orders", on_load=OrderState.refresh)
+@page(route="/orders", title="Orders", on_load=OrderState.refresh)
 def my_orders_page() -> rx.Component:
     return rx.foreach(OrderState.orders, lambda o: rx.text(o["status"], " — ", o["total"]))
 

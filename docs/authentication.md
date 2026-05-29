@@ -95,10 +95,10 @@ Wrap a page function with `@login_required` and Reflex will redirect anonymous v
 
 ```python
 import reflex as rx
-from reflex_django import template
+from reflex_django.pages.decorators import page
 from reflex_django.auth import login_required
 
-@template(route="/account", title="Account")
+@page(route="/account", title="Account")
 @login_required
 def account() -> rx.Component:
     return rx.text("Members only.")
@@ -107,7 +107,7 @@ def account() -> rx.Component:
 Or, if you want to control the redirect target per page:
 
 ```python
-@template(route="/billing")
+@page(route="/billing")
 @login_required(login_url="/login?next=/billing")
 def billing() -> rx.Component:
     ...
@@ -180,7 +180,7 @@ async def submit(self):
 Render them in your UI by binding to the reactive `DjangoUserState.messages` list:
 
 ```python
-from reflex_django import DjangoUserState
+from reflex_django.states import DjangoUserState
 
 def message_banner():
     return rx.foreach(
@@ -348,7 +348,7 @@ The reactive `self.perms` field (a JSON-safe list of `app.codename` strings) is 
 ### Optional login on a page
 
 ```python
-@template(route="/", on_load=HomeState.on_load)
+@page(route="/", on_load=HomeState.on_load)
 def home() -> rx.Component:
     return rx.cond(
         HomeState.is_authenticated,
@@ -367,7 +367,7 @@ class HomeState(AppState):
 ### Required login on a page
 
 ```python
-@template(route="/dashboard", on_load=DashboardState.on_load)
+@page(route="/dashboard", on_load=DashboardState.on_load)
 def dashboard() -> rx.Component:
     return rx.heading("Dashboard")
 

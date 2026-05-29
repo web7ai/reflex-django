@@ -14,7 +14,7 @@ from reflex_django.app_factory import (
     reset_app_factory_cache,
     resolve_page_packages,
 )
-from reflex_django.decorators import PAGE_REGISTRY, clear_page_registry
+from reflex_django.pages.decorators import PAGE_REGISTRY, clear_page_registry
 from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
 from reflex_django.routing import UrlRoutingMode, resolve_url_routing
 

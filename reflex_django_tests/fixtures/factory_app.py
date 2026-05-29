@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from reflex_django.decorators import page
+from reflex_django.pages.decorators import page
 
 
 def create_app() -> rx.App:

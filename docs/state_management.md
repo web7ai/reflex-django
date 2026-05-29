@@ -233,8 +233,8 @@ This is what a typical `AppState` page looks like: per-event Django context for 
 ```python
 # accounts/views.py
 import reflex as rx
-from reflex_django import template
-from reflex_django.state import AppState
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 
 
 class ProfileState(AppState):
@@ -257,7 +257,7 @@ class ProfileState(AppState):
         self.saved = True
 
 
-@template(route="/profile", title="Profile", on_load=ProfileState.on_load)
+@page(route="/profile", title="Profile", on_load=ProfileState.on_load)
 def profile() -> rx.Component:
     return rx.vstack(
         rx.heading(f"Hi, {ProfileState.username}"),
@@ -329,7 +329,7 @@ Class defaults are values, not snapshots of the current user.
 `reflex-django` also ships a smaller class called `DjangoUserState`. It exposes the same reactive variables (`is_authenticated`, `username`, etc.) **without** the per-event `self.request` and `self.user`. Use it when you only need the UI snapshot — for example, a navbar that shows the username:
 
 ```python
-from reflex_django import DjangoUserState
+from reflex_django.states import DjangoUserState
 
 def navbar():
     return rx.hstack(

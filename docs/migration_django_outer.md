@@ -27,7 +27,7 @@ You get: one port, one origin, full middleware on Reflex events, and Django-firs
 | **Ports** | Two (Reflex frontend + Django backend) | One (everything on `8000`) |
 | **Outer app** | Reflex | Django |
 | **Config** | `rxconfig.py` with plugin kwargs | `reflex_mount()` in `urls.py` + `REFLEX_DJANGO_*` settings |
-| **Pages** | `{app}/{app}.py` with `app = rx.App()` | `{app}/views.py` with `@template` |
+| **Pages** | `{app}/{app}.py` with `app = rx.App()` | `{app}/views.py` with `@page` |
 | **Middleware on events** | Limited subset (Session, Auth, Locale) | Full `settings.MIDDLEWARE` chain |
 | **Bound context** | `self.request`, `self.user`, `self.session` | Above + `self.response`, `self.messages`, `self.csrf_token` |
 | **Middleware redirects** | Ignored | Auto-converted to `rx.redirect(...)` |
@@ -142,10 +142,10 @@ New:
 ```python
 # shop/views.py — new
 import reflex as rx
-from reflex_django import template
+from reflex_django.pages.decorators import page
 
 
-@template(route="/", title="Home")
+@page(route="/", title="Home")
 def home() -> rx.Component:
     return rx.heading("Hi")
 ```

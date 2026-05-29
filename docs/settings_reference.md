@@ -99,7 +99,7 @@ These control which Django values appear as reactive variables on `DjangoUserSta
 
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
-| `REFLEX_DJANGO_AUTO_DISCOVER_PAGES` | `bool` | `True` | Walk `INSTALLED_APPS` and import `{app}.views` for `@template`/`@page` decorators. |
+| `REFLEX_DJANGO_AUTO_DISCOVER_PAGES` | `bool` | `True` | Walk `INSTALLED_APPS` and import `{app}.views` for `@page` decorators. |
 | `REFLEX_DJANGO_PAGE_PACKAGES` | `list[str]` | `[]` | Explicit list of page modules. When non-empty, disables auto-discovery. |
 | `REFLEX_DJANGO_PAGE_APPS` | `list[str] \| None` | `None` | Allowlist of app labels for auto-discovery. `None` = scan all. |
 | `REFLEX_DJANGO_PAGE_MODULE` | `str` | `"views"` | Which submodule to import per app. |

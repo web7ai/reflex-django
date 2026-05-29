@@ -329,7 +329,7 @@ The order in which modules import each other is load-bearing. From the top of an
         └── ensure_reflex_cli_layout() — synthesises rxconfig in sys.modules
 3. ROOT_URLCONF is imported → reflex_mount() registers the in-memory rx.Config
 4. reflex_django.django_led_app imports {app}/views.py for each INSTALLED_APPS entry
-5. rx.App() is instantiated; @template / @page decorators register routes
+5. rx.App() is instantiated; @page decorators register routes
 6. DjangoOuterDispatcher wraps Django ASGI + Reflex inner ASGI
 7. ASGI server binds the port
 ```

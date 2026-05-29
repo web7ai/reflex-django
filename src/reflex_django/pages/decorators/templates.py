@@ -7,7 +7,7 @@ from typing import Any
 
 import reflex as rx
 
-from reflex_django.decorators import page
+from reflex_django.pages.decorators import page
 
 _DEFAULT_META = [
     {
@@ -17,7 +17,7 @@ _DEFAULT_META = [
 ]
 
 
-def template(
+def centered_template(
     route: str,
     *,
     title: str | None = None,
@@ -34,7 +34,7 @@ def template(
 
     Example::
 
-        from reflex_django import template
+        from reflex_django.pages.decorators.templates import centered_template as template
         from reflex_django.states import AppState
         import reflex as rx
 
@@ -54,7 +54,7 @@ def template(
         on_load: Reflex ``on_load`` handler(s).
         meta: Extra meta tag dicts.
         show_title: When ``True`` and *title* is set, render an ``rx.heading``.
-        **page_kwargs: Forwarded to :func:`reflex.page` (via :func:`~reflex_django.decorators.page`).
+        **page_kwargs: Forwarded to :func:`reflex.page` (via :func:`~reflex_django.pages.decorators.page`).
 
     Returns:
         A decorator for the page render function.
@@ -94,3 +94,6 @@ def template(
         return wrapped_page
 
     return decorator
+
+
+__all__ = ["centered_template"]

@@ -9,7 +9,7 @@ from reflex_django.conf import configure_django
 configure_django()
 
 from reflex.page import DECORATED_PAGES  # noqa: E402
-from reflex_django.decorators import clear_page_registry, page
+from reflex_django.pages.decorators import clear_page_registry, page
 from reflex_django.integration import (
     install_reflex_django_integration,
     reset_integration_for_tests,

@@ -117,7 +117,7 @@ The most common declarative CRUD class. Auto-builds a serializer from `model + f
 ---
 
 ### `on_load`
-A page-level event handler passed to `@template(route=..., on_load=...)`. Runs when the user navigates to that route. Use it to fetch data and gate by login.
+A page-level event handler passed to `@page(route=..., on_load=...)`. Runs when the user navigates to that route. Use it to fetch data and gate by login.
 
 ### `Outer dispatcher`
 See `DjangoOuterDispatcher`.
@@ -125,10 +125,10 @@ See `DjangoOuterDispatcher`.
 ---
 
 ### `@page`
-A decorator from `reflex_django` that registers a Reflex page *without* the default layout wrapper. Use when you want full control over the page's outer container.
+The primary decorator from `reflex_django.pages.decorators` that registers a Reflex page. You own the page's outer container.
 
 ### `Page`
-A Reflex component decorated with `@template` or `@page` and assigned a URL route. The user navigates to pages; pages render components; components are bound to state.
+A Reflex component decorated with `@page` (or `centered_template`) and assigned a URL route. The user navigates to pages; pages render components; components are bound to state.
 
 ### `PermissionMixin`
 A mixin that wires DRF-style permission classes into the dispatch pipeline. Pass `Meta.permission_classes = (...)` to use it.
@@ -217,8 +217,8 @@ A `django.http.HttpRequest` instance constructed by the bridge from a WebSocket 
 
 ---
 
-### `@template`
-The most common decorator from `reflex_django` for registering a Reflex page. Wraps the content in a centered layout container.
+### `centered_template`
+An optional decorator from `reflex_django.pages.decorators.templates` for registering a Reflex page wrapped in a centered layout container. Often imported `as template`.
 
 ### `UserScopedMixin`
 A mixin that auto-scopes CRUD queries to the current user. Replaces three manual hook overrides (`get_queryset`, `get_object_lookup`, `get_create_kwargs`).

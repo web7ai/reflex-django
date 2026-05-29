@@ -8,10 +8,11 @@ Every public symbol you can import from `reflex_django`, grouped by what you'd u
 
 ```python
 # state — the bridge to Django context
-from reflex_django.state import AppState, ModelState, ModelCRUDView
+from reflex_django.states import AppState, ModelState
 
 # pages
-from reflex_django import template, page
+from reflex_django.pages.decorators import page
+from reflex_django.pages.decorators.templates import centered_template as template
 
 # urls.py
 from reflex_django.urls import reflex_mount
@@ -28,7 +29,7 @@ from reflex_django.auth import (
 from reflex_django.serializers import ReflexDjangoModelSerializer
 
 # reactive snapshot var (use in UI components)
-from reflex_django import DjangoUserState
+from reflex_django.states import DjangoUserState
 
 # request access without an AppState subclass
 from reflex_django import request, current_request, current_user
@@ -45,8 +46,8 @@ Most projects don't import anything else.
 
 | Symbol | Where it lives | What it does |
 |:---|:---|:---|
-| `template(route, ...)` | `reflex_django` | Register a Reflex page with the default layout wrapper. ([Details](pages_in_views.md).) |
-| `page(route, ...)` | `reflex_django` | Same, but without the layout wrapper. |
+| `page(route, ...)` | `reflex_django.pages.decorators` | Register a Reflex page (no layout wrapper). The default. ([Details](pages_in_views.md).) |
+| `centered_template(route, ...)` | `reflex_django.pages.decorators.templates` | Same, but wraps content in a centered layout. Often imported `as template`. |
 | `reflex_mount(...)` | `reflex_django.urls` | Mount Reflex in `urls.py`. ([Configuration](configuration.md).) |
 | `admin_urlpatterns(prefix)` | `reflex_django.urls` | Convenience builder for admin URL patterns. |
 
@@ -54,16 +55,18 @@ Most projects don't import anything else.
 
 ## State classes
 
+All State classes are importable from `reflex_django.states`.
+
 | Class | Where it lives | Use it for |
 |:---|:---|:---|
-| `AppState` | `reflex_django.state` | Default state for pages that need Django context (`self.request.user`, session, …). ([Details](state_management.md).) |
-| `ModelState` | `reflex_django.state` | Declarative CRUD over a Django model. Auto-builds serializer. ([Details](reactive_model_state.md).) |
+| `AppState` | `reflex_django.states` | Default state for pages that need Django context (`self.request.user`, session, …). ([Details](state_management.md).) |
+| `ModelState` | `reflex_django.states` | Declarative CRUD over a Django model. Auto-builds serializer. ([Details](reactive_model_state.md).) |
 | `ModelCRUDView` | `reflex_django.state` | Declarative CRUD with explicit `serializer_class`. ([Details](crud_with_mixins_and_states.md).) |
 | `ModelListView` | `reflex_django.state` | Read-only `ModelState` variant — list/filter/paginate only. |
-| `DjangoUserState` | `reflex_django` | Reactive snapshot of user/session for use in components. |
-| `DjangoAuthState` | `reflex_django` | State backing the built-in auth pages. |
-| `DjangoContextState` | `reflex_django` | Reactive holder for context-processor output. |
-| `DjangoI18nState` | `reflex_django` | Reactive holder for language/i18n data. |
+| `DjangoUserState` | `reflex_django.states` | Reactive snapshot of user/session for use in components. |
+| `DjangoAuthState` | `reflex_django.states` | State backing the built-in auth pages. |
+| `DjangoContextState` | `reflex_django.states` | Reactive holder for context-processor output. |
+| `DjangoI18nState` | `reflex_django.states` | Reactive holder for language/i18n data. |
 
 ---
 
@@ -121,7 +124,7 @@ Three flavors. They all read the same per-event request.
 
 | Symbol | Where it lives | Style |
 |:---|:---|:---|
-| `self.request`, `self.user` on `AppState` | `reflex_django.state` | Method-style |
+| `self.request`, `self.user` on `AppState` | `reflex_django.states` | Method-style |
 | `request` (module proxy) | `reflex_django` | Attribute proxy (`request.user`, `request.GET`) |
 | `current_request()`, `current_user()`, `current_session()`, `current_language()`, `current_csrf_token()`, `current_messages()`, `current_response()` | `reflex_django` | Functional |
 
@@ -211,15 +214,22 @@ For custom login UI that needs to refresh cookies on the client:
 
 ## Lazy imports
 
-The `reflex_django` package uses PEP 562 lazy attribute access, so importing it never touches Django's app registry. The symbols above are all resolvable through:
+The `reflex_django` package uses PEP 562 lazy attribute access, so importing it never touches Django's app registry. Top-level symbols are resolvable through attribute access:
 
 ```python
 import reflex_django
 
-reflex_django.AppState
-reflex_django.template
 reflex_django.add_auth_pages
+reflex_django.ReflexDjangoPlugin
 # ...
+```
+
+State classes and page decorators live in dedicated modules instead of the top-level package:
+
+```python
+from reflex_django.states import AppState, DjangoUserState
+from reflex_django.pages.decorators import page
+from reflex_django.pages.decorators.templates import centered_template as template
 ```
 
 If you see `module 'reflex_django' has no attribute 'X'`, double-check the spelling against this page.

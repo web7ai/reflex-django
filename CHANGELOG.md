@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** public API reorganized. Built-in State classes now live under
+  ``reflex_django.states`` (``from reflex_django.states import AppState,
+  DjangoUserState, DjangoAuthState, DjangoI18nState, DjangoContextState,
+  ModelState``). The page decorator moved to ``reflex_django.pages.decorators``
+  (``from reflex_django.pages.decorators import page``) and the layout decorator
+  moved to ``reflex_django.pages.decorators.templates`` as ``centered_template``
+  (``from reflex_django.pages.decorators.templates import centered_template as
+  template``).
+
+### Removed
+
+- **Breaking:** removed the old import paths. ``reflex_django.decorators`` and
+  ``reflex_django.ui`` are gone, and the top-level ``reflex_django.{page,
+  template, AppState, ModelState, DjangoUserState, DjangoAuthState,
+  DjangoI18nState, DjangoContextState}`` re-exports no longer exist. Import these
+  from ``reflex_django.states`` and ``reflex_django.pages.decorators`` instead.
+
 ### Fixed
 
 - ``dispatch is not a function``: patch ``reflex.page`` to bucket decorators under
