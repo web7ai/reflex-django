@@ -216,13 +216,34 @@ async def proxy_websocket_to_vite(scope: Any, receive: Any, send: Any) -> None:
         f"{'?' + query if query else ''}"
     )
 
+    # Vite's HMR client opens the WebSocket with the ``vite-hmr`` subprotocol
+    # (React Router / Vite also use ``vite-ping``). The handshake fails unless
+    # we (a) request the same subprotocol(s) when connecting to Vite upstream
+    # and (b) echo the negotiated subprotocol back to the browser on accept.
+    # Without this the proxied socket connects but Vite never treats it as an
+    # HMR channel, so edits compile but the browser is never told to reload.
+    requested_subprotocols = [
+        str(p) for p in scope.get("subprotocols", []) if p
+    ]
+    connect_kwargs: dict[str, Any] = {}
+    if requested_subprotocols:
+        connect_kwargs["subprotocols"] = requested_subprotocols
+
     msg = await receive()
     if msg["type"] != "websocket.connect":
         return
 
     try:
-        async with websockets.connect(target_url) as upstream:  # type: ignore[attr-defined]
-            await send({"type": "websocket.accept"})
+        async with websockets.connect(  # type: ignore[attr-defined]
+            target_url, **connect_kwargs
+        ) as upstream:
+            negotiated = getattr(upstream, "subprotocol", None)
+            accept_msg: dict[str, Any] = {"type": "websocket.accept"}
+            if negotiated:
+                accept_msg["subprotocol"] = negotiated
+            elif requested_subprotocols:
+                accept_msg["subprotocol"] = requested_subprotocols[0]
+            await send(accept_msg)
 
             async def from_browser() -> None:
                 while True:

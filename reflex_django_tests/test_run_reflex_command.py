@@ -239,16 +239,16 @@ def test_env_prod_ignores_serve_from_build_setting(
     export_call.assert_not_called()
 
 
-def test_default_is_from_build_when_setting_true(
+def test_from_build_setting_enables_export_without_flag(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """Plain ``python manage.py run_reflex`` defaults to from-build.
+    """Setting ``REFLEX_DJANGO_SERVE_FROM_BUILD = True`` opts into from-build.
 
-    With the new default ``REFLEX_DJANGO_SERVE_FROM_BUILD = True`` the
-    user does not have to pass ``--from-build`` — the export runs
-    automatically before serving.
+    Vite is the default now, but a project that explicitly turns the setting
+    on gets the serve-from-disk loop without passing ``--from-build`` on every
+    invocation — the export runs automatically before serving.
     """
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
@@ -388,3 +388,114 @@ def test_explicit_from_build_beats_with_vite(
 
     export_call.assert_called_once()
     vite_spawn.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Vite is the default dev loop now (REFLEX_DJANGO_SERVE_FROM_BUILD defaults False)
+# ---------------------------------------------------------------------------
+
+
+def test_default_spawns_vite_and_skips_export(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """Plain ``run_reflex`` (no flags, setting unset/False) runs the Vite loop.
+
+    The Vite-HMR loop is the default now: we must spawn Vite and must NOT
+    auto-export the SPA.
+    """
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    vite_spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        vite_spawn,
+    )
+    monkeypatch.delenv("REFLEX_DJANGO_SERVE_FROM_BUILD", raising=False)
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False, raising=False
+    )
+
+    Command().handle()  # no flags at all
+
+    vite_spawn.assert_called_once()
+    export_call.assert_not_called()
+
+
+def test_vite_default_disables_backend_reload(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """When Vite is active the backend ASGI server must boot with reload off.
+
+    This is the core fix: the frontend runner owns recompilation, so the
+    backend stays up instead of restarting on every Reflex edit.
+    """
+    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        mock.MagicMock(),
+    )
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False, raising=False
+    )
+
+    Command().handle()
+
+    _stub_asgi_server.assert_called_once()
+    assert _stub_asgi_server.call_args.kwargs.get("reload") is False
+
+
+def test_with_vite_disables_backend_reload(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """Explicit ``--with-vite`` also boots the backend with reload off."""
+    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        mock.MagicMock(),
+    )
+
+    Command().handle(with_vite=True)
+
+    _stub_asgi_server.assert_called_once()
+    assert _stub_asgi_server.call_args.kwargs.get("reload") is False
+
+
+def test_no_reload_passes_no_watch_to_vite(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``run_reflex --no-reload`` spawns the frontend runner with watching off.
+
+    ``--no-reload`` means "don't watch for changes", so the recompile-on-edit
+    loop in the frontend runner must be disabled too.
+    """
+    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    vite_spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        vite_spawn,
+    )
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False, raising=False
+    )
+
+    Command().handle(no_reload=True)
+
+    vite_spawn.assert_called_once()
+    assert vite_spawn.call_args.kwargs.get("watch") is False

@@ -156,9 +156,9 @@ The patterns below are things you'll figure out yourself after a week or two. Re
 
 ## Dev workflow
 
-**`run_reflex --skip-rebuild`** when you're only editing Django models, migrations, or admin.
+**`run_reflex`** (the default) when you're iterating on Reflex pages — Vite hot-reloads the frontend on every edit; restart the command to pick up state/backend edits.
 
-**`run_reflex --with-vite`** when you're iterating on Reflex pages and want hot-reload.
+**`run_reflex --from-build --skip-rebuild`** when you're only editing Django models, migrations, or admin and want the backend to auto-restart without re-exporting the SPA.
 
 **Keep the `.web/` and `.reflex/` directories in `.gitignore`.** Both are caches; nothing in them is yours.
 

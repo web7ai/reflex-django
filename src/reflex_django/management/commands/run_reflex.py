@@ -170,12 +170,13 @@ class Command(BaseCommand):
         backend_only = bool(options.get("backend_only"))
         skip_rebuild = bool(options.get("skip_rebuild"))
 
-        # Resolve from-build mode (default for dev now). Precedence, highest first:
+        # Resolve from-build mode. The Vite-HMR dev loop is the default now;
+        # from-build is the opt-in. Precedence, highest first:
         #   1. ``--env prod``                       → False (prod is its own contract:
         #                                              build separately in CI, then run)
-        #   2. ``--with-vite`` / ``--no-from-build``→ False (explicit Vite opt-out)
-        #   3. ``--from-build``                     → True  (explicit opt-in)
-        #   4. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default True)
+        #   2. ``--with-vite`` / ``--no-from-build``→ False (explicit Vite opt-in)
+        #   3. ``--from-build``                     → True  (explicit serve-from-disk)
+        #   4. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default False)
         with_vite = bool(options.get("with_vite"))
         explicit_from_build = bool(options.get("from_build"))
         if is_prod:
@@ -203,20 +204,33 @@ class Command(BaseCommand):
 
         # Print an up-front banner BEFORE the (potentially slow) auto-export
         # kicks in so the user sees what mode they are in. Plain
-        # ``manage.py run_reflex`` (no flags) lands here in the from-build
-        # branch by default.
+        # ``manage.py run_reflex`` (no flags) lands in the Vite-HMR branch by
+        # default; ``--from-build`` opts into the serve-from-disk loop.
         if from_build:
             mode_label = (
                 "--from-build (explicit)"
                 if explicit_from_build
-                else "from-build (default)"
+                else "from-build (REFLEX_DJANGO_SERVE_FROM_BUILD)"
             )
             self.stdout.write(
                 self.style.MIGRATE_HEADING(
                     f"reflex-django: {mode_label} — Django will auto-export the "
                     "SPA and serve the compiled bundle from disk. No Vite, no HMR.\n"
-                    "    Pass --with-vite for the legacy Vite-HMR dev loop, or "
+                    "    Omit --from-build for the default Vite-HMR dev loop, or "
                     "--skip-rebuild to reuse the existing bundle on disk."
+                )
+            )
+        elif not is_prod and not backend_only:
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(
+                    "reflex-django: Vite-HMR dev loop (default) — editing a "
+                    "Reflex page recompiles the SPA and Vite hot-reloads only "
+                    "the frontend.\n"
+                    "    The backend does NOT auto-restart: re-run "
+                    "`python manage.py run_reflex` (or restart it) to pick up "
+                    "backend/state edits.\n"
+                    "    Pass --from-build to serve a compiled bundle from disk "
+                    "instead (no Node, no HMR)."
                 )
             )
 
@@ -238,16 +252,30 @@ class Command(BaseCommand):
                     )
                 )
                 return
-            self._spawn_vite_blocking(frontend_port)
+            self._spawn_vite_blocking(
+                frontend_port, watch=not options.get("no_reload")
+            )
             return
 
+        # Vite is active whenever we are not serving the SPA from disk and the
+        # user did not ask for a backend-only run. When Vite is active it owns
+        # the frontend recompile-on-change loop, so the backend must NOT use
+        # uvicorn's ``--reload`` (which would re-import the whole Django+Reflex
+        # ASGI stack and restart on every edit, defeating HMR).
+        vite_active = not serve_from_disk and not backend_only
+        watch_frontend = vite_active and not options.get("no_reload")
+
         vite_proc: subprocess.Popen[bytes] | None = None
-        if not serve_from_disk and not backend_only:
-            vite_proc = self._spawn_vite_background(frontend_port)
+        if vite_active:
+            vite_proc = self._spawn_vite_background(
+                frontend_port, watch=watch_frontend
+            )
             self.stdout.write(
                 self.style.NOTICE(
                     f"reflex-django: Vite started on port {frontend_port} "
-                    f"(reverse-proxied by Django on port {backend_port})."
+                    f"(reverse-proxied by Django on port {backend_port}).\n"
+                    "    Frontend edits hot-reload via Vite; the backend stays "
+                    "up and does not auto-restart."
                 )
             )
         elif is_prod:
@@ -268,6 +296,11 @@ class Command(BaseCommand):
             )
 
         reload_enabled = not options.get("no_reload") and not is_prod
+        # When Vite is active the frontend runner owns the recompile-on-change
+        # loop, so the backend ASGI server boots once and stays up — no
+        # uvicorn ``--reload``. This is what keeps frontend edits to a Vite
+        # HMR instead of a full backend rebuild + restart + WebSocket drop.
+        backend_reload = reload_enabled and not vite_active
         # In from-build dev mode we MUST own the reload loop ourselves. If we
         # delegated to uvicorn's ``--reload``, the child would re-import
         # :mod:`reflex_django.asgi_entry` on every file change, which re-runs
@@ -293,7 +326,7 @@ class Command(BaseCommand):
                     host=backend_host,
                     port=backend_port,
                     loglevel=loglevel,
-                    reload=reload_enabled,
+                    reload=backend_reload,
                 )
         finally:
             if vite_proc is not None and vite_proc.poll() is None:
@@ -315,10 +348,11 @@ class Command(BaseCommand):
         Honours the env var ``REFLEX_DJANGO_SERVE_FROM_BUILD`` as well so
         operators can toggle the behaviour without editing ``settings.py``.
 
-        The library default is ``True`` (from-build is the canonical dev
-        story for the Django-outer architecture); if the setting is missing
-        entirely we still return ``True`` so a fresh project that hasn't
-        added the key yet gets the new default behaviour.
+        The library default is ``False`` (the Vite-HMR dev loop is the
+        canonical dev story); if the setting is missing entirely we still
+        return ``False`` so a fresh project that hasn't added the key yet
+        gets the Vite default. Pass ``--from-build`` (or set the key/env to a
+        truthy value) to opt into the serve-from-disk build loop.
         """
         env = os.environ.get("REFLEX_DJANGO_SERVE_FROM_BUILD")
         if env is not None:
@@ -326,9 +360,9 @@ class Command(BaseCommand):
         try:
             from django.conf import settings
 
-            return bool(getattr(settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True))
+            return bool(getattr(settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False))
         except Exception:  # noqa: BLE001
-            return True
+            return False
 
     def _auto_export_for_build_mode(self) -> None:
         """Run the export command in-process before serving the SPA.
@@ -430,6 +464,8 @@ class Command(BaseCommand):
     def _spawn_vite_background(
         self,
         frontend_port: int,
+        *,
+        watch: bool = True,
     ) -> subprocess.Popen[bytes]:
         """Spawn Vite behind the proxy via the reflex-django bootstrap runner.
 
@@ -438,6 +474,12 @@ class Command(BaseCommand):
         (otherwise Reflex CLI fails with ``rxconfig.py not found`` because the
         :func:`~reflex_django.cli_layout.ensure_reflex_cli_layout` import patch
         is not in place).
+
+        When ``watch`` is True (the default) the runner also watches the
+        Reflex source tree and recompiles ``.web`` on change so Vite hot
+        reloads the frontend without restarting the backend. Pass
+        ``watch=False`` (``run_reflex --no-reload``) for a one-shot compile +
+        Vite with no recompile loop.
         """
         cmd = [
             sys.executable,
@@ -446,6 +488,8 @@ class Command(BaseCommand):
             "--frontend-port",
             str(frontend_port),
         ]
+        if not watch:
+            cmd.append("--no-watch")
         env = {
             **os.environ,
             "REFLEX_DJANGO_URL_ROUTING": "django_outer",
@@ -453,7 +497,12 @@ class Command(BaseCommand):
         }
         return subprocess.Popen(cmd, env=env)
 
-    def _spawn_vite_blocking(self, frontend_port: int) -> None:
+    def _spawn_vite_blocking(
+        self,
+        frontend_port: int,
+        *,
+        watch: bool = True,
+    ) -> None:
         """Run Vite in the foreground (``--frontend-only`` from the user)."""
         cmd = [
             sys.executable,
@@ -462,6 +511,8 @@ class Command(BaseCommand):
             "--frontend-port",
             str(frontend_port),
         ]
+        if not watch:
+            cmd.append("--no-watch")
         subprocess.run(cmd, check=False)
 
     def _run_asgi_server(

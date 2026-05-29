@@ -209,17 +209,21 @@ The compiled SPA might not be on disk yet, so `manage.py run_reflex` is building
 
 ### Hot reload doesn't work for Reflex page edits
 
-Use `python manage.py run_reflex --with-vite` for hot module reload on Reflex components. Without it, every save triggers a full uvicorn restart.
+The default `python manage.py run_reflex` already runs Vite for hot-module reload — editing a Reflex page recompiles the SPA and Vite hot-reloads the frontend, with the backend left running. If hot reload isn't firing, make sure you didn't pass `--from-build` (which serves a static bundle from disk) or `--no-reload` (which disables the watch loop), and that `watchfiles` is installed (`pip install "uvicorn[standard]"`).
+
+### My state / event-handler edit didn't take effect
+
+In the default Vite mode the backend boots once and stays up, so server-side Python (states, event handlers, models) is only re-read when you restart the command. Stop `run_reflex` and run it again to pick up backend changes. Pure UI/page edits don't need a restart — they hot-reload through Vite.
 
 ### Can I edit a Django model without rebuilding the SPA?
 
-Yes — use `--skip-rebuild`:
+Yes — use `--from-build --skip-rebuild`:
 
 ```bash
-python manage.py run_reflex --skip-rebuild
+python manage.py run_reflex --from-build --skip-rebuild
 ```
 
-The uvicorn server still restarts on Python changes, but the slow SPA export step is skipped.
+In that mode the uvicorn server restarts on Python changes, but the slow SPA export step is skipped.
 
 ### Where does the compiled SPA live?
 

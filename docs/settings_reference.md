@@ -19,10 +19,10 @@ For *how* to use them in context, see [Configuration with `reflex_mount()`](conf
 
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
-| `REFLEX_DJANGO_SERVE_FROM_BUILD` | `bool` | `True` | `run_reflex` auto-builds the SPA and serves it from disk. Set `False` for `--with-vite` HMR. |
+| `REFLEX_DJANGO_SERVE_FROM_BUILD` | `bool` | `False` | When `False` (default), `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to auto-build the SPA and serve it from disk. |
 | `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE` | `bool` | `True` | Pipe `STATIC_ROOT/_reflex/index.html` through Django's template engine so `{{ request.user }}`, `{% csrf_token %}` work in the SPA shell. |
 | `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` | `bool` | `False` | Show or hide the "Built with Reflex" footer. |
-| `REFLEX_DJANGO_DEV_PROXY` | `bool` | `False` | Auto-managed by `run_reflex --with-vite`. Don't set manually. |
+| `REFLEX_DJANGO_DEV_PROXY` | `bool` | `False` | Auto-managed by `run_reflex` (on in the default Vite mode, off for `--from-build`/`--env prod`). Don't set manually. |
 
 ---
 

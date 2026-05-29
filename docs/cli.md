@@ -8,7 +8,7 @@
 
 | Command | What it does |
 |:---|:---|
-| `python manage.py run_reflex` | Dev server: build the SPA, run uvicorn, watch for changes, restart on edit. |
+| `python manage.py run_reflex` | Dev server: run Vite for hot-module reload + uvicorn, hot-reload the frontend on Reflex edits. |
 | `python manage.py export_reflex` | Build the SPA bundle for production (CI). |
 
 Plus everything you already use:
@@ -27,11 +27,11 @@ Nothing changes about those.
 
 ## `manage.py run_reflex` — the dev server
 
-This is the one you'll run all day. It does three things:
+This is the one you'll run all day. By default it does three things:
 
-1. **Build the SPA.** Auto-runs `export_reflex` (frontend-only, no zip, staged to `STATIC_ROOT/_reflex/`) before starting.
-2. **Start uvicorn** as a subprocess on port 8000 (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`.
-3. **Watch** the project for `.py` changes. Each change cleanly stops uvicorn, re-runs the build, and starts a fresh uvicorn.
+1. **Start Vite** for hot-module reload, reverse-proxied by Django (invisible to you on the single port).
+2. **Start uvicorn** as a subprocess on port 8000 (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`. It boots **once** and stays up.
+3. **Watch** the Reflex source for `.py` changes. Each change recompiles the SPA into `.web` and Vite **hot-reloads only the frontend** — the backend is not restarted.
 
 ```bash
 python manage.py run_reflex
@@ -39,40 +39,57 @@ python manage.py run_reflex
 
 That's the default. Open `http://localhost:8000/` and you have your admin at `/admin/`, the SPA at `/`, and the Reflex WebSocket on `/_event`.
 
+Because the backend stays up, edits to **states, event handlers, or other server-side Python** won't take effect until you restart the command (Ctrl+C and re-run, or save again after restarting). Pure UI/page edits hot-reload instantly. If you'd rather have the backend auto-rebuild and serve a compiled bundle from disk (no Node, no HMR), use `--from-build`.
+
 ### Flags
 
 | Flag | Effect |
 |:---|:---|
-| `--skip-rebuild` | Skip the SPA build before starting. Good for "I only edited a Django model" iterations. |
-| `--no-reload` | Don't watch for changes. The server runs once and exits when you Ctrl+C. |
-| `--env prod` | Set `REFLEX_ENV` to `prod` (changes a few default toggles — see Reflex's docs). |
-| `--frontend-only` | Only build the SPA frontend; don't start the server. |
-| `--backend-only` | Only run uvicorn; don't build the SPA. (Assumes the bundle is already on disk.) |
-| `--with-vite` | Use the Vite hot-reload dev server proxied through Django. Hot-module reload on Reflex page edits. |
+| `--with-vite` | The default. Run Vite for hot-module reload, proxied through Django. Frontend edits hot-reload; the backend stays up. |
+| `--from-build` | Opt out of Vite. Auto-export the SPA and serve the compiled bundle from disk; the watcher re-exports + restarts uvicorn on every `.py` change. |
+| `--skip-rebuild` | (with `--from-build`) Skip the SPA build before starting. Good for "I only edited a Django model" iterations. |
+| `--no-reload` | Don't watch for changes. The server runs once and exits when you Ctrl+C. (In the default Vite mode this disables the frontend recompile loop too.) |
+| `--env prod` | Set `REFLEX_ENV` to `prod` and serve the compiled bundle from disk (no Vite). |
+| `--frontend-only` | Only run the Vite frontend (or, with `--from-build`, only build the bundle); don't start the server. |
+| `--backend-only` | Only run uvicorn; don't start Vite or build the SPA. (Assumes the bundle is already on disk.) |
 | `--port N` | Override the backend port. |
 
 Common combos:
 
 ```bash
-# Fast iteration on Django code only (skip SPA rebuilds)
-python manage.py run_reflex --skip-rebuild
+# Default: Vite hot-module reload for Reflex page edits
+python manage.py run_reflex
 
-# Hot-module reload for Reflex page edits
-python manage.py run_reflex --with-vite
+# Serve a compiled bundle from disk (no Node, auto-rebuild on .py change)
+python manage.py run_reflex --from-build
+
+# Fast iteration on Django code only (from-build, skip SPA rebuilds)
+python manage.py run_reflex --from-build --skip-rebuild
 
 # Build only, don't serve (useful in CI to verify)
-python manage.py run_reflex --frontend-only
+python manage.py run_reflex --from-build --frontend-only
 ```
 
-### What it boots, in order
+### What it boots, in order (default Vite mode)
 
 ```text
 1. install_reflex_django_integration()
      - configures Django, patches reflex.config.get_config, builds in-memory rxconfig
+2. Vite dev server (frontend runner subprocess)
+     - compiles .web once, runs `vite dev` on the frontend port
+     - watches the Reflex source: on .py change, recompiles .web in a fresh
+       interpreter so Vite hot-reloads the frontend
+3. uvicorn subprocess
+     reflex_django.asgi_entry:application on port 8000 — boots once, stays up
+```
+
+With `--from-build` instead:
+
+```text
+1. install_reflex_django_integration()
 2. (unless --skip-rebuild)
      export_reflex --frontend-only --no-zip --stage-to-static-root
-3. uvicorn subprocess
-     reflex_django.asgi_entry:application on port 8000
+3. uvicorn subprocess on port 8000
 4. parent process: watchfiles loop
      - on .py change: stop uvicorn, re-export, start fresh uvicorn
 ```
@@ -128,15 +145,22 @@ The first two are standard Django. The third builds the SPA. The fourth picks up
 
 ## Reload precedence
 
-When you save a file in dev:
+In the **default Vite mode**, when you save a `.py` file:
+
+1. `watchfiles` (in the frontend runner) notices the change.
+2. The runner recompiles the SPA into `.web` in a fresh interpreter.
+3. Vite hot-reloads the changed frontend modules in the browser.
+4. The uvicorn backend is **not** touched — it keeps running.
+
+Because the backend is never re-imported, edits to **states, event handlers, or other server-side Python** only reach the running backend after you restart `run_reflex`. Pure UI/page edits hot-reload instantly.
+
+With **`--from-build`**, the watcher owns a full restart loop instead:
 
 1. `watchfiles` notices the change.
 2. If it's a `.py` file inside the project (not in `.web/`, `.venv/`, etc.), the watcher triggers a restart.
 3. The watcher sends SIGTERM to uvicorn; uvicorn shuts down its workers.
 4. The watcher re-runs the export (unless `--skip-rebuild`).
 5. The watcher starts a fresh uvicorn subprocess.
-
-If you used `--with-vite`, edits to Reflex components hot-reload through Vite without restarting the Python process. Edits to states or non-page code still trigger a restart.
 
 ---
 

@@ -243,19 +243,24 @@ REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE: bool = True
 # ``reflex_mount(rx_config={"show_built_with_reflex": True})``).
 REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX: bool = False
 
-# When True (default), ``manage.py run_reflex`` skips Vite entirely,
-# re-exports the SPA on each invocation (the equivalent of
-# ``manage.py export_reflex --frontend-only --no-zip --stage-to-static-root``),
-# and serves the resulting bundle from disk just like ``--env prod`` would.
-# This makes the single-port Django-outer architecture the default dev story
-# too — no Node sidecar, no HMR, just Django.
+# Controls the default ``manage.py run_reflex`` dev loop.
 #
-# Trade-off: no HMR — the developer re-runs the command to rebuild after a
-# Reflex page change. ASGI auto-reload still fires for Django/Python edits.
+# When False (default), ``run_reflex`` spawns the Vite dev server for
+# hot-module reload: editing a Reflex page recompiles ``.web`` and Vite
+# hot-reloads only the frontend, while the Django/uvicorn backend keeps
+# running (it does NOT auto-restart). Re-run the command — or restart the
+# backend manually — to pick up backend/state/event-handler edits.
 #
-# To restore the legacy Vite-HMR dev loop, set this to ``False`` (or pass
-# ``--with-vite`` on the command line, or env ``REFLEX_DJANGO_SERVE_FROM_BUILD=0``).
-REFLEX_DJANGO_SERVE_FROM_BUILD: bool = True
+# When True, ``run_reflex`` skips Vite entirely, re-exports the SPA on each
+# invocation (the equivalent of ``manage.py export_reflex --frontend-only
+# --no-zip --stage-to-static-root``), and serves the resulting bundle from
+# disk just like ``--env prod`` would — no Node sidecar, no HMR. In that mode
+# the ASGI server auto-reloads + re-exports on every ``.py`` change.
+#
+# To opt into the serve-from-disk build loop, set this to ``True`` (or pass
+# ``--from-build`` on the command line, or env ``REFLEX_DJANGO_SERVE_FROM_BUILD=1``).
+# Passing ``--with-vite`` forces the Vite-HMR loop regardless of this setting.
+REFLEX_DJANGO_SERVE_FROM_BUILD: bool = False
 
 # Additional reserved Reflex path prefixes for the outer dispatcher
 # (advanced; usually not needed). Combined with the defaults in
