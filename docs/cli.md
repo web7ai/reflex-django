@@ -29,15 +29,15 @@ Nothing changes about those.
 
 This is the one you'll run all day. By default it does three things:
 
-1. **Start Vite** for hot-module reload, reverse-proxied by Django (invisible to you on the single port).
-2. **Start uvicorn** as a subprocess on port 8000 (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`. It boots **once** and stays up.
+1. **Start Vite** for hot-module reload on port `3000` — this is the URL you open in dev.
+2. **Start uvicorn** as a subprocess on port 8000 (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`. It boots **once** and stays up; it serves the admin, API, and the Reflex WebSocket.
 3. **Watch** the Reflex source for `.py` changes. Each change recompiles the SPA into `.web` and Vite **hot-reloads only the frontend** — the backend is not restarted.
 
 ```bash
 python manage.py run_reflex
 ```
 
-That's the default. Open `http://localhost:8000/` and you have your admin at `/admin/`, the SPA at `/`, and the Reflex WebSocket on `/_event`.
+That's the default. Open `http://localhost:3000/` for the live, hot-reloading dev app: the SPA at `/`, your admin at `/admin/`, and the Reflex WebSocket on `/_event` are all reachable there, sharing Django's cookies and session (the backend runs on port `8000` behind it). In production there's no Vite — you serve the compiled SPA from your ASGI server on one port (see [Deployment](deployment.md)).
 
 Because the backend stays up, edits to **states, event handlers, or other server-side Python** won't take effect until you restart the command (Ctrl+C and re-run, or save again after restarting). Pure UI/page edits hot-reload instantly. If you'd rather have the backend auto-rebuild and serve a compiled bundle from disk (no Node, no HMR), use `--from-build`.
 

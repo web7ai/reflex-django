@@ -309,13 +309,13 @@ python manage.py run_reflex
 The first time, this will:
 
 1. Build the Reflex SPA (a one-time compile step).
-2. Start `uvicorn` on port 8000.
-3. Watch your Python files for changes and restart on edit.
+2. Start `uvicorn` on port 8000 (the backend) and the Vite dev server on port 3000 (the frontend, with hot reload).
+3. Watch your Python files for changes and hot-reload the frontend on edit.
 
-Open it:
+Open it (the Vite dev server — hot reload on save):
 
-- `http://localhost:8000/` — the todo page.
-- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created).
+- `http://localhost:3000/` — the todo page.
+- `http://localhost:3000/admin/` — the Django admin (log in with the superuser you created).
 
 Try this flow:
 

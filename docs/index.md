@@ -64,7 +64,15 @@ Then:
 python manage.py run_reflex
 ```
 
-That's it. Open `http://localhost:8000/`. Your admin is at `/admin/`. Your reactive UI is at `/`. They share cookies, sessions, and the same Python process.
+One command starts **both** your Django backend and the Reflex frontend together. For development, open:
+
+```text
+http://localhost:3000/
+```
+
+That's the Vite dev server, and it's where you get **instant hot reload**: edit a page in `views.py`, hit save, and the browser updates in place — no manual restart, no lost state. Your reactive UI is at `/`, the Django admin at `/admin/`, and the Reflex WebSocket on `/_event` — all reachable from that one URL, sharing the same cookies and session (Django runs the backend on port `8000` behind it). Backend/state edits are picked up on the next run.
+
+> In production there's no Vite: you build the SPA and serve everything from your ASGI server on a single port. See [Deployment](deployment.md).
 
 ---
 

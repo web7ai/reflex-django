@@ -146,9 +146,11 @@ python manage.py migrate   # if you have new migrations
 python manage.py run_reflex
 ```
 
-- `http://localhost:8000/admin/` — your admin, unchanged.
-- `http://localhost:8000/api/...` — your existing API, unchanged.
-- `http://localhost:8000/catalog` — your new Reflex page.
+Open `http://localhost:3000/` (the Vite dev server, with hot reload):
+
+- `http://localhost:3000/admin/` — your admin, unchanged.
+- `http://localhost:3000/api/...` — your existing API, unchanged.
+- `http://localhost:3000/catalog` — your new Reflex page.
 
 Your existing tests, management commands, and migrations all keep working.
 
