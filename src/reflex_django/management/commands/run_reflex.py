@@ -192,6 +192,15 @@ class Command(BaseCommand):
         os.environ.setdefault("REFLEX_DJANGO_FRONTEND_PORT", str(frontend_port))
         os.environ.setdefault("REFLEX_DJANGO_BACKEND_PORT", str(backend_port))
 
+        # ``run_reflex`` owns SPA builds itself (Vite for HMR, or the explicit
+        # ``_auto_export_for_build_mode`` for --env prod/--from-build), so turn
+        # off the ASGI startup auto-export hook that exists for raw
+        # ``uvicorn ...:application`` deploys. Otherwise the in-process ASGI
+        # boot could trigger a second, redundant export — or build a bundle in
+        # the Vite-HMR loop where one isn't needed. ``setdefault`` lets an
+        # operator who explicitly set the env keep their choice.
+        os.environ.setdefault("REFLEX_DJANGO_AUTO_EXPORT_ON_START", "0")
+
         # ``--env prod`` and ``--from-build`` both serve the SPA from disk and
         # must not try to reach Vite. We treat them uniformly here: no Vite
         # spawn, no dev proxy, and a pre-flight SPA check. ``--env prod``
@@ -284,6 +293,12 @@ class Command(BaseCommand):
 
         vite_proc: subprocess.Popen[bytes] | None = None
         if vite_active:
+            # Force the dev proxy ON for the in-process ASGI server. This is
+            # the signal the asgi_entry startup probe trusts: it skips its
+            # "is Vite reachable?" check so it never disables the proxy while
+            # Vite is still booting (the probe only fires for a *bare* ASGI
+            # boot where the proxy is on solely by the DEBUG default).
+            os.environ["REFLEX_DJANGO_DEV_PROXY"] = "1"
             vite_proc = self._spawn_vite_background(
                 frontend_port, watch=watch_frontend
             )

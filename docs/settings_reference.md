@@ -20,9 +20,10 @@ For *how* to use them in context, see [Configuration with `reflex_mount()`](conf
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
 | `REFLEX_DJANGO_SERVE_FROM_BUILD` | `bool` | `False` | When `False` (default), `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to auto-build the SPA and serve it from disk. |
+| `REFLEX_DJANGO_AUTO_EXPORT_ON_START` | `bool` | `True` | When the ASGI entry point (`reflex_django.asgi_entry:application`) boots and finds no compiled SPA on disk, build it once (equivalent to `export_reflex --frontend-only --no-zip --stage-to-static-root`). Lets a bare `uvicorn backend.asgi:application` deploy work without a separate `reflex export` step. Set `False` (or env `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0`) when the bundle is pre-built in CI / the filesystem is read-only. `run_reflex` disables it automatically (it builds itself). Requires Node/npm on the host. |
 | `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE` | `bool` | `True` | Pipe `STATIC_ROOT/_reflex/index.html` through Django's template engine so `{{ request.user }}`, `{% csrf_token %}` work in the SPA shell. |
 | `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` | `bool` | `False` | Show or hide the "Built with Reflex" footer. |
-| `REFLEX_DJANGO_DEV_PROXY` | `bool` | `False` | Auto-managed by `run_reflex` (on in the default Vite mode, off for `--from-build`/`--env prod`). Don't set manually. |
+| `REFLEX_DJANGO_DEV_PROXY` | `bool` | `False` | Auto-managed by `run_reflex` (forced on in the default Vite mode, off for `--from-build`/`--env prod`). When you run a bare ASGI server (`uvicorn backend.asgi:application`) with `DEBUG=True`, the entry point probes the Vite port once at startup; if nothing is listening it disables the proxy for the process and serves the compiled SPA from disk (no per-request `ConnectError` spam). Set the env to `1` to force it on, or `0` to force it off. |
 
 ---
 

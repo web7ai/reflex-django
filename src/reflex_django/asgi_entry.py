@@ -27,8 +27,12 @@ that :mod:`reflex_django.asgi` provided before.
 
 from __future__ import annotations
 
+import logging
+import os
+import socket
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from reflex_django.asgi import ASGIApp, django_asgi_application
 from reflex_django.django_outer_dispatcher import (
@@ -40,8 +44,164 @@ from reflex_django.routing import UrlRoutingMode, resolve_url_routing
 if TYPE_CHECKING:
     from reflex.app import App
 
+logger = logging.getLogger("reflex_django.asgi_entry")
+
 
 _REFLEX_FRONTEND_MOUNT_ENV = "REFLEX_MOUNT_FRONTEND_COMPILED_APP"
+
+_AUTO_EXPORT_ON_START_ENV = "REFLEX_DJANGO_AUTO_EXPORT_ON_START"
+
+
+def _auto_export_on_start_enabled() -> bool:
+    """Return whether the startup "build SPA if missing" hook is enabled.
+
+    Honours the env var ``REFLEX_DJANGO_AUTO_EXPORT_ON_START`` first (so
+    operators and ``manage.py run_reflex`` can toggle it without editing
+    settings), then ``settings.REFLEX_DJANGO_AUTO_EXPORT_ON_START``. Defaults
+    to True so a raw ``uvicorn ...:application`` boot serves a real SPA out of
+    the box.
+    """
+    env = os.environ.get(_AUTO_EXPORT_ON_START_ENV)
+    if env is not None:
+        return str(env).strip().lower() not in {"0", "false", "no"}
+    try:
+        from django.conf import settings
+
+        return bool(getattr(settings, _AUTO_EXPORT_ON_START_ENV, True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _spa_bundle_missing() -> bool:
+    """Return True when no compiled SPA ``index.html`` is discoverable on disk.
+
+    Uses the same discovery paths as
+    :class:`reflex_django.views.mount.ReflexMountView` so the pre-flight check
+    matches what the runtime view will actually serve. Errors are treated as
+    "missing" so we err on the side of (re)building.
+    """
+    try:
+        from reflex_django.views.mount import _resolve_spa_index
+
+        return _resolve_spa_index() is None
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _maybe_auto_export_spa() -> None:
+    """Build the SPA bundle once at startup when it is missing from disk.
+
+    The canonical production entry point is a raw ASGI server
+    (``uvicorn backend.asgi:application``). When the operator hasn't run
+    ``reflex export`` + ``manage.py collectstatic`` yet,
+    :class:`~reflex_django.views.mount.ReflexMountView` 404s every request with
+    "Reflex SPA bundle not found", which makes a deploy fail confusingly.
+    Rather than make that a hard blocker, build the bundle once here so the
+    app boots serving a real SPA.
+
+    This is best-effort: build failures are logged but never raised, so the
+    server still starts (and falls back to any existing bundle, or the helpful
+    404 if there genuinely is nothing). ``manage.py run_reflex`` disables this
+    via ``REFLEX_DJANGO_AUTO_EXPORT_ON_START=0`` because it owns builds itself.
+    """
+    if not _auto_export_on_start_enabled():
+        return
+    if not _spa_bundle_missing():
+        return
+    try:
+        from django.core.management import call_command
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("reflex-django: cannot auto-export SPA at startup (%r).", exc)
+        return
+
+    logger.warning(
+        "reflex-django: no compiled SPA bundle found on disk; building it once "
+        "now so the ASGI server can serve it. To pre-build in CI (faster, "
+        "deterministic boot), run `python manage.py export_reflex "
+        "--frontend-only --no-zip --stage-to-static-root` (and "
+        "`collectstatic`) before starting the server, or set "
+        "REFLEX_DJANGO_AUTO_EXPORT_ON_START=0 to disable this."
+    )
+    try:
+        call_command(
+            "export_reflex",
+            frontend_only=True,
+            no_zip=True,
+            stage_to_static_root=True,
+            env="prod",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "reflex-django: startup SPA auto-export failed (%r). The server "
+            "will fall back to any existing bundle on disk; otherwise requests "
+            "will 404 with a hint. Build manually with `manage.py "
+            "export_reflex` or set REFLEX_DJANGO_AUTO_EXPORT_ON_START=0.",
+            exc,
+        )
+
+
+_DEV_PROXY_ENV = "REFLEX_DJANGO_DEV_PROXY"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _dev_proxy_explicitly_enabled() -> bool:
+    """Return True only when ``REFLEX_DJANGO_DEV_PROXY`` is explicitly truthy.
+
+    ``manage.py run_reflex`` sets this in its Vite loop so the startup probe
+    trusts it (Vite may still be booting). A proxy that is on merely because
+    ``DEBUG=True`` is *not* "explicit" and remains subject to the probe.
+    """
+    return str(os.environ.get(_DEV_PROXY_ENV, "")).strip().lower() in _TRUTHY
+
+
+def _vite_target_reachable(target: str, timeout: float = 0.5) -> bool:
+    """Return True when a TCP connection to the Vite target succeeds quickly."""
+    parts = urlsplit(target)
+    host = parts.hostname or "127.0.0.1"
+    port = parts.port
+    if port is None:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _maybe_disable_dev_proxy_without_vite() -> None:
+    """Disable the dev proxy at startup when no Vite dev server is running.
+
+    A raw ``uvicorn ...:application`` boot with ``DEBUG=True`` leaves the dev
+    proxy enabled, so every request tries (and fails) to reach Vite before
+    falling back to disk — producing noisy per-request ``ConnectError`` logs.
+    When the proxy is on only by the ``DEBUG`` default (not explicitly forced
+    via ``REFLEX_DJANGO_DEV_PROXY=1``) and nothing is listening at the target,
+    switch the whole process to serve the compiled SPA from disk so it behaves
+    like prod — quietly and without the per-request connect overhead.
+
+    Skipped entirely when the proxy is already off (returns ``None`` target)
+    or when explicitly forced on (``manage.py run_reflex`` does this; Vite may
+    still be coming up, so we must not pre-emptively disable it there).
+    """
+    try:
+        from reflex_django.dev_proxy import _dev_vite_target_or_none
+
+        target = _dev_vite_target_or_none()
+    except Exception:  # noqa: BLE001
+        return
+    if target is None or _dev_proxy_explicitly_enabled():
+        return
+    if _vite_target_reachable(target):
+        return
+
+    os.environ[_DEV_PROXY_ENV] = "0"
+    logger.warning(
+        "reflex-django: dev proxy is on (DEBUG=True) but no Vite dev server is "
+        "reachable at %s; serving the compiled SPA from disk for this process "
+        "(prod-style). Run `python manage.py run_reflex` for HMR, or set "
+        "DEBUG=False / REFLEX_DJANGO_DEV_PROXY=0 to silence this explicitly.",
+        target,
+    )
 
 
 def _unwrap_reflex_inner_asgi(rx_app: App) -> ASGIApp:
@@ -94,8 +254,6 @@ def _disable_reflex_frontend_mount() -> None:
     Vite). Letting Reflex mount its own catch-all on ``_api`` would shadow
     Django's URL space if anything routed to Reflex by mistake.
     """
-    import os
-
     if _REFLEX_FRONTEND_MOUNT_ENV not in os.environ:
         os.environ[_REFLEX_FRONTEND_MOUNT_ENV] = "0"
 
@@ -136,6 +294,17 @@ def build_django_outer_application() -> ASGIApp:
 
     install_reflex_django_integration()
     rx_app = ensure_django_led_app_ready()
+
+    # When the app is run standalone (raw ASGI server) with DEBUG=True but no
+    # Vite dev server, turn the dev proxy off up front so we serve from disk
+    # silently instead of failing a proxy connect on every request.
+    _maybe_disable_dev_proxy_without_vite()
+
+    # With the integration installed and the app compiled, build the SPA
+    # bundle once if it's missing so a raw ``uvicorn ...:application`` prod
+    # boot serves a real SPA instead of 404ing. No-op when a bundle already
+    # exists or when disabled (e.g. by ``manage.py run_reflex``).
+    _maybe_auto_export_spa()
 
     reflex_inner = _unwrap_reflex_inner_asgi(rx_app)
     lifespan_cm = _lifespan_cm_for_app(rx_app)

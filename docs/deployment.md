@@ -6,6 +6,30 @@ This page covers the production basics — one container, one ASGI server, one r
 
 ---
 
+## TL;DR — production checklist
+
+If you only read one section, read this. A correct production deploy is:
+
+1. **Build the SPA in CI** — `export_reflex --frontend-only --no-zip --stage-to-static-root` then `collectstatic`. (See [the build pipeline](#the-build-pipeline).)
+2. **Point `DJANGO_SETTINGS_MODULE` at a real settings module** with `DEBUG = False`, a real `SECRET_KEY`, `ALLOWED_HOSTS`, and `STATIC_ROOT`. **Never** ship `reflex_django.default_settings`. (See [required settings](#required-settings).)
+3. **Run an ASGI server** on `reflex_django.asgi_entry:application` — uvicorn, gunicorn+uvicorn worker, granian, or hypercorn. (See [ASGI server choices](#asgi-server-choices).)
+4. **Put a reverse proxy in front** that serves `/static/` directly and forwards everything else (with WebSocket upgrade on `/_event`). (See [Nginx](#nginx-in-front-of-your-app) / [Caddy](#caddy-alternative).)
+5. **Serve from disk**: with `DEBUG = False` the dev proxy is off, so the server serves the compiled SPA from `STATIC_ROOT`. Because you built it in CI (step 1), the boot-time auto-build is a no-op; set `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0` if you want to guarantee it never runs at boot.
+
+```bash
+# The whole thing, minus the reverse proxy:
+export DJANGO_SETTINGS_MODULE=config.production   # DEBUG=False inside
+uv sync --frozen
+uv run python manage.py migrate --noinput
+uv run python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+uv run python manage.py collectstatic --noinput
+uv run uvicorn reflex_django.asgi_entry:application --host 0.0.0.0 --port 8000 --workers 4
+```
+
+The rest of this page explains each step and the platform-specific variations.
+
+---
+
 ## What you ship
 
 The artifact is just your Python project plus the compiled SPA. There's no separate frontend image.
@@ -50,6 +74,18 @@ What each does:
 | `collectstatic` | Gather your admin static files + the SPA bundle into `STATIC_ROOT`. |
 
 After this, your container/image has `staticfiles/` ready to serve and the Python deps installed. Now you boot the ASGI server.
+
+### Safety net: auto-build on first boot
+
+If you skip `export_reflex` (or it never ran), the ASGI app doesn't 404 with "Reflex SPA bundle not found" anymore. On first boot, `reflex_django.asgi_entry:application` detects the missing bundle and builds it once (equivalent to the `export_reflex` line above), then serves it. This makes a bare `uvicorn backend.asgi:application` deploy work out of the box.
+
+This is a convenience, not a substitute for building in CI. Building at boot is slower (the first request waits for the build), needs Node/npm on the host, and needs a writable filesystem. For fast, deterministic, read-only-friendly deploys, **keep `export_reflex` in your build pipeline** and disable the boot-time build:
+
+```bash
+REFLEX_DJANGO_AUTO_EXPORT_ON_START=0
+```
+
+or set `REFLEX_DJANGO_AUTO_EXPORT_ON_START = False` in your production settings. (`manage.py run_reflex` disables it automatically — it manages builds itself.)
 
 ---
 
@@ -136,6 +172,17 @@ Set `DJANGO_SETTINGS_MODULE=config.production` in the container.
 ### Don't rely on `default_settings`
 
 `reflex_django.default_settings` is a development convenience. It has an insecure `SECRET_KEY` and `DEBUG = True`. **Never** use it in production. Always point `DJANGO_SETTINGS_MODULE` at your real module.
+
+### `DEBUG` and the dev proxy
+
+In development (`DEBUG = True`), the catch-all view reverse-proxies frontend requests to the Vite dev server for hot-module reload. In production you don't run Vite, so this must be off — and with `DEBUG = False` it is: the view serves the compiled SPA from `STATIC_ROOT` directly.
+
+The library is defensive about the common mistake of booting a bare ASGI server with `DEBUG = True` and no Vite:
+
+- **Startup probe.** On boot, if the proxy is on only because of `DEBUG` (not explicitly forced) and nothing is listening on the Vite port, the proxy is disabled for the process and the SPA is served from disk. You get one log line instead of a `ConnectError` on every request.
+- **Runtime fallback.** If Vite goes away mid-session, requests fall back to the disk bundle with a short retry cooldown rather than 502ing.
+
+These are safety nets, not a substitute for correct config. **Set `DEBUG = False` in production** so the proxy never engages in the first place. To be fully explicit you can also set `REFLEX_DJANGO_DEV_PROXY=0`. See [`REFLEX_DJANGO_DEV_PROXY`](settings_reference.md) in the settings reference.
 
 ---
 
@@ -452,6 +499,8 @@ LOGGING = {
 | WebSocket disconnects after 60s | Reverse proxy timeout too low | Bump `proxy_read_timeout` / idle timeout to 600s+ |
 | `CSRF verification failed` on admin | Missing `X-Forwarded-Proto` | Set `SECURE_PROXY_SSL_HEADER` and ensure your proxy sends the header |
 | Browser shows old SPA after deploy | Bundle cache | Add `expires` + `immutable` to `/static/`. Reflex bundles are content-hashed. |
+| First request hangs ~30-60s, then works | Boot-time SPA auto-build (bundle wasn't pre-built) | Run `export_reflex` + `collectstatic` in CI and set `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0` |
+| Boot fails building SPA on read-only FS | Boot-time auto-build needs to write `.web`/`STATIC_ROOT` | Pre-build in CI; set `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0` |
 | Sessions reset between requests | Multiple workers without sticky sessions | Enable sticky sessions on the load balancer or use a shared session backend |
 | Reflex events 500 with no useful logs | Custom middleware blowing up | Set `LOGGING` level to DEBUG, restart, reproduce |
 | `503` from health check | Worker count too low | Scale workers, or increase the readiness `initialDelaySeconds` |

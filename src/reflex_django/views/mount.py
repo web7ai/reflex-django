@@ -18,8 +18,11 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from django.http import (
     FileResponse,
@@ -189,6 +192,103 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
     return FileResponse(asset.open("rb"), content_type=content_type)
 
 
+_LOCAL_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "0.0.0.0", "::1"})
+
+# Latch so the self-loop warning is emitted at most once per process instead
+# of on every request (favicon, assets, page loads …).
+_dev_proxy_self_loop_handled = False
+
+
+def _disable_dev_proxy_after_self_loop(target: str) -> None:
+    """Turn the dev proxy off process-wide after detecting a self-loop.
+
+    Running the ASGI app standalone (no separate Vite) with ``DEBUG=True``
+    makes the dev proxy point back at this server. Rather than re-checking and
+    re-warning on every request, we set ``REFLEX_DJANGO_DEV_PROXY=0`` so
+    :func:`reflex_django.dev_proxy._dev_vite_target_or_none` returns ``None``
+    from here on, and the app serves the compiled SPA from disk like prod.
+    The warning is logged only once.
+    """
+    global _dev_proxy_self_loop_handled
+    os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+    if _dev_proxy_self_loop_handled:
+        return
+    _dev_proxy_self_loop_handled = True
+    logger.warning(
+        "Vite dev-proxy target %s points back at this server (no separate "
+        "Vite running). Disabling the dev proxy and serving the compiled SPA "
+        "from disk for the rest of this process. To avoid this entirely, run "
+        "with DEBUG=False or set REFLEX_DJANGO_DEV_PROXY=0 for standalone/prod "
+        "serving, or use `python manage.py run_reflex` for the dev loop.",
+        target,
+    )
+
+
+# When Vite is reachable-in-principle (dev proxy on) but not actually running,
+# every proxied request pays a full TCP connect + failure before we fall back
+# to disk — and logs a warning. To keep the disk fallback fast and quiet, we
+# back off: after one failed connect we serve from disk directly for a short
+# cooldown, retry once the window elapses, and auto-recover when Vite returns.
+_VITE_UNREACHABLE_COOLDOWN_S = 5.0
+_vite_unreachable_until: float = 0.0
+_vite_unreachable_logged: bool = False
+
+
+def _vite_in_cooldown() -> bool:
+    """Return True while we're skipping proxy attempts after a failed connect."""
+    return time.monotonic() < _vite_unreachable_until
+
+
+def _mark_vite_unreachable(target: str) -> None:
+    """Start/extend the disk-fallback cooldown and log once per outage."""
+    global _vite_unreachable_until, _vite_unreachable_logged
+    _vite_unreachable_until = time.monotonic() + _VITE_UNREACHABLE_COOLDOWN_S
+    if _vite_unreachable_logged:
+        return
+    _vite_unreachable_logged = True
+    logger.warning(
+        "Vite unreachable at %s; serving the compiled SPA from disk and "
+        "pausing proxy attempts for ~%.0fs (will retry automatically). This "
+        "is expected when the ASGI server runs without a separate Vite dev "
+        "server — use `python manage.py run_reflex` for HMR, or set "
+        "DEBUG=False / REFLEX_DJANGO_DEV_PROXY=0 to serve from disk silently.",
+        target,
+        _VITE_UNREACHABLE_COOLDOWN_S,
+    )
+
+
+def _mark_vite_reachable() -> None:
+    """Clear the cooldown once a proxy attempt succeeds again."""
+    global _vite_unreachable_until, _vite_unreachable_logged
+    if _vite_unreachable_logged:
+        logger.info("Vite reachable again; resuming the HMR dev proxy.")
+    _vite_unreachable_until = 0.0
+    _vite_unreachable_logged = False
+
+
+def _dev_proxy_target_is_self(request: HttpRequest, target: str) -> bool:
+    """Return True when the dev-proxy target points back at this same server.
+
+    Running the ASGI app directly (e.g. ``uvicorn backend.asgi:application
+    --port 3000``) without a separate Vite server is a common production-style
+    invocation. If the resolved Vite target happens to be the same
+    host:port the request arrived on (classically because the backend was
+    started on the default Vite port ``3000``), reverse-proxying would loop
+    the server back into itself, spinning until it 502s. Detecting that lets
+    us fall back to serving the compiled SPA from disk instead.
+    """
+    try:
+        parts = urlsplit(target)
+        target_port = parts.port
+        if target_port is None:
+            return False
+        if str(target_port) != str(request.get_port()):
+            return False
+        return (parts.hostname or "").lower() in _LOCAL_HOSTNAMES
+    except Exception:  # noqa: BLE001
+        return False
+
+
 class ReflexMountView(View):
     """Catch-all view for Reflex-owned URL space served by Django.
 
@@ -207,8 +307,27 @@ class ReflexMountView(View):
         request: HttpRequest,
     ) -> HttpResponse:
         target = _dev_vite_target_or_none()
-        if target is not None:
+        if target is not None and _dev_proxy_target_is_self(request, target):
+            _disable_dev_proxy_after_self_loop(target)
+            target = None
+
+        if target is not None and _vite_in_cooldown():
+            # We recently saw Vite down; skip the (slow) connect attempt and
+            # serve the compiled bundle from disk directly. The window expires
+            # on its own so we transparently resume proxying when Vite returns.
+            response = _serve_spa_response(request.path)
+        elif target is not None:
             response = await reverse_proxy_to_vite(request, target)
+            # ``reverse_proxy_to_vite`` returns 502 when Vite is unreachable
+            # (e.g. the ASGI app is run standalone, prod-style, with no Vite).
+            # Rather than surfacing a Bad Gateway for every asset, fall back to
+            # the compiled bundle on disk so the app behaves like prod, and
+            # start a cooldown so we don't re-probe Vite on every asset.
+            if getattr(response, "status_code", None) == 502:
+                _mark_vite_unreachable(target)
+                response = _serve_spa_response(request.path)
+            else:
+                _mark_vite_reachable()
         else:
             response = _serve_spa_response(request.path)
         # Pipe HTML responses through Django's template engine so

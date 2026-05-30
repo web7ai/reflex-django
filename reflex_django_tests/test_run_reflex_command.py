@@ -488,6 +488,37 @@ def test_default_spawns_vite_and_skips_export(
     export_call.assert_not_called()
 
 
+def test_vite_default_forces_dev_proxy_on(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """The Vite loop sets REFLEX_DJANGO_DEV_PROXY=1 so the ASGI probe trusts it.
+
+    The asgi_entry startup probe only disables a proxy that is on by the
+    DEBUG default; forcing it to "1" here keeps the proxy alive while Vite
+    is still booting.
+    """
+    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        mock.MagicMock(),
+    )
+    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False, raising=False
+    )
+
+    Command().handle()
+
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "1"
+
+
 def test_vite_default_disables_backend_reload(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,

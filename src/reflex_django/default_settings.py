@@ -262,6 +262,25 @@ REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX: bool = False
 # Passing ``--with-vite`` forces the Vite-HMR loop regardless of this setting.
 REFLEX_DJANGO_SERVE_FROM_BUILD: bool = False
 
+# Whether the ASGI entry point (``reflex_django.asgi_entry:application``) should
+# build the SPA bundle once at startup when none is found on disk.
+#
+# The canonical production launch is a raw ASGI server, e.g.
+# ``uvicorn backend.asgi:application``. If the operator forgot to run
+# ``reflex export`` + ``manage.py collectstatic`` first, the catch-all view
+# would 404 every request with "Reflex SPA bundle not found", making a deploy
+# fail in a confusing way. When this is True (default), the server instead
+# builds the bundle once on first boot (equivalent to ``manage.py
+# export_reflex --frontend-only --no-zip --stage-to-static-root``) so the app
+# comes up serving a real SPA out of the box.
+#
+# Set to False (or env ``REFLEX_DJANGO_AUTO_EXPORT_ON_START=0``) in
+# environments where the bundle is built ahead of time (CI image build,
+# read-only filesystems, or when you want a fast, deterministic boot). The
+# build still requires Node/npm to be available on the host. ``manage.py
+# run_reflex`` disables this automatically because it manages builds itself.
+REFLEX_DJANGO_AUTO_EXPORT_ON_START: bool = True
+
 # Additional reserved Reflex path prefixes for the outer dispatcher
 # (advanced; usually not needed). Combined with the defaults in
 # :data:`reflex_django.django_outer_dispatcher.DEFAULT_RESERVED_REFLEX_PREFIXES`.
