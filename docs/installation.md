@@ -123,7 +123,7 @@ python manage.py migrate
 python manage.py run_reflex
 ```
 
-Open `http://localhost:3000/` — the Vite dev server with hot reload. The first run takes a moment because it compiles the Reflex SPA, but subsequent runs are quick. (The Django backend, including `/admin/`, runs on port `8000` behind it and is reachable from the same URL.)
+Open **`http://localhost:8000/`** — your single dev URL. The first run takes a moment because it compiles the Reflex SPA and waits for Vite to be ready, but subsequent runs are quicker. Vite runs on port `3000` in the background for hot reload; Django reverse-proxies the SPA so you only need to remember one address. Admin, API, and Reflex pages all live on `:8000`.
 
 ---
 

@@ -56,6 +56,14 @@ class DjangoPrefixConfig:
         static = _static_url_prefix()
         if static:
             paths.append(static)
+        try:
+            from reflex_django.dev_proxy import dev_uses_separate_ports
+
+            if dev_uses_separate_ports():
+                # Two-port dev: ``/`` is backend-owned (project root view), not SPA.
+                paths.append("/")
+        except Exception:
+            pass
         return tuple(dict.fromkeys(p for p in paths if p))
 
     @staticmethod
@@ -159,3 +167,24 @@ def export_prefix_env(config: DjangoPrefixConfig) -> None:
             "REFLEX_DJANGO_DJANGO_PREFIX",
             json.dumps(list(config.django_prefix)),
         )
+
+
+def export_rx_port_env() -> None:
+    """Sync ``frontend_port`` / ``backend_port`` from ``reflex_mount()`` to the env."""
+    try:
+        from reflex_django.mount_config import (
+            ensure_mount_config_loaded,
+            get_merged_mount_rx_config,
+        )
+
+        ensure_mount_config_loaded()
+        rx_config = get_merged_mount_rx_config().rx_config
+    except Exception:
+        return
+
+    frontend_port = rx_config.get("frontend_port")
+    backend_port = rx_config.get("backend_port")
+    if isinstance(frontend_port, int) and frontend_port > 0:
+        os.environ.setdefault("REFLEX_DJANGO_FRONTEND_PORT", str(frontend_port))
+    if isinstance(backend_port, int) and backend_port > 0:
+        os.environ.setdefault("REFLEX_DJANGO_BACKEND_PORT", str(backend_port))

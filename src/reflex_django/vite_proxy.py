@@ -20,6 +20,42 @@ _PROXY_BLOCK_RE = re.compile(
 )
 
 
+def _remove_vite_proxy_block(content: str) -> str:
+    """Remove the reflex-django ``server.proxy`` block, including nested braces."""
+    marker = f"// {_PROXY_MARKER}"
+    idx = content.find(marker)
+    if idx == -1:
+        return _PROXY_BLOCK_RE.sub("\n", content)
+
+    proxy_idx = content.find("proxy:", idx)
+    if proxy_idx == -1:
+        return content
+
+    brace_start = content.find("{", proxy_idx)
+    if brace_start == -1:
+        return content
+
+    depth = 0
+    end = brace_start
+    for pos in range(brace_start, len(content)):
+        char = content[pos]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end = pos + 1
+                while end < len(content) and content[end] in ", \t":
+                    end += 1
+                if end < len(content) and content[end] == "\n":
+                    end += 1
+                break
+
+    start = content.rfind("\n", 0, idx)
+    start = 0 if start == -1 else start + 1
+    return content[:start] + content[end:]
+
+
 def _normalize_proxy_prefix(prefix: str) -> str:
     if not prefix.startswith("/"):
         prefix = "/" + prefix
@@ -138,7 +174,7 @@ def inject_vite_dev_proxy(
     prefixes: tuple[str, ...],
 ) -> str:
     """Inject ``server.proxy`` rules into a generated ``vite.config.js``."""
-    content = _PROXY_BLOCK_RE.sub("\n", content)
+    content = _remove_vite_proxy_block(content)
 
     unique_prefixes = _normalized_prefixes(prefixes)
     if not unique_prefixes:
@@ -177,6 +213,30 @@ def inject_vite_proxy_plugin(content: str) -> str:
         content,
         count=1,
     )
+
+
+def strip_vite_proxy_plugin(content: str) -> str:
+    """Remove the reflex-django proxy plugin import and registration from Vite config."""
+    content = content.replace(_PROXY_PLUGIN_IMPORT + "\n", "")
+    content = content.replace(_PROXY_PLUGIN_IMPORT, "")
+    content = re.sub(
+        r"\n\s*reflexDjangoProxyPlugin\(\),?",
+        "",
+        content,
+        count=1,
+    )
+    return content
+
+
+def strip_vite_dev_proxy(content: str) -> str:
+    """Remove ``server.proxy`` rules injected by reflex-django."""
+    return _remove_vite_proxy_block(content)
+
+
+def strip_vite_config_proxy(content: str) -> str:
+    """Remove all reflex-django Vite→Django proxy wiring from ``vite.config.js``."""
+    content = strip_vite_dev_proxy(content)
+    return strip_vite_proxy_plugin(content)
 
 
 def patch_vite_config(
@@ -281,31 +341,69 @@ def ensure_vite_django_dev_proxy(
     return changed
 
 
+def strip_vite_django_dev_proxy(web_dir: Path) -> bool:
+    """Remove Vite→Django proxy rules from ``.web/`` (DJANGO_OUTER single-port mode).
+
+    In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER`, the browser
+    uses the Django port and Django reverse-proxies SPA traffic to Vite.
+    Bidirectional Vite ``server.proxy`` rules would create request loops.
+
+    Returns:
+        ``True`` when any file was modified or deleted.
+    """
+    web_dir = Path(web_dir)
+    changed = False
+
+    plugin_path = web_dir / _PROXY_PLUGIN_FILENAME
+    if plugin_path.is_file():
+        plugin_path.unlink()
+        changed = True
+
+    vite_path = web_dir / "vite.config.js"
+    if vite_path.is_file():
+        content = vite_path.read_text(encoding="utf-8")
+        updated = strip_vite_config_proxy(content)
+        if updated != content:
+            vite_path.write_text(updated, encoding="utf-8")
+            changed = True
+
+    return changed
+
+
 def ensure_vite_django_dev_proxy_from_config() -> bool:
-    """Patch ``.web/vite.config.js`` using the active Reflex config and plugin.
+    """Patch or strip ``.web/vite.config.js`` using the active Reflex config.
 
     In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
     Django serves ``/`` directly and reverse-proxies it to Vite via
     :class:`reflex_django.views.mount.ReflexMountView`; the browser never talks
-    to Vite at ``localhost:<frontend_port>`` itself, so Vite does not need
-    Django-aware ``server.proxy`` rules. The patch is a no-op in that mode.
+    to Vite at ``localhost:<frontend_port>`` itself, so Vite must **not** proxy
+    backend paths back to Django. Any stale proxy rules are stripped instead.
     """
     from reflex.utils import prerequisites
     from reflex_base.config import get_config
     from reflex_base.utils import console
 
+    from reflex_django.dev_proxy import dev_uses_separate_ports
     from reflex_django.plugin import ReflexDjangoPlugin
     from reflex_django.routing import UrlRoutingMode, resolve_url_routing
 
     routing_mode = resolve_url_routing()
-    if routing_mode == UrlRoutingMode.DJANGO_OUTER:
-        # Django is the outer ASGI app; Vite is reverse-proxied through Django.
-        # Patching Vite to proxy backend paths would create a request loop.
-        return False
-
     web_dir = Path(prerequisites.get_web_dir())
     if not web_dir.is_dir():
         return False
+
+    if routing_mode == UrlRoutingMode.DJANGO_OUTER:
+        from reflex_django.dev_proxy import dev_uses_separate_ports
+
+        if not dev_uses_separate_ports():
+            changed = strip_vite_django_dev_proxy(web_dir)
+            if changed:
+                console.info(
+                    "reflex-django removed Vite→Django proxy rules from .web/ "
+                    "(DJANGO_OUTER single-port mode)."
+                )
+            return changed
+        # Two-port dev: fall through and inject Vite→Django proxies below.
 
     config = get_config()
     plugin = next(
@@ -320,13 +418,17 @@ def ensure_vite_django_dev_proxy_from_config() -> bool:
         return False
 
     django_led = routing_mode == UrlRoutingMode.DJANGO_LED
+    separate_ports = (
+        routing_mode == UrlRoutingMode.DJANGO_OUTER
+        and dev_uses_separate_ports()
+    )
     changed = ensure_vite_django_dev_proxy(
         web_dir,
         target=config.api_url.rstrip("/"),
         prefixes=prefixes,
         frontend_port=config.frontend_port,
         backend_port=config.backend_port,
-        patch_env=django_led,
+        patch_env=django_led or separate_ports,
     )
     if changed:
         console.info(

@@ -141,6 +141,23 @@ def patch_vite_ssr_external(content: str) -> str:
     return content[:pos] + insert + content[pos:]
 
 
+def patch_vite_strict_port(content: str) -> str:
+    """Require Vite to bind the configured port (fail instead of auto-incrementing)."""
+    if "strictPort" in content:
+        return content
+    match = re.search(r"server:\s*\{", content)
+    if match is None:
+        return content
+    brace_pos = match.end() - 1
+    newline = content.find("\n", brace_pos)
+    insert_at = newline + 1 if newline != -1 else match.end()
+    return (
+        content[:insert_at]
+        + "\n    strictPort: true,\n"
+        + content[insert_at:]
+    )
+
+
 def patch_vite_react_dedupe(content: str) -> str:
     """Ensure a single React instance via Vite ``resolve.dedupe`` only.
 
@@ -149,6 +166,7 @@ def patch_vite_react_dedupe(content: str) -> str:
     """
     updated = patch_vite_rollup_output(content)
     updated = patch_vite_ssr_external(updated)
+    updated = patch_vite_strict_port(updated)
     updated = strip_vite_react_file_aliases(updated)
     if not re.search(r"dedupe\s*:\s*\[", updated):
         match = re.search(r"(\n\s*resolve\s*:\s*\{)", updated)

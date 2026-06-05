@@ -33,6 +33,9 @@ class _FakeRequest:
     def get_port(self) -> str:
         return self._port
 
+    def get_host(self) -> str:
+        return f"localhost:{self._port}"
+
 
 class _FakeResponse:
     def __init__(self, status_code: int) -> None:
@@ -197,3 +200,66 @@ def test_healthy_proxy_response_is_used(
     proxy.assert_awaited_once()
     patched["serve"].assert_not_called()
     assert result is ok
+
+
+def test_proxy_502_returns_503_when_dev_proxy_forced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When REFLEX_DJANGO_DEV_PROXY=1, a 502 does not fall back to disk."""
+    patched = _patch_common(monkeypatch)
+    monkeypatch.setenv("REFLEX_DJANGO_DEV_PROXY", "1")
+    monkeypatch.setattr(
+        mount, "_dev_vite_target_or_none", lambda: "http://127.0.0.1:3000"
+    )
+    proxy = mock.AsyncMock(return_value=_FakeResponse(502))
+    monkeypatch.setattr(mount, "reverse_proxy_to_vite", proxy)
+
+    view = mount.ReflexMountView()
+    request = _FakeRequest(port="8000")
+
+    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+
+    proxy.assert_awaited_once()
+    patched["serve"].assert_not_called()
+    assert result.status_code == 503
+
+
+def test_separate_ports_returns_plain_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two-port dev: stray SPA paths on the backend port get a plain 404."""
+    patched = _patch_common(monkeypatch)
+    monkeypatch.setattr("reflex_django.views.mount.dev_uses_separate_ports", lambda: True)
+    monkeypatch.setattr(mount, "_dev_vite_target_or_none", lambda: None)
+
+    view = mount.ReflexMountView()
+    request = _FakeRequest(port="8000", path="/login")
+
+    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+
+    patched["serve"].assert_not_called()
+    assert result.status_code == 404
+    assert not result.content
+
+
+def test_cooldown_returns_503_when_dev_proxy_forced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cooldown skips disk fallback when dev proxy is explicitly on."""
+    patched = _patch_common(monkeypatch)
+    monkeypatch.setenv("REFLEX_DJANGO_DEV_PROXY", "1")
+    monkeypatch.setattr(
+        mount, "_dev_vite_target_or_none", lambda: "http://127.0.0.1:3000"
+    )
+    proxy = mock.AsyncMock(return_value=_FakeResponse(502))
+    monkeypatch.setattr(mount, "reverse_proxy_to_vite", proxy)
+
+    view = mount.ReflexMountView()
+    request = _FakeRequest(port="8000")
+
+    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+
+    proxy.assert_awaited_once()
+    patched["serve"].assert_not_called()
+    assert result.status_code == 503

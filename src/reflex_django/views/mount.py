@@ -34,6 +34,9 @@ from django.views import View
 
 from reflex_django.dev_proxy import (
     _dev_vite_target_or_none,
+    _resolve_frontend_port_from_config,
+    dev_proxy_explicitly_enabled,
+    dev_uses_separate_ports,
     reverse_proxy_to_vite,
 )
 from reflex_django.routing import UrlRoutingMode, resolve_url_routing
@@ -169,12 +172,30 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
     if asset is None:
         index = _resolve_spa_index()
         if index is None:
-            return HttpResponseNotFound(
-                "Reflex SPA bundle not found. Run `reflex export` and "
-                "`manage.py collectstatic` for production, or run "
-                "`manage.py run_reflex` for development.",
-                content_type="text/plain",
-            )
+            try:
+                from django.conf import settings as django_settings
+
+                debug = getattr(django_settings, "DEBUG", False)
+            except Exception:
+                debug = False
+            if debug:
+                msg = (
+                    "Reflex dev proxy is not active and no compiled SPA was "
+                    "found on disk. Start the dev server with "
+                    "`python manage.py run_reflex` and open "
+                    "http://localhost:<backend_port>/ (not a bare "
+                    "`runserver`/`uvicorn` boot). If Vite is already running, "
+                    "ensure port "
+                    f"{_resolve_frontend_port_from_config() or 3000} is free "
+                    "and matches `frontend_port` in `reflex_mount()`."
+                )
+            else:
+                msg = (
+                    "Reflex SPA bundle not found. Run `reflex export` and "
+                    "`manage.py collectstatic` for production, or run "
+                    "`manage.py run_reflex` for development."
+                )
+            return HttpResponseNotFound(msg, content_type="text/plain")
         asset = index
 
     mime, _ = mimetypes.guess_type(str(asset))
@@ -269,6 +290,17 @@ def _mark_vite_reachable() -> None:
     _vite_unreachable_logged = False
 
 
+def _vite_starting_response(target: str) -> HttpResponse:
+    """Return 503 while the Vite dev server is still booting or unreachable."""
+    return HttpResponse(
+        "reflex-django: Vite dev server is starting or unreachable at "
+        f"{target}. Retry in a moment, or run `python manage.py run_reflex` "
+        "to start the dev loop.",
+        status=503,
+        content_type="text/plain",
+    )
+
+
 def _dev_proxy_target_is_self(request: HttpRequest, target: str) -> bool:
     """Return True when the dev-proxy target points back at this same server.
 
@@ -314,23 +346,28 @@ class ReflexMountView(View):
             _disable_dev_proxy_after_self_loop(target)
             target = None
 
+        force_vite_proxy = dev_proxy_explicitly_enabled()
         if target is not None and _vite_in_cooldown():
-            # We recently saw Vite down; skip the (slow) connect attempt and
-            # serve the compiled bundle from disk directly. The window expires
-            # on its own so we transparently resume proxying when Vite returns.
-            response = _serve_spa_response(request.path)
+            # We recently saw Vite down; skip the (slow) connect attempt.
+            if force_vite_proxy:
+                response = _vite_starting_response(target)
+            else:
+                # Serve the compiled bundle from disk when dev proxy is off.
+                response = _serve_spa_response(request.path)
         elif target is not None:
             response = await reverse_proxy_to_vite(request, target)
             # ``reverse_proxy_to_vite`` returns 502 when Vite is unreachable
             # (e.g. the ASGI app is run standalone, prod-style, with no Vite).
-            # Rather than surfacing a Bad Gateway for every asset, fall back to
-            # the compiled bundle on disk so the app behaves like prod, and
-            # start a cooldown so we don't re-probe Vite on every asset.
             if getattr(response, "status_code", None) == 502:
                 _mark_vite_unreachable(target)
-                response = _serve_spa_response(request.path)
+                if force_vite_proxy:
+                    response = _vite_starting_response(target)
+                else:
+                    response = _serve_spa_response(request.path)
             else:
                 _mark_vite_reachable()
+        elif dev_uses_separate_ports():
+            response = HttpResponseNotFound()
         else:
             response = _serve_spa_response(request.path)
         # Pipe HTML responses through Django's template engine so

@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Two-port dev workflow (default)** — `python manage.py run_reflex` now matches native Reflex:
+  open the **frontend port** (`:3000`) for the SPA; the **backend port** (`:8000`) serves Django
+  and Reflex endpoints only (admin, API, `/_event`). Vite proxies backend paths. Pass
+  ``--single-port`` for the alternative (browse `:8000`, Django reverse-proxies Vite).
+- Setting ``REFLEX_DJANGO_SEPARATE_DEV_PORTS`` and env ``REFLEX_DJANGO_SEPARATE_DEV_PORTS``.
+- **Single-port dev workflow (DJANGO_OUTER)** — opt-in via ``--single-port``; `python manage.py run_reflex` now expects you
+  to open **`http://localhost:<backend_port>/`** (default **8000**). Vite still runs on the
+  frontend port (default **3000**) for hot reload, but it is reverse-proxied through Django;
+  you do not need to browse to `:3000` in the default setup.
+- **`export_rx_port_env()`** — `reflex_mount()` exports `frontend_port` and `backend_port`
+  from `rx_config` into the environment so the dev proxy resolves ports even outside
+  `run_reflex`.
+- **`REFLEX_DJANGO_FRONTEND_PORT` / `REFLEX_DJANGO_BACKEND_PORT`** — optional Django
+  settings (and env vars) for the Vite and ASGI ports; documented in
+  [Settings reference](docs/settings_reference.md).
+- **`strip_vite_django_dev_proxy()`** — removes stale Vite→Django `server.proxy` rules from
+  `.web/` in DJANGO_OUTER mode (bidirectional proxies caused request loops on `:8000`).
+- **`run_reflex` port checks** — fails fast when the frontend port is already in use;
+  waits for Vite to serve a real SPA document before starting uvicorn (not just a TCP
+  connect).
+- **Vite `strictPort: true`** — injected via `frontend_stability` so Vite does not silently
+  hop to `:3001` when `:3000` is busy.
 - **`reflex_django.django_dev_middleware`** — optional Django HTTP middleware for Vite
   dev (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`, and
   ``DEFAULT_DEV_MIDDLEWARE`` for settings). Documented in
@@ -23,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dev docs and defaults** — installation, CLI, FAQ, and local-development guides now
+  describe the **single-port** dev URL (`:8000`) instead of telling users to open the Vite
+  port (`:3000`). The legacy two-port layout (`reflex_led` / `django_led`) is still
+  supported but is no longer the documented default.
+- **`ReflexDjangoPlugin.pre_compile`** — skips injecting Vite→Django proxy rules in
+  DJANGO_OUTER mode; `post_compile` strips any stale proxy block instead.
+- **`ReflexMountView`** — when `REFLEX_DJANGO_DEV_PROXY=1` (set by `run_reflex`), Vite
+  outages return **503** with a clear message instead of serving a broken disk bundle.
+- **`_resolve_frontend_port_from_config()`** — reads ports from Django settings and the
+  `reflex_mount()` registry, not only `rx.Config` and env.
 - **Breaking:** public API reorganized. Built-in State classes now live under
   ``reflex_django.states`` (``from reflex_django.states import AppState,
   DjangoUserState, DjangoAuthState, DjangoI18nState, DjangoContextState,
@@ -42,6 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Dev proxy loop on `:8000`** — stale bidirectional Vite/Django proxies and disk fallback
+  to an incomplete `.web` bundle could make the browser spin on static assets; DJANGO_OUTER
+  now strips Vite-side proxies and avoids disk fallback while the dev proxy is explicitly on.
+- **"Reflex SPA bundle not found" in dev** — clearer 404 text when the dev proxy is off
+  (e.g. `runserver` / bare `uvicorn` without Vite); port env export and settings help
+  `run_reflex` find the right Vite target.
+- **Vite port mismatch** — when `:3000` was occupied, Vite could bind to `:3001` while
+  Django still proxied to `:3000`; `strictPort` and pre-flight port checks address this.
 - Frontend dev: ``useContext(EventLoopContext)`` destructuring on ``null`` default
   context; Vite ``react`` → ``index.js`` aliases that broke ``react/jsx-runtime``
   pre-bundling.

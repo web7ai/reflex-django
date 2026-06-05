@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from reflex_django.vite_proxy import inject_vite_dev_proxy, patch_vite_config
+from reflex_django.vite_proxy import (
+    inject_vite_dev_proxy,
+    patch_vite_config,
+    strip_vite_config_proxy,
+)
 
 _SAMPLE_VITE_CONFIG = """export default defineConfig((config) => ({
   server: {
@@ -67,3 +71,16 @@ def test_inject_vite_dev_proxy_normalizes_prefixes() -> None:
     )
     assert '"/api":' in result
     assert '"/admin":' in result
+
+
+def test_strip_vite_config_proxy_removes_injected_rules() -> None:
+    patched = patch_vite_config(
+        _SAMPLE_VITE_CONFIG,
+        target="http://localhost:8000",
+        prefixes=("/admin", "/api"),
+    )
+    stripped = strip_vite_config_proxy(patched)
+    assert "reflex-django-proxy" not in stripped
+    assert "reflexDjangoProxyPlugin" not in stripped
+    assert '"/_event":' not in stripped
+    assert "server: {" in stripped

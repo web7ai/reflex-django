@@ -17,7 +17,7 @@ from django.views.generic import RedirectView
 
 from reflex_django.mount_config import register_mount_rx_config
 from reflex_django.mount_registry import register_mount
-from reflex_django.prefixes import export_prefix_env, resolve_prefixes
+from reflex_django.prefixes import export_prefix_env, export_rx_port_env, resolve_prefixes
 from reflex_django.views.mount import ReflexMountView
 
 
@@ -34,6 +34,9 @@ def _catchall_exclusions(reserved: tuple[str, ...]) -> str:
         if segment:
             parts.append(rf"(?!{re.escape(segment)}$)")
             parts.append(rf"(?!{re.escape(segment)}/)")
+    if "/" in reserved:
+        # Site root: Django passes an empty path to the catch-all regex.
+        parts.append(r"(?!$)")
     return "".join(parts)
 
 
@@ -155,6 +158,7 @@ def reflex_mount(
         django_prefix=django_prefix,
     )
     export_prefix_env(config)
+    export_rx_port_env()
 
     return _reflex_catchall_pattern(
         config.mount_prefix,

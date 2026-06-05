@@ -52,7 +52,7 @@ When Reflex fires an event, it doesn't go through Django's HTTP pipeline. By def
 - There's no `HttpRequest`. So no `request.user`, no `request.session`, no `request.COOKIES`.
 - **No middleware runs.** None of it. Not the session middleware, not the auth middleware, not your custom multi-tenant or rate-limit middleware.
 - Reflex doesn't know that the user logged into `/admin/` two seconds ago, because it never saw the session cookie.
-- And by default, Reflex wants its own dev server on its own port — which means the SPA at `localhost:3000` can't easily share cookies with Django at `localhost:8000`.
+- And by default, Reflex wants its own dev server on its own port — which used to mean juggling `localhost:3000` and `localhost:8000` with fragile cookie sharing. **reflex-django** fixes that: you browse one URL (`:8000`) and Vite hot-reloads behind the scenes.
 
 So even though both frameworks are written in Python and could happily live in the same process, in practice they sit on opposite sides of a glass wall. You end up writing a token bridge, configuring CORS, running two terminals, and re-implementing auth twice.
 

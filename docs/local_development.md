@@ -1,111 +1,104 @@
-# Local development (Vite port, Django admin, CSRF)
+# Local development
 
-During `python manage.py run_reflex`, the Reflex frontend usually runs on **port 3000** (Vite with hot reload) while Django/ASGI listens on **port 8000**. The browser opens `http://localhost:3000/`; Vite proxies Django routes (`/admin`, `/api`, `/_event`, …) to the backend.
-
-That two-port layout is convenient for HMR but needs a few integration pieces so Django admin, CSRF, and the Reflex event loop behave like a single site. **reflex-django** ships those pieces automatically where possible.
+This page explains how the dev server actually works — which URL to open, what the two ports mean, and how to fix the problems people run into most often.
 
 ---
 
-## What reflex-django does for you
+## The short version
 
-### 1. Vite dev proxy (`pre_compile` / `post_compile`)
-
-When `reflex_mount()` lists `django_prefix` entries (e.g. `/admin`, `/api`), the plugin:
-
-- Injects **`reflexDjangoProxyPlugin()`** into `.web/vite.config.js` so proxied requests hit Django *before* React Router handles unknown paths.
-- Adds **`server.proxy`** rules for each prefix plus Reflex internals (`/_event` with WebSocket, `/_upload`, `/static`, …).
-- Forwards **`x-forwarded-host`** and **`x-forwarded-proto`** from the browser’s `Host` header so Django can build correct absolute URLs when `USE_X_FORWARDED_HOST = True`.
-
-If `/admin` 404s on `:3000` after an export, re-run `run_reflex` once — `post_compile` rewrites the proxy block when it is missing.
-
-See also: [Configuration](configuration.md), [CLI](cli.md).
-
-### 2. Frontend stability patches (`post_compile`)
-
-Reflex generates `EventLoopContext = createContext(null)` and components that destructure `useContext(EventLoopContext)`. Before the provider mounts (or when tooling loads a second React copy), the browser can throw:
-
-```text
-TypeError: useContext is not a function or its return value is not iterable
+```bash
+python manage.py run_reflex
 ```
 
-After each compile, **reflex-django** patches `.web` when needed:
+Open **`http://localhost:8000/`** in your browser.
 
-| File | Change |
+That's it. One URL for everything: your Reflex pages, Django admin, API, and the Reflex WebSocket (`/_event`).
+
+Vite still runs in the background on port **3000** for hot reload, but you don't need to visit it. Django reverse-proxies SPA traffic to Vite for you.
+
+---
+
+## How the two ports fit together
+
+In the default **DJANGO_OUTER** layout (what you get out of the box):
+
+```text
+Browser  →  http://localhost:8000/     (this is what you open)
+                │
+                ├─ /admin, /api, /static  →  Django handles these directly
+                ├─ /_event, /ping, …      →  Reflex backend (same process)
+                └─ /, /@vite/client, …    →  Django proxies to Vite on :3000
+```
+
+| Port | Who listens | Do you open it? |
+|:---|:---|:---|
+| **8000** (backend) | Django + Reflex ASGI | **Yes** — your dev URL |
+| **3000** (frontend) | Vite (HMR) | No — internal only |
+
+This is different from the older **two-port** layout (`reflex_led`), where you opened `:3000` and Vite proxied Django routes back to `:8000`. That mode still exists for legacy projects, but it is not the default anymore.
+
+---
+
+## What `run_reflex` does for you
+
+When you run the default command (no extra flags):
+
+1. **Compiles** the Reflex SPA into `.web/`
+2. **Starts Vite** on the frontend port (default `3000`)
+3. **Waits** until Vite is actually serving the SPA (not just listening on a socket)
+4. **Starts uvicorn** on the backend port (default `8000`) with `reflex_django.asgi_entry:application`
+5. **Watches** your `.py` files — frontend edits hot-reload through Vite; backend edits need a restart
+
+You should see something like:
+
+```text
+reflex-django: Vite ready on port 3000 (reverse-proxied by Django on port 8000).
+    Open http://localhost:8000/ — frontend edits hot-reload via Vite; ...
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+### What you should *not* use for local dev
+
+| Command | Why it breaks the SPA |
 |:---|:---|
-| `utils/context.js` | Safe default: `createContext([() => {}, []])` |
-| `utils/components/*.jsx`, `app/root.jsx` | Guarded `useContext(EventLoopContext)` (no array destructuring on `null`) |
-| `vite.config.js` | `resolve.dedupe: ["react", "react-dom", "@emotion/react"]` only — **no** `react` → `index.js` aliases (those break `react/jsx-runtime`) |
+| `python manage.py runserver` | WSGI only — no Vite, no dev proxy |
+| `uvicorn ...:application` alone | No Vite unless you start it separately and set `REFLEX_DJANGO_DEV_PROXY=1` |
 
-You should see a log line like:
-
-```text
-reflex-django applied frontend stability patches: N files (e.g. utils/context.js, …)
-```
-
-Patches are idempotent; re-running compile does not duplicate them.
-
-### 3. Django dev HTTP middleware (optional, recommended for `:3000`)
-
-For projects that open **Django admin on the Vite port** (`http://localhost:3000/admin/`), add the dev middleware near the **top** of `MIDDLEWARE` in your **development** settings:
-
-```python
-from reflex_django.django_dev_middleware import DEFAULT_DEV_MIDDLEWARE
-
-MIDDLEWARE = [
-    *DEFAULT_DEV_MIDDLEWARE,
-    # ... your existing middleware ...
-]
-```
-
-Or reference the classes explicitly:
-
-```python
-MIDDLEWARE = [
-    "reflex_django.django_dev_middleware.EnsureRequestBodyAttrsMiddleware",
-    "reflex_django.django_dev_middleware.DevViteProxyHostMiddleware",
-    # ...
-]
-```
-
-#### `EnsureRequestBodyAttrsMiddleware`
-
-Reflex and the event bridge sometimes create synthetic requests without Django 6’s `_body` / `_read_started` attributes. This middleware sets them **only when there is no request body** (`CONTENT_LENGTH` is 0).
-
-> **Important:** It must **not** set `_body = b""` on real POSTs (admin saves, forms). Doing so breaks CSRF verification and form parsing.
-
-#### `DevViteProxyHostMiddleware`
-
-When the Vite proxy does not send `X-Forwarded-Host`, Django would see `Host: localhost:8000` while the browser is on `:3000`. Admin forms and CSRF cookies would target the wrong origin.
-
-This middleware copies `Origin` or `Referer` into `HTTP_X_FORWARDED_HOST` / `HTTP_X_FORWARDED_PROTO` for local hosts (`localhost`, `127.0.0.1`, `[::1]`).
-
-Requires:
-
-```python
-USE_X_FORWARDED_HOST = True
-```
-
-#### CSRF trusted origins
-
-Django 4+ compares the `Origin` header to `CSRF_TRUSTED_ORIGINS` **exactly** (scheme + host + port). Include **both** backend and frontend dev URLs:
-
-```python
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-```
-
-Extra origins can be appended via the `CSRF_TRUSTED_ORIGINS` environment variable (comma-separated).
+If you hit either of those, you'll likely see **"Reflex SPA bundle not found"** or a static-asset reload loop. Use `run_reflex` instead.
 
 ---
 
-## Example: development settings snippet
+## Configuring ports
+
+Set ports in `reflex_mount()` — they propagate everywhere automatically:
 
 ```python
-# settings/dev.py (or base/dev.py)
+urlpatterns += [
+    reflex_mount(
+        app_name="myapp",
+        django_prefix=("/admin", "/api"),
+        rx_config={"frontend_port": 3000, "backend_port": 8000},
+    ),
+]
+```
+
+Optional overrides in development settings:
+
+```python
+REFLEX_DJANGO_DEV_PROXY = True
+REFLEX_DJANGO_FRONTEND_PORT = 3000
+REFLEX_DJANGO_BACKEND_PORT = 8000
+```
+
+Or via environment variables: `REFLEX_DJANGO_FRONTEND_PORT`, `REFLEX_DJANGO_BACKEND_PORT`.
+
+---
+
+## Django dev middleware (recommended)
+
+Even though you browse `:8000`, keep the dev middleware in your **development** settings. It helps when tools or proxies forward requests with unusual `Host` headers:
+
+```python
 from reflex_django.django_dev_middleware import DEFAULT_DEV_MIDDLEWARE
 
 DEBUG = True
@@ -114,32 +107,95 @@ USE_X_FORWARDED_HOST = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:3000",
+    "http://localhost:3000",   # harmless to keep for legacy / tooling
     "http://127.0.0.1:3000",
 ]
 
 MIDDLEWARE = [
     *DEFAULT_DEV_MIDDLEWARE,
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    # ...
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    # ... your existing middleware ...
 ]
 ```
 
-Keep `AsyncStreamingMiddleware` **last**. Dev middleware belongs **first** (before CSRF/session).
+### What the middleware does
+
+| Middleware | Purpose |
+|:---|:---|
+| `EnsureRequestBodyAttrsMiddleware` | Sets Django 6 `_body` / `_read_started` on synthetic requests — only when there is no POST body |
+| `DevViteProxyHostMiddleware` | Copies `Origin` / `Referer` into forwarded-host headers for local hosts |
+
+> **Important:** `EnsureRequestBodyAttrsMiddleware` must **not** blank out real POST bodies — that breaks admin saves and CSRF.
+
+---
+
+## Frontend stability patches
+
+After each compile, **reflex-django** patches `.web` to prevent common browser errors:
+
+| File | Change |
+|:---|:---|
+| `utils/context.js` | Safe `EventLoopContext` default |
+| `utils/components/*.jsx`, `app/root.jsx` | Guarded `useContext` (no destructuring on `null`) |
+| `vite.config.js` | `resolve.dedupe`, `strictPort: true` |
+
+Look for a log line like:
+
+```text
+reflex-django applied frontend stability patches: N files (e.g. utils/context.js, …)
+```
+
+In DJANGO_OUTER mode, reflex-django also **removes** stale Vite→Django proxy rules from `.web/` — those caused request loops when browsing `:8000`.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | What to check |
-|:---|:---|
-| Admin **403 CSRF** on `:3000` | `CSRF_TRUSTED_ORIGINS` includes `http://localhost:3000`; `USE_X_FORWARDED_HOST = True`; `DevViteProxyHostMiddleware` early in `MIDDLEWARE`; no middleware forcing empty `_body` on POST |
-| Admin works on `:8000` but not `:3000` | Vite proxy present in `.web/vite.config.js`; restart `run_reflex` |
-| `useContext is not a function` / **not iterable** | Restart dev server after compile; confirm `reflex-django` `post_compile` ran (log mentions stability patches); hard-refresh browser; clear `.web/node_modules/.vite` if needed |
-| `Could not read … react/index.js/jsx-runtime` | Remove manual Vite aliases that map `react` to `index.js`; use **dedupe only** (reflex-django no longer adds file aliases) |
-| `/admin` 404 on `:3000` | Re-run `run_reflex`; check `django_prefix` in `reflex_mount()` matches real URL prefixes |
+### "Reflex SPA bundle not found"
+
+The dev proxy is off and there's no compiled bundle on disk. Common causes:
+
+- You started `runserver` or bare `uvicorn` instead of `run_reflex`
+- A previous run disabled the proxy (`REFLEX_DJANGO_DEV_PROXY=0`)
+- Vite never started
+
+**Fix:** stop any stale servers, then:
+
+```bash
+python manage.py run_reflex
+```
+
+Open `http://localhost:8000/`.
+
+### Port 3000 is already in use
+
+`run_reflex` will tell you explicitly. Another Vite or `run_reflex` instance is probably still running.
+
+**Fix (Windows):**
+
+```powershell
+netstat -ano | findstr ":3000"
+Stop-Process -Id <PID> -Force
+```
+
+Then restart `run_reflex`.
+
+### Static files reloading forever on `:8000`
+
+Usually means Django fell back to a stale disk bundle while Vite wasn't reachable, or old bidirectional proxy rules were still in `.web/`.
+
+**Fix:** stop all dev servers, delete `.web/vite-plugin-reflex-django-proxy.js` if it exists, restart `run_reflex` (it regenerates a clean `.web/`).
+
+### Admin 403 CSRF
+
+Include both `:8000` and `:3000` in `CSRF_TRUSTED_ORIGINS`, set `USE_X_FORWARDED_HOST = True`, and put `DEFAULT_DEV_MIDDLEWARE` at the top of `MIDDLEWARE`.
+
+### `useContext is not a function or its return value is not iterable`
+
+Restart `run_reflex` after compile, hard-refresh the browser (Ctrl+Shift+R), and confirm the stability-patch log line appeared. Do not add Vite aliases that map `react` to `react/index.js`.
+
+### Backend changes not showing up
+
+Expected in the default Vite mode — the ASGI server stays up for HMR. Restart `run_reflex` after editing states, event handlers, or models.
 
 ---
 
@@ -155,4 +211,10 @@ Dev middleware does **not** replace the event bridge. For middleware on button c
 
 ---
 
-**See also:** [FAQ — development](faq.md#development-vite-port-and-csrf) · [Public API — dev middleware](public_api.md#django-http-dev-middleware) · [Settings reference](settings_reference.md)
+## Legacy two-port mode (`reflex_led`)
+
+If you intentionally set `REFLEX_DJANGO_URL_ROUTING=reflex_led`, you open `http://localhost:3000/` and Vite proxies Django prefixes to `:8000`. That layout injects Vite `server.proxy` rules during compile. **Do not mix** this with the DJANGO_OUTER workflow — pick one routing mode and stick with it.
+
+---
+
+**See also:** [CLI — `run_reflex`](cli.md) · [FAQ — development](faq.md#development-vite-port-and-csrf) · [Settings reference](settings_reference.md)

@@ -23,6 +23,38 @@ from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger("reflex_django.dev_proxy")
 
+_DEV_PROXY_ENV = "REFLEX_DJANGO_DEV_PROXY"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def dev_uses_separate_ports() -> bool:
+    """Return True when the browser should use Vite (:3000) and :8000 is backend-only.
+
+    Matches the native Reflex dev layout: frontend on the Vite port, Django admin/API
+    and Reflex Socket.IO on the backend port (proxied from Vite). The Django catch-all
+    does **not** reverse-proxy the SPA in this mode.
+    """
+    env = os.environ.get("REFLEX_DJANGO_SEPARATE_DEV_PORTS")
+    if env is not None:
+        return str(env).strip().lower() not in {"0", "false", "no"}
+    try:
+        from django.conf import settings
+
+        return bool(getattr(settings, "REFLEX_DJANGO_SEPARATE_DEV_PORTS", False))
+    except Exception:
+        return False
+
+
+def dev_proxy_explicitly_enabled() -> bool:
+    """Return True only when ``REFLEX_DJANGO_DEV_PROXY`` is explicitly truthy.
+
+    ``manage.py run_reflex`` sets this in its Vite loop so the startup probe
+    trusts it (Vite may still be booting). A proxy that is on merely because
+    ``DEBUG=True`` is *not* "explicit" and remains subject to the probe.
+    """
+    return str(os.environ.get(_DEV_PROXY_ENV, "")).strip().lower() in _TRUTHY
+
+
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
@@ -45,10 +77,30 @@ _HOP_BY_HOP = frozenset(
 
 
 def _resolve_frontend_port_from_config() -> int | None:
-    """Return the Reflex frontend port from ``rx.Config`` or env, when available."""
+    """Return the Reflex frontend port from env, settings, mount registry, or ``rx.Config``."""
     env_port = os.environ.get("REFLEX_DJANGO_FRONTEND_PORT")
     if env_port and env_port.isdigit():
         return int(env_port)
+    try:
+        from django.conf import settings
+
+        setting_port = getattr(settings, "REFLEX_DJANGO_FRONTEND_PORT", None)
+        if isinstance(setting_port, int) and setting_port > 0:
+            return setting_port
+    except Exception:
+        pass
+    try:
+        from reflex_django.mount_config import (
+            ensure_mount_config_loaded,
+            get_merged_mount_rx_config,
+        )
+
+        ensure_mount_config_loaded()
+        mount_port = get_merged_mount_rx_config().rx_config.get("frontend_port")
+        if isinstance(mount_port, int) and mount_port > 0:
+            return mount_port
+    except Exception:
+        pass
     try:
         from reflex_base.config import get_config
 
@@ -83,6 +135,8 @@ def _dev_vite_target_or_none() -> str | None:
     }:
         return None
     if not getattr(settings, "REFLEX_DJANGO_DEV_PROXY", True):
+        return None
+    if dev_uses_separate_ports():
         return None
 
     port = _resolve_frontend_port_from_config()
@@ -271,6 +325,8 @@ async def proxy_websocket_to_vite(scope: Any, receive: Any, send: Any) -> None:
 __all__ = [
     "_dev_vite_target_or_none",
     "_resolve_frontend_port_from_config",
+    "dev_proxy_explicitly_enabled",
+    "dev_uses_separate_ports",
     "proxy_websocket_to_vite",
     "reverse_proxy_to_vite",
 ]

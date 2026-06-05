@@ -226,6 +226,12 @@ REFLEX_DJANGO_MIRROR_LANGUAGE: bool = True
 # to serve the compiled SPA directly even in DEBUG.
 REFLEX_DJANGO_DEV_PROXY: bool = True
 
+# When True, dev mode matches native Reflex: open the Vite port (default 3000) for
+# the SPA; the backend port (default 8000) serves Django + Reflex endpoints only.
+# ``manage.py run_reflex`` enables this by default; pass ``--single-port`` for the
+# alternative (browse the backend port, Django reverse-proxies Vite).
+REFLEX_DJANGO_SEPARATE_DEV_PORTS: bool = False
+
 # When True (default), Django's catch-all view runs the Reflex SPA's
 # ``index.html`` through Django's template engine with
 # :class:`~django.template.RequestContext`. This makes ``{{ request.user }}``,

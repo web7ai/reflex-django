@@ -48,7 +48,7 @@ MIDDLEWARE = [
 
 The streaming middleware needs to be **last**. It's there to keep Django's admin streaming responses ASGI-safe; it does nothing under WSGI. ([Details](async_streaming_middleware.md).)
 
-If you use the Vite dev URL (`http://localhost:3000/admin/`), also prepend the dev middleware and CSRF origins — see [Local development](local_development.md):
+For local dev (browse `http://localhost:8000/admin/`), prepend the dev middleware and CSRF origins — see [Local development](local_development.md):
 
 ```python
 # settings/dev.py (recommended)
@@ -167,11 +167,13 @@ python manage.py migrate   # if you have new migrations
 python manage.py run_reflex
 ```
 
-Open `http://localhost:3000/` (the Vite dev server, with hot reload):
+Open **`http://localhost:8000/`** (single dev URL):
 
-- `http://localhost:3000/admin/` — your admin, unchanged.
-- `http://localhost:3000/api/...` — your existing API, unchanged.
-- `http://localhost:3000/catalog` — your new Reflex page.
+- `http://localhost:8000/admin/` — your admin, unchanged.
+- `http://localhost:8000/api/...` — your existing API, unchanged.
+- `http://localhost:8000/catalog` — your new Reflex page.
+
+Vite runs on `:3000` in the background for hot reload — you don't need to browse there.
 
 Your existing tests, management commands, and migrations all keep working.
 

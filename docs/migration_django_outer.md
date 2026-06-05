@@ -254,7 +254,7 @@ The legacy mode is supported for backwards compatibility. New projects should us
 
 After migrating, walk through these and make sure each one is true:
 
-- [ ] `python manage.py run_reflex` starts without errors and you can open `http://localhost:3000/` (the Vite dev server, with hot reload).
+- [ ] `python manage.py run_reflex` starts without errors and you can open `http://localhost:8000/` (single dev URL; Vite hot-reloads on `:3000` behind the scenes).
 - [ ] `/admin/` works and you can log in.
 - [ ] After logging in at `/admin/`, a Reflex page that uses `self.request.user.is_authenticated` reports `True`.
 - [ ] A custom Django middleware you previously had (if any) shows its effects inside a Reflex event handler.

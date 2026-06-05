@@ -140,18 +140,7 @@ def _maybe_auto_export_spa() -> None:
         )
 
 
-_DEV_PROXY_ENV = "REFLEX_DJANGO_DEV_PROXY"
-_TRUTHY = frozenset({"1", "true", "yes", "on"})
-
-
-def _dev_proxy_explicitly_enabled() -> bool:
-    """Return True only when ``REFLEX_DJANGO_DEV_PROXY`` is explicitly truthy.
-
-    ``manage.py run_reflex`` sets this in its Vite loop so the startup probe
-    trusts it (Vite may still be booting). A proxy that is on merely because
-    ``DEBUG=True`` is *not* "explicit" and remains subject to the probe.
-    """
-    return str(os.environ.get(_DEV_PROXY_ENV, "")).strip().lower() in _TRUTHY
+from reflex_django.dev_proxy import dev_proxy_explicitly_enabled as _dev_proxy_explicitly_enabled
 
 
 def _vite_target_reachable(target: str, timeout: float = 0.5) -> bool:
@@ -194,7 +183,7 @@ def _maybe_disable_dev_proxy_without_vite() -> None:
     if _vite_target_reachable(target):
         return
 
-    os.environ[_DEV_PROXY_ENV] = "0"
+    os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
     logger.warning(
         "reflex-django: dev proxy is on (DEBUG=True) but no Vite dev server is "
         "reachable at %s; serving the compiled SPA from disk for this process "

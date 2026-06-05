@@ -27,17 +27,20 @@ Nothing changes about those.
 
 ## `manage.py run_reflex` — the dev server
 
-This is the one you'll run all day. By default it does three things:
+This is the one you'll run all day. By default it does four things:
 
-1. **Start Vite** for hot-module reload on port `3000` — this is the URL you open in dev.
-2. **Start uvicorn** as a subprocess on port 8000 (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`. It boots **once** and stays up; it serves the admin, API, and the Reflex WebSocket.
-3. **Watch** the Reflex source for `.py` changes. Each change recompiles the SPA into `.web` and Vite **hot-reloads only the frontend** — the backend is not restarted.
+1. **Compile** the Reflex SPA into `.web/`
+2. **Start Vite** for hot-module reload on port `3000` (background — you don't browse to it)
+3. **Wait** until Vite is serving the SPA, then **start uvicorn** on port `8000` (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`
+4. **Watch** the Reflex source for `.py` changes. Each change recompiles the SPA into `.web` and Vite **hot-reloads only the frontend** — the backend is not restarted
 
 ```bash
 python manage.py run_reflex
 ```
 
-That's the default. Open `http://localhost:3000/` for the live, hot-reloading dev app: the SPA at `/`, your admin at `/admin/`, and the Reflex WebSocket on `/_event` are all reachable there, sharing Django's cookies and session (the backend runs on port `8000` behind it). In production there's no Vite — you serve the compiled SPA from your ASGI server on one port (see [Deployment](deployment.md)).
+That's the default. Open **`http://localhost:8000/`** — one URL for everything: the SPA at `/`, your admin at `/admin/`, your API, and the Reflex WebSocket on `/_event`, all on the same origin with shared cookies and session. Django reverse-proxies SPA traffic to Vite on `:3000` behind the scenes.
+
+In production there's no Vite — you serve the compiled SPA from your ASGI server on one port (see [Deployment](deployment.md)).
 
 Because the backend stays up, edits to **states, event handlers, or other server-side Python** won't take effect until you restart the command (Ctrl+C and re-run, or save again after restarting). Pure UI/page edits hot-reload instantly. If you'd rather have the backend auto-rebuild and serve a compiled bundle from disk (no Node, no HMR), use `--from-build`.
 
@@ -75,12 +78,15 @@ python manage.py run_reflex --from-build --frontend-only
 ```text
 1. install_reflex_django_integration()
      - configures Django, patches reflex.config.get_config, builds in-memory rxconfig
-2. Vite dev server (frontend runner subprocess)
-     - compiles .web once, runs `vite dev` on the frontend port
+2. Check frontend port is free (fail fast if :3000 is already taken)
+3. Vite dev server (frontend runner subprocess)
+     - compiles .web once, runs `vite dev` on the frontend port (strictPort: true)
      - watches the Reflex source: on .py change, recompiles .web in a fresh
        interpreter so Vite hot-reloads the frontend
-3. uvicorn subprocess
+4. Wait until Vite serves the SPA (HTTP probe, not just TCP)
+5. uvicorn subprocess
      reflex_django.asgi_entry:application on port 8000 — boots once, stays up
+     Django reverse-proxies SPA routes to Vite; Reflex WebSocket on /_event
 ```
 
 With `--from-build` instead:
@@ -101,8 +107,11 @@ Open the browser, the page loads, the WebSocket connects, you're in.
 **"DJANGO_SETTINGS_MODULE not set"**
 Set it in your shell: `export DJANGO_SETTINGS_MODULE=config.settings`. The auto-discovery via `manage.py` usually catches this, but if it can't, set it explicitly.
 
-**"Could not find compiled SPA"**
-The build hasn't run yet, or `STATIC_ROOT` isn't writable. Run `python manage.py run_reflex` once without `--skip-rebuild`.
+**"Could not find compiled SPA" / "Reflex SPA bundle not found"**
+You're probably not running `run_reflex` (e.g. `runserver` or bare `uvicorn`), or Vite didn't start. Use `python manage.py run_reflex` and open `http://localhost:8000/`. If port `3000` is busy, free it first — see [Local development](local_development.md#troubleshooting).
+
+**"Port 3000 is already in use"**
+Stop the other dev server (`netstat` / Task Manager), then re-run `run_reflex`.
 
 **Restart loop on every file**
 You're probably saving files in a watched directory that gets modified by the rebuild itself (`.web/`). Make sure your editor's "save" doesn't also touch generated files.

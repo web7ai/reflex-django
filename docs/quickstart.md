@@ -312,10 +312,12 @@ The first time, this will:
 2. Start `uvicorn` on port 8000 (the backend) and the Vite dev server on port 3000 (the frontend, with hot reload).
 3. Watch your Python files for changes and hot-reload the frontend on edit.
 
-Open it (the Vite dev server — hot reload on save):
+Open it:
 
-- `http://localhost:3000/` — the todo page.
-- `http://localhost:3000/admin/` — the Django admin (log in with the superuser you created).
+- `http://localhost:8000/` — the todo page.
+- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created).
+
+(Vite hot-reloads on port `3000` behind the scenes — you only need the `:8000` URL.)
 
 Try this flow:
 

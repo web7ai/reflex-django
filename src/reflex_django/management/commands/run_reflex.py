@@ -121,6 +121,16 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--single-port",
+            action="store_true",
+            dest="single_port",
+            help=(
+                "Browse the backend port for the SPA (Django reverse-proxies Vite). "
+                "Default dev mode uses two ports like native Reflex: UI on the "
+                "frontend port, backend on the ASGI port."
+            ),
+        )
+        parser.add_argument(
             "reflex_args",
             nargs="*",
             help="Additional arguments forwarded to ``reflex run`` (prefix with --).",
@@ -293,23 +303,38 @@ class Command(BaseCommand):
 
         vite_proc: subprocess.Popen[bytes] | None = None
         if vite_active:
-            # Force the dev proxy ON for the in-process ASGI server. This is
-            # the signal the asgi_entry startup probe trusts: it skips its
-            # "is Vite reachable?" check so it never disables the proxy while
-            # Vite is still booting (the probe only fires for a *bare* ASGI
-            # boot where the proxy is on solely by the DEBUG default).
-            os.environ["REFLEX_DJANGO_DEV_PROXY"] = "1"
+            single_port = bool(options.get("single_port"))
+            if single_port:
+                os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "0"
+                os.environ["REFLEX_DJANGO_DEV_PROXY"] = "1"
+            else:
+                os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
+                os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+            self._ensure_frontend_port_free(frontend_port)
             vite_proc = self._spawn_vite_background(
                 frontend_port, watch=watch_frontend
             )
-            self.stdout.write(
-                self.style.NOTICE(
-                    f"reflex-django: Vite started on port {frontend_port} "
-                    f"(reverse-proxied by Django on port {backend_port}).\n"
-                    "    Frontend edits hot-reload via Vite; the backend stays "
-                    "up and does not auto-restart."
+            self._wait_for_vite_ready(frontend_port, vite_proc=vite_proc)
+            if single_port:
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f"reflex-django: Vite ready on port {frontend_port} "
+                        f"(reverse-proxied by Django on port {backend_port}).\n"
+                        "    Open http://localhost:"
+                        f"{backend_port}/ — frontend edits hot-reload via Vite; "
+                        "the backend stays up and does not auto-restart."
+                    )
                 )
-            )
+            else:
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f"reflex-django: two-port dev (native Reflex layout).\n"
+                        f"    UI + hot reload: http://localhost:{frontend_port}/\n"
+                        f"    Django + Reflex backend: http://localhost:{backend_port}/ "
+                        f"(admin, API, /_event — not the SPA shell).\n"
+                        "    Pass --single-port to browse only the backend port."
+                    )
+                )
         elif is_prod:
             self.stdout.write(
                 self.style.SUCCESS(
@@ -508,6 +533,82 @@ class Command(BaseCommand):
                 "    python manage.py collectstatic --noinput\n"
                 "Or run without `--env prod` for dev mode (Vite-proxied)."
             )
+        )
+
+    def _ensure_frontend_port_free(self, frontend_port: int) -> None:
+        """Fail fast when another process already owns the Vite port."""
+        import socket
+
+        host = os.environ.get("REFLEX_DJANGO_FRONTEND_HOST", "127.0.0.1")
+        try:
+            with socket.create_connection((host, frontend_port), timeout=0.5):
+                occupied = True
+        except OSError:
+            occupied = False
+        if occupied:
+            raise CommandError(
+                f"reflex-django: port {frontend_port} is already in use. "
+                "Stop the other dev server (an old Vite or `run_reflex` "
+                "instance) and re-run `python manage.py run_reflex`."
+            )
+
+    @staticmethod
+    def _vite_http_ready(target: str) -> bool:
+        """Return True when *target* serves a Vite/React SPA root document."""
+        from reflex_django.asgi_entry import _vite_target_reachable
+
+        if not _vite_target_reachable(target):
+            return False
+        try:
+            import httpx
+
+            response = httpx.get(f"{target.rstrip('/')}/", timeout=2.0)
+        except Exception:  # noqa: BLE001
+            return False
+        if response.status_code != 200:
+            return False
+        body = response.text.lower()
+        return any(
+            marker in body
+            for marker in ("react-router", "@vite", "modulepreload", "vite/client")
+        )
+
+    def _wait_for_vite_ready(
+        self,
+        frontend_port: int,
+        *,
+        vite_proc: subprocess.Popen[bytes],
+        timeout: float = 120.0,
+        poll_interval: float = 0.5,
+    ) -> None:
+        """Block until Vite serves the SPA on the expected port."""
+        host = os.environ.get("REFLEX_DJANGO_FRONTEND_HOST", "127.0.0.1")
+        target = f"http://{host}:{frontend_port}"
+        deadline = time.monotonic() + timeout
+        announced = False
+
+        while time.monotonic() < deadline:
+            if vite_proc.poll() is not None:
+                raise CommandError(
+                    f"reflex-django: Vite subprocess exited before becoming "
+                    f"ready on port {frontend_port}. Check the Vite logs above."
+                )
+            if self._vite_http_ready(target):
+                return
+            if not announced:
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f"reflex-django: waiting for Vite on port {frontend_port}..."
+                    )
+                )
+                announced = True
+            time.sleep(poll_interval)
+
+        raise CommandError(
+            f"reflex-django: timed out after {timeout:.0f}s waiting for Vite "
+            f"on port {frontend_port}. Ensure Node/Bun is installed, port "
+            f"{frontend_port} is free, and no stale Vite process is running, "
+            "then re-run `python manage.py run_reflex`."
         )
 
     def _spawn_vite_background(

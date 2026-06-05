@@ -67,10 +67,10 @@ python manage.py run_reflex
 One command starts **both** your Django backend and the Reflex frontend together. For development, open:
 
 ```text
-http://localhost:3000/
+http://localhost:8000/
 ```
 
-That's the Vite dev server, and it's where you get **instant hot reload**: edit a page in `views.py`, hit save, and the browser updates in place — no manual restart, no lost state. Your reactive UI is at `/`, the Django admin at `/admin/`, and the Reflex WebSocket on `/_event` — all reachable from that one URL, sharing the same cookies and session (Django runs the backend on port `8000` behind it). Backend/state edits are picked up on the next run.
+That's your **single dev URL**. Django listens on port `8000` and quietly reverse-proxies the SPA to Vite on port `3000` (hot reload still works — you just don't browse to `:3000` yourself). Your reactive UI is at `/`, the Django admin at `/admin/`, your API at `/api/`, and the Reflex WebSocket on `/_event` — all on the same origin, sharing cookies and session. Edit a page in `views.py`, save, and the browser updates in place. Backend/state edits are picked up when you restart `run_reflex`.
 
 > In production there's no Vite: you build the SPA and serve everything from your ASGI server on a single port. See [Deployment](deployment.md).
 
@@ -115,7 +115,7 @@ Then drop into the build guides when you actually need them — CRUD pages, form
 | I want to… | Read |
 |:---|:---|
 | Configure ports, app name, prefixes | [Configuration](configuration.md) |
-| Dev on `:3000`, admin CSRF, `useContext` errors | [Local development](local_development.md) |
+| Dev on `:8000`, ports, admin CSRF, `useContext` errors | [Local development](local_development.md) |
 | Put pages next to my Django models | [Pages live in views.py](pages_in_views.md) |
 | Read `request.user` inside a button handler | [AppState: your bridge to Django](state_management.md) |
 | Build a list/edit/delete page fast | [CRUD with ModelState](reactive_model_state.md) |

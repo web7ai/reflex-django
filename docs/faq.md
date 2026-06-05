@@ -339,13 +339,19 @@ If those fit your needs, use them. They're great for adding selective interactiv
 
 ## Development (Vite port and CSRF)
 
-### Why do I open `localhost:3000` instead of `8000`?
+### Which URL do I open in dev — `localhost:8000` or `3000`?
 
-`run_reflex` starts Vite on the frontend port (default **3000**) for hot reload and proxies Django routes to the backend on **8000**. Same cookies and session when configured correctly. Full setup: [Local development](local_development.md).
+**`http://localhost:8000/`** (the backend port). That's the default in DJANGO_OUTER mode: Django listens on `:8000` and reverse-proxies the SPA to Vite on `:3000` for hot reload. You get one origin for pages, admin, API, and `/_event`.
 
-### Django admin returns 403 CSRF on port 3000
+Vite on `:3000` is internal — you don't need to browse there unless you're on the legacy two-port layout (`reflex_led`). Full setup: [Local development](local_development.md).
 
-Add both `:3000` and `:8000` to `CSRF_TRUSTED_ORIGINS`, set `USE_X_FORWARDED_HOST = True`, and put `reflex_django.django_dev_middleware.DEFAULT_DEV_MIDDLEWARE` at the top of `MIDDLEWARE` in dev settings. See [Local development](local_development.md).
+### "Reflex SPA bundle not found" on `:8000`
+
+The dev proxy is off and there's no compiled bundle. Start dev with `python manage.py run_reflex` (not `runserver`). If port `3000` is already taken, free it and restart. See [Local development — troubleshooting](local_development.md#troubleshooting).
+
+### Django admin returns 403 CSRF
+
+Add both `:8000` and `:3000` to `CSRF_TRUSTED_ORIGINS`, set `USE_X_FORWARDED_HOST = True`, and put `reflex_django.django_dev_middleware.DEFAULT_DEV_MIDDLEWARE` at the top of `MIDDLEWARE` in dev settings. See [Local development](local_development.md).
 
 ### `useContext is not a function or its return value is not iterable`
 
