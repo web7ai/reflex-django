@@ -196,9 +196,8 @@ Anything you stuck on `request` from custom middleware (`request.tenant`, `reque
 Running the full middleware chain on every event isn't free. For high-frequency states (telemetry, live cursor updates), you can:
 
 1. Move the state to a `rx.State` subclass (skip `AppState` and its refresh).
-2. Set `load_context_processors = False` on `ModelState` subclasses ([details](django_context_to_reflex.md)).
-3. Skip specific middleware via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
-4. As a last resort, set `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
+2. Skip specific middleware via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+3. As a last resort, set `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
 
 For normal apps, the per-event overhead is small (a few microseconds for session and auth lookups, milliseconds if your custom middleware does I/O).
 
@@ -230,7 +229,7 @@ The proxy delegates to the same per-event request the bridge built.
 - Two middleware are skipped on events (CSRF, async streaming) — configurable.
 - 3xx redirects from middleware become `rx.redirect(...)` automatically.
 - Exceptions from middleware skip the handler and toast an error.
-- Disable per-class with `load_context_processors = False`, globally with `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
+- Disable globally with `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
 - Anything you put on `request.*` in custom middleware shows up on `self.request.*` in handlers.
 
 ---

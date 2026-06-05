@@ -66,9 +66,6 @@ def test_preprocess_binds_handler_substate() -> None:
     ) as bind_mock, mock.patch(
         "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
         new=mock.AsyncMock(),
-    ), mock.patch(
-        "reflex_django.state.auth_bridge.maybe_sync_django_context_state",
-        new=mock.AsyncMock(),
     ), mock.patch.object(
         HomeState,
         "get_state",

@@ -487,11 +487,6 @@ async def bridge_request_for_state(
     # ``self.user`` / ``self.request.user`` without a SynchronousOnlyOperation.
     await _eagerly_resolve_lazy_user(request)
 
-    try:
-        await _attach_reflex_context(request)
-    except Exception:
-        pass
-
     return request, response
 
 
@@ -517,28 +512,6 @@ async def bind_django_request_for_handler_state(
             begin_event_request(http)
             begin_event_response(response)
     bind_request_on_state(handler_state, http)
-
-
-async def _attach_reflex_context(request: HttpRequest) -> None:
-    """Run configured context processors and cache JSON-safe output on ``request``.
-
-    Controlled by ``REFLEX_DJANGO_AUTO_LOAD_CONTEXT`` (default ``True``). When
-    enabled, runs on every bridged event so handlers can use ``self.request`` /
-    ``self.django_context`` without calling :meth:`~reflex_django.states.AppState.load_django_context`.
-    """
-    from django.conf import settings
-
-    from reflex_django.context import set_request_reflex_context
-    from reflex_django.reflex_context import (
-        collect_reflex_context,
-        reflex_context_processor_paths,
-    )
-
-    auto_load = getattr(settings, "REFLEX_DJANGO_AUTO_LOAD_CONTEXT", True)
-    if not auto_load and not reflex_context_processor_paths():
-        return
-    merged = await collect_reflex_context(request)
-    set_request_reflex_context(request, merged)
 
 
 class DjangoEventBridge(Middleware):
@@ -636,12 +609,6 @@ class DjangoEventBridge(Middleware):
 
                     mirror_auth_cookies_to_state_tree(state, sk)
             await maybe_sync_app_state_auth(
-                state,
-                handler_state_cls=getattr(event, "state_cls", None),
-            )
-            from reflex_django.state.auth_bridge import maybe_sync_django_context_state
-
-            await maybe_sync_django_context_state(
                 state,
                 handler_state_cls=getattr(event, "state_cls", None),
             )

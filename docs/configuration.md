@@ -189,14 +189,6 @@ These control whether Django's per-request data appears as reactive variables on
 | `REFLEX_DJANGO_PAGE_APPS` | `None` | Allowlist of app labels to scan. `None` means "all of them". |
 | `REFLEX_DJANGO_PAGE_MODULE` | `"views"` | Which submodule to import per app. |
 
-### Context processors
-
-| Setting | Default | What it does |
-|:---|:---|:---|
-| `REFLEX_DJANGO_CONTEXT_PROCESSORS` | `()` | Extra context callables to run on every Reflex event. |
-| `REFLEX_DJANGO_AUTO_LOAD_CONTEXT` | `True` | Run context processors automatically. |
-| `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | `True` | Use Django's template context processors when the explicit list is empty. |
-
 ### Reflex runtime (`rx.Config`)
 
 | Setting | Default | What it does |

@@ -54,7 +54,6 @@ class ModelCRUDView(ModelORMMixin, DispatchMixin, LoginRequiredMixin, ABC):
     structured_errors: ClassVar[bool] = False
     # ``run_model_validation`` is Meta-only (see :class:`ModelCRUDMeta`); do not
     # declare it here — a same-named ClassVar shadows :meth:`validate_model_full_clean`.
-    load_context_processors: ClassVar[bool] = True
     reset_after_save: ClassVar[bool] = True
     form_reset_var: ClassVar[str | None] = "form_reset_key"
     use_form_submit: ClassVar[bool] = False

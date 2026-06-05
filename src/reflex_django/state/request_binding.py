@@ -7,7 +7,6 @@ from typing import Any
 from reflex_django.context import (
     current_request,
     current_response,
-    get_request_reflex_context,
 )
 from reflex_django.state.request import DjangoStateRequest
 
@@ -58,7 +57,6 @@ def bind_request_on_state(
         return
     wrapper = DjangoStateRequest(
         http,
-        get_request_reflex_context(http),
         response=response,
     )
     object.__setattr__(target, REQUEST_WRAPPER_ATTR, wrapper)

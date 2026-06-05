@@ -206,7 +206,6 @@ Inside any `@rx.event` method on an `AppState` subclass:
 | `self.csrf_token` | CSRF token for the current request |
 | `self.django_response` | Raw `HttpResponse` (handy for inspecting headers) |
 | `self.resolver_match` | `ResolverMatch` if the path resolves to a Django view |
-| `self.django_context` | Dict of context-processor keys (when `REFLEX_DJANGO_AUTO_LOAD_CONTEXT = True`) |
 
 ### Middleware short-circuits become navigations
 

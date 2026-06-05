@@ -25,7 +25,6 @@ class ModelListView(ListMixin, LoginRequiredMixin, PermissionMixin, ABC):
     login_required_actions: ClassVar[frozenset[str] | None] = None
     permission_classes: ClassVar[tuple[type, ...]] = ()
     backend_class: ClassVar[type | None] = None
-    load_context_processors: ClassVar[bool] = True
     paginate_by: ClassVar[int | None] = None
     max_page_size: ClassVar[int] = 100
     page_var: ClassVar[str] = "page"

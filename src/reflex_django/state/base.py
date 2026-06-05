@@ -39,7 +39,7 @@ class BaseModelState(ABC):
 
     @property
     def request(self) -> Any:
-        """Bridged request + context processors for the current event (not a Reflex var)."""
+        """Bridged request for the current event (not a Reflex var)."""
         try:
             return object.__getattribute__(self, "_rd_request")
         except AttributeError:
@@ -75,15 +75,10 @@ class BaseModelState(ABC):
     async def bind_request_context(self) -> None:
         """Attach :attr:`request` and :attr:`django_request` for this event."""
         from reflex_django.context import current_request
-        from reflex_django.reflex_context import collect_reflex_context
         from reflex_django.state.request import DjangoStateRequest
 
         http_request = current_request()
-        context: dict[str, Any] = {}
-        opts = self.get_options()
-        if http_request is not None and opts.load_context_processors:
-            context = await collect_reflex_context(http_request)
-        wrapper = DjangoStateRequest(http_request, context)
+        wrapper = DjangoStateRequest(http_request)
         object.__setattr__(self, "_rd_request", wrapper)
         object.__setattr__(self, "_rd_django_request", http_request)
 

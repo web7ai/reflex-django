@@ -6,10 +6,6 @@ WebSocket upgrade. :class:`DjangoEventBridge` synthesizes a Django HTTP request
 from that data and stashes it on a :class:`contextvars.ContextVar` so user
 state code can call :func:`current_user`, :func:`current_session`,
 :func:`current_language`, or :func:`current_request` from any event handler.
-
-Template ``TEMPLATES`` context processors can be reused for Reflex (see
-:mod:`reflex_django.reflex_context`), but the active values are still keyed off
-the synthetic request for the current Reflex event, not a template render.
 """
 
 from __future__ import annotations
@@ -22,8 +18,6 @@ if TYPE_CHECKING:
     from django.contrib.sessions.backends.base import SessionBase
     from django.http import HttpRequest, HttpResponse
 
-
-REFLEX_DJANGO_CONTEXT_ATTR = "_reflex_django_context"
 
 _request_var: contextvars.ContextVar[HttpRequest | None] = contextvars.ContextVar(
     "reflex_django.current_request", default=None
@@ -71,21 +65,6 @@ def anonymous_user() -> Any:
 
     return AnonymousUser()
 
-
-def get_request_reflex_context(request: HttpRequest | None) -> dict[str, Any]:
-    """Return context-processor output cached on ``request``, if any."""
-    if request is None:
-        return {}
-    raw = getattr(request, REFLEX_DJANGO_CONTEXT_ATTR, None)
-    return dict(raw) if isinstance(raw, dict) else {}
-
-
-def set_request_reflex_context(
-    request: HttpRequest,
-    context: dict[str, Any],
-) -> None:
-    """Cache merged context-processor output on the synthetic request."""
-    setattr(request, REFLEX_DJANGO_CONTEXT_ATTR, dict(context))
 
 _reset_token_var: contextvars.ContextVar[
     contextvars.Token[HttpRequest | None] | None
@@ -332,7 +311,6 @@ def current_csrf_token() -> str:
 
 
 __all__ = [
-    "REFLEX_DJANGO_CONTEXT_ATTR",
     "anonymous_user",
     "begin_event_request",
     "begin_event_response",
@@ -345,10 +323,8 @@ __all__ = [
     "current_user",
     "end_event_request",
     "end_event_response",
-    "get_request_reflex_context",
     "reset_current_request",
     "reset_current_response",
     "set_current_request",
     "set_current_response",
-    "set_request_reflex_context",
 ]

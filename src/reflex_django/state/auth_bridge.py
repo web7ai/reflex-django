@@ -96,8 +96,8 @@ class AuthBridgeMixin:
 
     @property
     def request(self) -> Any:
-        """Bridged Django request + context processors for the current event."""
-        from reflex_django.context import current_request, get_request_reflex_context
+        """Bridged Django request for the current event."""
+        from reflex_django.context import current_request
         from reflex_django.state.request import DjangoStateRequest
         from reflex_django.state.request_binding import REQUEST_WRAPPER_ATTR
 
@@ -116,14 +116,7 @@ class AuthBridgeMixin:
                 "not in class-level defaults or UI rendering."
             )
             raise RuntimeError(msg)
-        return DjangoStateRequest(http, get_request_reflex_context(http))
-
-    @property
-    def django_context(self) -> dict[str, Any]:
-        """Merged context-processor dict for the current event (read-only copy)."""
-        from reflex_django.context import current_request, get_request_reflex_context
-
-        return get_request_reflex_context(current_request())
+        return DjangoStateRequest(http)
 
     @property
     def django_request(self) -> Any | None:
@@ -284,32 +277,6 @@ class AuthBridgeMixin:
     async def on_permission_denied(self) -> Any:
         """Hook when permission checks fail; override in subclasses."""
         return rx.toast.error("You do not have permission to perform this action.")
-
-    async def load_django_context(self) -> dict[str, Any]:
-        """Re-run context processors and refresh the cached request context.
-
-        Not required on each event when ``REFLEX_DJANGO_AUTO_LOAD_CONTEXT`` is
-        ``True`` (default): :class:`~reflex_django.middleware.DjangoEventBridge`
-        already loads context before your handler runs. Call this only when you
-        need a forced refresh mid-handler.
-
-        Returns:
-            Merged JSON-safe context dict (same keys as ``self.request`` attrs
-            from processors, e.g. template ``auth`` context when enabled).
-        """
-        from reflex_django.context import (
-            current_request,
-            get_request_reflex_context,
-            set_request_reflex_context,
-        )
-        from reflex_django.reflex_context import collect_reflex_context
-
-        http = current_request()
-        if http is None:
-            return {}
-        merged = await collect_reflex_context(http)
-        set_request_reflex_context(http, merged)
-        return merged
 
 
 def _iter_django_user_state_classes() -> Any:
@@ -473,50 +440,6 @@ async def maybe_sync_app_state_auth(
     )
 
 
-async def maybe_sync_django_context_state(
-    state: Any,
-    *,
-    handler_state_cls: type | None = None,
-) -> None:
-    """Copy bridged context onto :class:`~reflex_django.reflex_context.DjangoContextState` substates."""
-    import json
-
-    from django.conf import settings
-
-    if not getattr(settings, "REFLEX_DJANGO_AUTO_LOAD_CONTEXT", True):
-        return
-
-    from reflex_django.context import current_request, get_request_reflex_context
-    from reflex_django.reflex_context import DjangoContextState
-
-    merged = get_request_reflex_context(current_request())
-    payload = json.dumps(merged, indent=2, sort_keys=True, default=str)
-
-    root = state._get_root_state() if hasattr(state, "_get_root_state") else state
-
-    def visit(node: Any) -> None:
-        if isinstance(node, DjangoContextState):
-            node.django_context = merged
-            node.django_context_json = payload
-        substates = getattr(node, "substates", None) or {}
-        if isinstance(substates, dict):
-            for child in substates.values():
-                visit(child)
-
-    if handler_state_cls is not None:
-        if not _is_django_user_handler_cls(handler_state_cls):
-            return
-        try:
-            handler = await root.get_state(handler_state_cls)
-        except Exception:
-            handler = _resolve_substate_node(root, handler_state_cls)
-        if handler is not None:
-            visit(handler)
-        return
-
-    visit(root)
-
-
 __all__ = [
     "AuthBridgeMixin",
     "SessionProxy",
@@ -525,6 +448,5 @@ __all__ = [
     "_sync_auth_snapshots_in_tree",
     "_sync_auth_snapshots_on_handler_branch",
     "maybe_sync_app_state_auth",
-    "maybe_sync_django_context_state",
     "session_async_save",
 ]

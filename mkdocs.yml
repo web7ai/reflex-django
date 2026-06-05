@@ -127,7 +127,6 @@ nav:
     - Model serializers: serializers.md
     - i18n & translations: i18n.md
     - HTTP APIs alongside Reflex: api_integration.md
-    - Using Django context processors: django_context_to_reflex.md
     - Custom middleware in events: django_middleware_to_reflex.md
   - Under the Hood:
     - Architecture overview: architecture.md

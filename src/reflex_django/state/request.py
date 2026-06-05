@@ -16,13 +16,9 @@ def _anonymous_user() -> Any:
 
 
 class DjangoStateRequest:
-    """Per-event view of the bridged Django request, response, and processor context.
+    """Per-event view of the bridged Django request and middleware response.
 
-    Access template-style keys from context processors via attribute lookup
-    (for example ``self.request.LANGUAGE_CODE``). Use :attr:`user` for the live
-    auth user on the synthetic request (not the JSON ``user`` snapshot from
-    processors unless you read ``self.request.context["user"]``).
-
+    Use :attr:`user` for the live auth user on the synthetic request.
     :attr:`response` exposes the :class:`django.http.HttpResponse` produced by
     the ``settings.MIDDLEWARE`` chain for the current event (``None`` if the
     chain is disabled). :attr:`messages` is a JSON-safe list of Django messages
@@ -30,16 +26,14 @@ class DjangoStateRequest:
     bound to the synthetic request (helpful for non-Reflex forms in your SPA).
     """
 
-    __slots__ = ("_http", "_context", "_response")
+    __slots__ = ("_http", "_response")
 
     def __init__(
         self,
         http_request: Any | None,
-        context: dict[str, Any] | None = None,
         response: HttpResponse | None = None,
     ) -> None:
         self._http = http_request
-        self._context = dict(context or {})
         self._response = response
 
     @property
@@ -56,11 +50,6 @@ class DjangoStateRequest:
     def response(self) -> HttpResponse | None:
         """Alias for :attr:`django_response`."""
         return self._response
-
-    @property
-    def context(self) -> dict[str, Any]:
-        """Shallow copy of merged context-processor output."""
-        return dict(self._context)
 
     @property
     def user(self) -> Any:
@@ -90,8 +79,6 @@ class DjangoStateRequest:
         return current_csrf_token()
 
     def __getattr__(self, name: str) -> Any:
-        if name in self._context:
-            return self._context[name]
         if self._http is not None:
             return getattr(self._http, name)
         msg = f"{type(self).__name__!r} has no attribute {name!r}"

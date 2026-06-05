@@ -49,7 +49,6 @@ Inside any `@rx.event async def` method on an `AppState` subclass:
 | `self.resolver_match` | `ResolverMatch` if the path resolved to a Django view. |
 | `self.django_request` | The raw `HttpRequest` (same object as `self.request`, just a different alias). |
 | `self.django_response` | The raw `HttpResponse`. |
-| `self.django_context` | Dict of context-processor keys, if `REFLEX_DJANGO_AUTO_LOAD_CONTEXT` is on. |
 
 ### Reactive variables (also bindable in components)
 

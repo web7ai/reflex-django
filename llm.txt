@@ -83,8 +83,8 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | ASGI | `build_django_asgi`, `make_dispatcher` |
 | Per-event context | **`request`** (`request.user`, `request.session`, `request.GET`, `request.headers`), `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
 | Event middleware | `DjangoEventBridge` |
-| Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState`, `DjangoContextState` |
-| Reflex context dicts | `collect_reflex_context`, `builtin_user_context`, `builtin_i18n_context` |
+| Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState` |
+| Per-event context | `current_user`, `current_session`, `current_request`, `current_messages`, `current_language`, `current_csrf_token` |
 | Auth shortcuts | `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` (`reflex_django.auth.shortcuts`) |
 | Auth decorators | `login_required`, `permission_required` (pages and event handlers; `reflex_django.auth.decorators`) |
 | AppState auth API | `self.user`, `self.session`, `login`, `logout`, `has_perm`, `has_group`, `on_auth_failed`, `on_permission_denied` on `AppState` / `DjangoUserState` |
@@ -122,7 +122,7 @@ Populated from `event.router_data`: `pathname` (+ `?query`), `query` dict, `head
 
 ---
 
-**Submodule extras (not re-exported on the package root):** `reflex_django.reflex_context` also exposes `template_context_processor_paths`, `reflex_context_processor_paths`, and `reflex_context_processors_use_template_sanitization` for tooling or advanced use (`src/reflex_django/reflex_context.py`). **`reflex_django.mixins`** exposes **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
+**Submodule extras (not re-exported on the package root):** **`reflex_django.mixins`** exposes **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
 
 ---
 
@@ -159,8 +159,6 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 |---------|---------|
 | `REFLEX_DJANGO_AUTO_SETTINGS` | `True` in bundled defaults; plugin **warns** that you should use your own settings + stable `SECRET_KEY` for production. |
 | `reflex_mount(admin_prefix=...)` | Admin URL prefix in ``urls.py`` (default ``/admin``); exported to env for workers. |
-| `REFLEX_DJANGO_CONTEXT_PROCESSORS` | Non-empty tuple of dotted callables `(request) -> dict` or async; used **exclusively** by `collect_reflex_context`. You must return **JSON-serializable** dicts. |
-| `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | When `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty and this is `True`, run `TEMPLATES[*].OPTIONS["context_processors"]` with sanitization (see `reflex_context.py`). |
 | `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `login_required` on event handlers when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |
 | `REFLEX_DJANGO_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
 | `EMAIL_BACKEND` / `DEFAULT_FROM_EMAIL` | Required for password-reset emails (console backend OK in dev). |
@@ -180,8 +178,8 @@ Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX
 
 1. **Authorize on the server inside event handlers** using `self.user` / `current_user()`, `require_login_user()`, `await self.has_perm(...)`, or `await auser_has_perm(user, "app.codename")`. Never trust snapshot fields alone for permission checks—they are a **UI snapshot** synchronized to the client.
 2. Use **`@login_required`** and **`@permission_required`** on event handlers to redirect anonymous or unauthorized users.
-3. **`user_snapshot(user)`** (`from reflex_django import user_snapshot`) is for display, logging, or custom processors—not a substitute for live `User` checks on mutations.
-4. Anything assigned to Reflex **`rx.State`** fields that sync to the browser must be **JSON-serializable**. Custom `REFLEX_DJANGO_CONTEXT_PROCESSORS` must not leak secrets or non-JSON objects.
+3. **`user_snapshot(user)`** (`from reflex_django import user_snapshot`) is for display, logging, or custom serializers—not a substitute for live `User` checks on mutations.
+4. Anything assigned to Reflex **`rx.State`** fields that sync to the browser must be **JSON-serializable**.
 5. Prefer **`async def`** event handlers when calling Django’s async APIs (`aget_user` is already used in the bridge for `request.user`).
 
 ---
@@ -391,15 +389,11 @@ Bound at the start of each **`dispatch`** (and list-only **`_load_*`**):
 | `self.django_request` | `current_request()` — synthetic `HttpRequest` |
 | `self.request` | `DjangoStateRequest` wrapper |
 | `self.request.user` | Live `request.user` (use for ORM filters) |
-| `self.request.SOME_KEY` | Merged context-processor output |
-| `self.request.context` | Full processor dict |
 
 ```python
 def get_queryset(self):
     return Note.objects.filter(user=self.request.user)
 ```
-
-`Meta.load_context_processors = False` skips `collect_reflex_context` but still binds the HTTP request.
 
 ### Scoping (no default owner field)
 
@@ -499,7 +493,7 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 ## Testing and advanced use
 
 - Use **`begin_event_request(request)`** / **`end_event_request()`** to bind a synthetic request in tests or advanced flows (normally the bridge does this). Examples: `reflex_django_tests/`.
-- **`collect_reflex_context(request)`** is async; pass `current_request()` inside a bridged event, or `None` for an empty dict.
+- Use **`current_user()`**, **`current_request()`**, **`current_messages()`**, etc. inside bridged handlers for per-event Django context.
 
 ---
 
@@ -523,4 +517,4 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 - `README.md` — full architecture, examples for states, bridges, context processors.
 - `CHANGELOG.md` — version-to-version changes.
 - `RELEASING.md` — maintainer release process.
-- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `auth/`, `auth_state.py`, `i18n_state.py`, `reflex_context.py`, `model.py`, `state/` (ModelCRUDView), `cli.py`.
+- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `auth/`, `auth_state.py`, `i18n_state.py`, `model.py`, `state/` (ModelCRUDView), `cli.py`.

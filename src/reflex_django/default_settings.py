@@ -133,17 +133,6 @@ REFLEX_DJANGO_AUTO_MOUNT = os.environ.get("REFLEX_DJANGO_AUTO_MOUNT", "1") not i
 # Django-led: dotted modules to import so @rx.page / decorators register.
 # REFLEX_DJANGO_PAGE_PACKAGES: list[str] = ["myapp.pages"]
 
-# Reflex-side context (JSON-serializable dicts only). See reflex_django.reflex_context.
-REFLEX_DJANGO_CONTEXT_PROCESSORS: tuple[str, ...] = ()
-
-# When True, DjangoEventBridge runs context processors on every Reflex event
-# (same work as AppState.load_django_context — no manual call needed).
-REFLEX_DJANGO_AUTO_LOAD_CONTEXT: bool = True
-
-# When True and REFLEX_DJANGO_CONTEXT_PROCESSORS is empty, collect_reflex_context
-# runs TEMPLATES[*].OPTIONS["context_processors"] and drops / adapts non-JSON keys.
-REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS: bool = True
-
 # Redirect target for :func:`reflex_django.auth.decorators.login_required` when anonymous.
 REFLEX_DJANGO_LOGIN_URL = "/login"
 

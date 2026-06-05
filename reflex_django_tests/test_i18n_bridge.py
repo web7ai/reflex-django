@@ -10,11 +10,8 @@ from reflex_django.conf import configure_django
 configure_django()
 
 from django.conf import settings  # noqa: E402
-from django.http import HttpRequest  # noqa: E402
 from django.utils import translation  # noqa: E402
-from reflex_django.context import begin_event_request, end_event_request  # noqa: E402
 from reflex_django.middleware import DjangoEventBridge  # noqa: E402
-from reflex_django.reflex_context import builtin_i18n_context  # noqa: E402
 
 
 class _StubEvent:
@@ -83,22 +80,3 @@ def test_preprocess_language_cookie_overrides_accept_language() -> None:
         assert translation.get_language() == "de"
 
     _run_in_fresh_context(_go)
-
-
-def test_builtin_i18n_context_matches_request() -> None:
-    end_event_request()
-    req = HttpRequest()
-    cast(Any, req).method = "GET"
-    cast(Any, req).LANGUAGE_CODE = "de"
-    req.META = {}
-    begin_event_request(req)
-    try:
-        translation.activate("de")
-        ctx = builtin_i18n_context(req)
-        assert ctx["LANGUAGE_CODE"] == "de"
-        assert ctx["LANGUAGE_BIDI"] is False
-        assert ["en", "English"] in ctx["LANGUAGES"]
-        assert ["de", "German"] in ctx["LANGUAGES"]
-    finally:
-        end_event_request()
-        translation.deactivate()

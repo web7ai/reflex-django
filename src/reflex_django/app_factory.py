@@ -442,43 +442,9 @@ def ensure_django_led_app_ready() -> Any:
 def _ensure_runtime_state_classes_registered() -> None:
     """Eagerly import substates that the middleware would otherwise register late.
 
-    Some ``reflex_django`` state classes — most notably
-    :class:`~reflex_django.reflex_context.DjangoContextState` — are exposed via
-    :pep:`562` lazy attribute access on the package and are first imported by
-    :func:`reflex_django.state.auth_bridge.maybe_sync_django_context_state`
-    when the first WebSocket event fires. That late import registers the class
-    as a new substate **after** the Reflex SPA has been compiled, leaving the
-    bundle without a matching React dispatcher entry. The next delta the
-    server sends for the substate then trips
-    ``TypeError: h[<state>] is not a function`` in
-    ``.web/build/client/assets/theme-*.js`` and the page is stuck on the
-    loading skeleton.
-
-    Pre-importing the affected classes here, before Reflex walks the state
-    tree, makes the frontend codegen and the runtime see the same set of
-    substates. Each import is best-effort and gated on the same settings the
-    runtime checks, so disabling a feature (e.g.
-    ``REFLEX_DJANGO_AUTO_LOAD_CONTEXT = False``) still skips the registration.
+    Pre-importing affected classes before Reflex walks the state tree keeps the
+    frontend codegen and runtime in sync (avoids missing dispatcher entries).
     """
-    try:
-        from django.conf import settings
-    except Exception:  # noqa: BLE001 — Django may not be configured yet.
-        return
-
-    if getattr(settings, "REFLEX_DJANGO_AUTO_LOAD_CONTEXT", True) or getattr(
-        settings, "REFLEX_DJANGO_CONTEXT_PROCESSORS", None
-    ):
-        try:
-            from reflex_django.reflex_context import DjangoContextState  # noqa: F401
-        except Exception:  # noqa: BLE001 — never fail boot on optional substates.
-            import logging
-
-            logging.getLogger("reflex_django.app_factory").exception(
-                "Could not pre-register DjangoContextState; the SPA bundle may "
-                "be missing a dispatcher entry and trigger "
-                "`TypeError: h[...] is not a function` on the first delta."
-            )
-
     try:
         from reflex_django.auth.state_builders import get_or_create_django_auth_state
 

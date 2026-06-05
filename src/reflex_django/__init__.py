@@ -76,11 +76,6 @@ if TYPE_CHECKING:
     from reflex_django.request import RequestProxy, request
     from reflex_django.middleware import DjangoEventBridge
     from reflex_django.model import Model
-    from reflex_django.reflex_context import (
-        builtin_i18n_context,
-        builtin_user_context,
-        collect_reflex_context,
-    )
     from reflex_django.session_js import (
         session_cookie_clear_js,
         session_cookie_name_and_suffix,
@@ -105,9 +100,6 @@ __all__ = [
     "build_asgi_application",
     "build_django_asgi",
     "build_django_outer_application",
-    "builtin_i18n_context",
-    "builtin_user_context",
-    "collect_reflex_context",
     "app",
     "configure_django",
     "create_app",
@@ -170,12 +162,6 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "ReflexDjangoAuthError": ("reflex_django.auth.shortcuts", "ReflexDjangoAuthError"),
     "auser_has_perm": ("reflex_django.auth.shortcuts", "auser_has_perm"),
     "begin_event_request": ("reflex_django.context", "begin_event_request"),
-    "builtin_i18n_context": ("reflex_django.reflex_context", "builtin_i18n_context"),
-    "builtin_user_context": ("reflex_django.reflex_context", "builtin_user_context"),
-    "collect_reflex_context": (
-        "reflex_django.reflex_context",
-        "collect_reflex_context",
-    ),
     "current_language": ("reflex_django.context", "current_language"),
     "current_request": ("reflex_django.context", "current_request"),
     "current_session": ("reflex_django.context", "current_session"),

@@ -69,7 +69,6 @@ class ModelStateOptions:
     backend_class: type
     structured_errors: bool
     run_model_validation: bool
-    load_context_processors: bool
     reset_after_save: bool
     form_reset_var: str | None
     use_form_submit: bool
@@ -201,9 +200,6 @@ def resolve_options(
     )
     backend_class = _get_attr(meta, state_cls, "backend_class", DjangoORMBackend)
     run_model_validation = bool(_get_attr(meta, state_cls, "run_model_validation", False))
-    load_context_processors = bool(
-        _get_attr(meta, state_cls, "load_context_processors", True)
-    )
     reset_after_save = bool(_get_attr(meta, state_cls, "reset_after_save", True))
     form_reset_var = _get_attr(meta, state_cls, "form_reset_var", "form_reset_key")
     use_form_submit = bool(_get_attr(meta, state_cls, "use_form_submit", False))
@@ -274,7 +270,6 @@ def resolve_options(
         backend_class=backend_class,
         structured_errors=structured_errors,
         run_model_validation=run_model_validation,
-        load_context_processors=load_context_processors,
         reset_after_save=reset_after_save,
         form_reset_var=form_reset_var,
         use_form_submit=use_form_submit,

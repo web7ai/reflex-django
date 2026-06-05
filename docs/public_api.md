@@ -65,7 +65,6 @@ All State classes are importable from `reflex_django.states`.
 | `ModelListView` | `reflex_django.state` | Read-only `ModelState` variant — list/filter/paginate only. |
 | `DjangoUserState` | `reflex_django.states` | Reactive snapshot of user/session for use in components. |
 | `DjangoAuthState` | `reflex_django.states` | State backing the built-in auth pages. |
-| `DjangoContextState` | `reflex_django.states` | Reactive holder for context-processor output. |
 | `DjangoI18nState` | `reflex_django.states` | Reactive holder for language/i18n data. |
 
 ---
@@ -185,16 +184,6 @@ Post-compile frontend helpers live in `reflex_django.frontend_stability` (called
 | Symbol | Where it lives | What it does |
 |:---|:---|:---|
 | `reflex_django.model.Model` | `reflex_django.model` | Optional `django.db.models.Model` subclass. Uses `BigAutoField` PK by default. Use it or plain `Model`, both fine. |
-
----
-
-## Reflex-context helpers
-
-| Symbol | What it does |
-|:---|:---|
-| `builtin_user_context(request)` | Returns the JSON snapshot of `request.user` used in `self.request.context["user"]`. |
-| `builtin_i18n_context(request)` | Returns the i18n context dict (`LANGUAGE_CODE`, `LANGUAGE_BIDI`). |
-| `collect_reflex_context(request)` | Runs all registered context processors and returns the merged dict. |
 
 ---
 

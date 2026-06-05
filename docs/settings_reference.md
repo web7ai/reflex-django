@@ -129,16 +129,6 @@ These control which Django values appear as reactive variables on `DjangoUserSta
 
 ---
 
-## Context processors
-
-| Setting | Type | Default | Purpose |
-|:---|:---|:---|:---|
-| `REFLEX_DJANGO_AUTO_LOAD_CONTEXT` | `bool` | `True` | Run context processors on every Reflex event. |
-| `REFLEX_DJANGO_CONTEXT_PROCESSORS` | `tuple[str, ...]` | `()` | Dotted paths of `f(request) -> dict` callables. |
-| `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | `bool` | `True` | If `REFLEX_DJANGO_CONTEXT_PROCESSORS` is empty, fall back to Django's template context processors. |
-
----
-
 ## Plugin and rxconfig
 
 | Setting | Type | Default | Purpose |
@@ -188,7 +178,7 @@ REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
 If you're scanning for the first time:
 
 1. Most projects need **zero** of these. The defaults are good.
-2. The first ones you'll touch are usually `REFLEX_DJANGO_AUTH` (built-in login pages) and `REFLEX_DJANGO_CONTEXT_PROCESSORS` (feature flags / site info).
+2. The first setting you'll usually touch is `REFLEX_DJANGO_AUTH` (built-in login pages).
 3. Performance tuning: `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`, then `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN`.
 4. Page layout: `REFLEX_DJANGO_PAGE_PACKAGES` if you want pages outside `INSTALLED_APPS`.
 

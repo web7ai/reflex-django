@@ -206,10 +206,6 @@ def test_load_notes_assigns_serialized_rows() -> None:
                 "reflex_django.auth.shortcuts.require_login_user",
                 return_value=user,
             ),
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(
                 MsNoteSerializer,
@@ -247,10 +243,6 @@ def test_save_note_create_calls_orm() -> None:
             mock.patch(
                 "reflex_django.auth.decorators.current_user",
             ) as cu,
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(_NotesState, "_load_notes", new=mock.AsyncMock()),
         ):
@@ -294,10 +286,6 @@ def test_save_note_update_clears_form() -> None:
             mock.patch(
                 "reflex_django.auth.decorators.current_user",
             ) as cu,
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(_NotesState, "_load_notes", new=mock.AsyncMock()),
         ):
@@ -340,10 +328,6 @@ def test_start_edit_bumps_form_reset_key() -> None:
             mock.patch(
                 "reflex_django.auth.decorators.current_user",
             ) as cu,
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
         ):
             u = mock.Mock()
@@ -379,10 +363,6 @@ def test_save_note_keeps_fields_when_reset_after_save_disabled() -> None:
                 return_value=user,
             ),
             mock.patch("reflex_django.auth.decorators.current_user") as cu,
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(_NoResetState, "_load_notes", new=mock.AsyncMock()),
         ):
@@ -418,10 +398,6 @@ def test_save_note_form_applies_form_data() -> None:
                 return_value=user,
             ),
             mock.patch("reflex_django.auth.decorators.current_user") as cu,
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(_FormSubmitState, "_load_notes", new=mock.AsyncMock()),
         ):
@@ -483,10 +459,6 @@ def test_paginated_load_sets_metadata_and_slice() -> None:
     async def run() -> None:
         with (
             mock.patch("reflex_django.auth.shortcuts.require_login_user", return_value=user),
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(
                 MsNoteSerializer,
@@ -517,10 +489,6 @@ def test_next_page_increments_and_reloads() -> None:
     async def run() -> None:
         with (
             mock.patch("reflex_django.auth.shortcuts.require_login_user", return_value=user),
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(MsNoteSerializer, "adata", new=mock.AsyncMock(return_value=[])),
             mock.patch.object(_PaginatedNotesState, "_load_notes", new=mock.AsyncMock()) as load,
@@ -567,30 +535,23 @@ def test_apply_search_filters_queryset() -> None:
     assert result is filtered
 
 
-def test_bind_request_context_exposes_user_and_processors() -> None:
+def test_bind_request_context_exposes_user() -> None:
     user = mock.Mock(pk=9)
     user.is_authenticated = True
     http = mock.Mock()
     http.user = user
-    merged = {"SITE_NAME": "Acme", "LANGUAGE_CODE": "en"}
+    http.LANGUAGE_CODE = "en"
 
     async def run() -> None:
-        with (
-            mock.patch(
-                "reflex_django.context.current_request",
-                return_value=http,
-            ),
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value=merged),
-            ),
+        with mock.patch(
+            "reflex_django.context.current_request",
+            return_value=http,
         ):
             state = _NotesState()
             await state.bind_request_context()
-            assert state.django_request is http
+            assert object.__getattribute__(state, "_rd_django_request") is http
             assert state.request.user is user
-            assert state.request.SITE_NAME == "Acme"
-            assert state.request.context["LANGUAGE_CODE"] == "en"
+            assert state.request.LANGUAGE_CODE == "en"
             state.teardown("load_list")
             assert object.__getattribute__(state, "_rd_request") is None
             assert object.__getattribute__(state, "_rd_django_request") is None

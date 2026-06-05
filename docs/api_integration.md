@@ -308,4 +308,4 @@ async def my_view(request):
 
 ---
 
-**Next:** [Using Django context processors →](django_context_to_reflex.md)
+**Next:** [Custom middleware in events →](django_middleware_to_reflex.md)

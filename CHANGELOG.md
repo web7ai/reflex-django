@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-05
+
+### Removed (breaking)
+
+- **Reflex event context-processor bridge** — removed `collect_reflex_context`, `DjangoContextState`, `builtin_user_context`, `builtin_i18n_context`, and settings `REFLEX_DJANGO_CONTEXT_PROCESSORS`, `REFLEX_DJANGO_AUTO_LOAD_CONTEXT`, `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS`.
+- **`AppState.django_context`**, **`AppState.load_django_context()`**, **`ModelState.Meta.load_context_processors`**, and **`DjangoStateRequest.context`** (processor-key attribute fallback).
+- Doc page `django_context_to_reflex.md`.
+
+**Migration:** use middleware-backed APIs instead — `self.user` / `current_user()`, `self.messages` / `current_messages()`, `current_language()`, `self.csrf_token` / `current_csrf_token()`. For custom cross-cutting data, use explicit Reflex state vars on `AppState`. Django `TEMPLATES` context processors and SPA shell templating (`REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE`) are unchanged.
+
 ### Added
 
 - **Settings-driven auto-mount** — `REFLEX_DJANGO_AUTO_MOUNT=True` (default) appends the Reflex SPA catch-all to `ROOT_URLCONF` at startup. No `reflex_mount()` line required in `urls.py`.

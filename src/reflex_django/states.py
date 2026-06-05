@@ -7,14 +7,13 @@ This module is the canonical import location for every built-in State class::
         DjangoUserState,
         DjangoAuthState,
         DjangoI18nState,
-        DjangoContextState,
         ModelState,
     )
 
 ``AppState`` and ``DjangoUserState`` are available eagerly. The Django-heavy or
-dynamically built classes (``DjangoAuthState``, ``DjangoContextState``,
-``DjangoI18nState``, ``ModelState``) are resolved lazily on first attribute
-access to avoid circular imports and import-time ``django.setup()`` requirements.
+dynamically built classes (``DjangoAuthState``, ``DjangoI18nState``,
+``ModelState``) are resolved lazily on first attribute access to avoid circular
+imports and import-time ``django.setup()`` requirements.
 """
 
 from __future__ import annotations
@@ -34,14 +33,12 @@ from reflex_django.state.assembly import (
 if TYPE_CHECKING:
     from reflex_django.auth.state import DjangoAuthState
     from reflex_django.i18n_state import DjangoI18nState
-    from reflex_django.reflex_context import DjangoContextState
     from reflex_django.state.model_state import ModelState
 
 __all__ = [
     "AppState",
     "AppStateMeta",
     "DjangoAuthState",
-    "DjangoContextState",
     "DjangoI18nState",
     "DjangoUserState",
     "ModelState",
@@ -49,7 +46,6 @@ __all__ = [
 
 _LAZY_STATES: dict[str, tuple[str, str]] = {
     "DjangoAuthState": ("reflex_django.auth.state", "DjangoAuthState"),
-    "DjangoContextState": ("reflex_django.reflex_context", "DjangoContextState"),
     "DjangoI18nState": ("reflex_django.i18n_state", "DjangoI18nState"),
     "ModelState": ("reflex_django.state.model_state", "ModelState"),
 }
@@ -108,12 +104,11 @@ class AppStateMeta(BaseStateMeta):
 class AppState(DjangoUserState, ABC, metaclass=AppStateMeta):
     """Base Reflex state with Django auth, session, and optional model CRUD.
 
-    **Handlers (server-side):** use :attr:`request`, :attr:`user`, :attr:`session`,
-    and :attr:`django_context` for the live Django objects bound by
-    :class:`~reflex_django.middleware.DjangoEventBridge` on every event (for example
-    ``self.request.user`` in ``on_load``). Context processors run automatically
-    when ``REFLEX_DJANGO_AUTO_LOAD_CONTEXT`` is enabled (default). Call
-    :meth:`login`, :meth:`logout`, :meth:`has_perm`, and :meth:`has_group` inside
+    **Handlers (server-side):** use :attr:`request`, :attr:`user`, and
+    :attr:`session` for the live Django objects bound by
+    :class:`~reflex_django.middleware.DjangoEventBridge` on every event (for
+    example ``self.request.user`` in ``on_load``). Call :meth:`login`,
+    :meth:`logout`, :meth:`has_perm`, and :meth:`has_group` inside
     ``@rx.event`` handlers.
 
     **UI (reactive):** use ``is_authenticated``, ``username``, ``email``,

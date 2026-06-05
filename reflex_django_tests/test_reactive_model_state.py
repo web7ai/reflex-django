@@ -238,10 +238,6 @@ def test_save_update_clears_fields_and_bumps_form_reset_key() -> None:
             mock.patch(
                 "reflex_django.auth.decorators.current_user",
             ) as cu,
-            mock.patch(
-                "reflex_django.reflex_context.collect_reflex_context",
-                new=mock.AsyncMock(return_value={}),
-            ),
             mock.patch.object(RmProduct, "objects") as mgr,
             mock.patch.object(ProductState, "refresh", new=mock.AsyncMock()),
         ):
