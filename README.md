@@ -15,7 +15,7 @@
 
 You love Django — the ORM, the admin, migrations, the way it just *works*. You also want a modern, reactive UI written in Python, not React.
 
-`reflex-django` runs Django and [Reflex](https://reflex.dev) as **one ASGI app on one port**. Configuration lives in `urls.py`. Pages live in `views.py`. The Django session you got from `/admin/login/` is the same session your Reflex button handlers see.
+`reflex-django` runs Django and [Reflex](https://reflex.dev) as **one ASGI app on one port**. Reflex config lives in `settings.py`. Pages live in `views.py`. The SPA catch-all is automatic. The Django session you got from `/admin/login/` is the same session your Reflex button handlers see.
 
 - **Same port** — Django at `8000`, Reflex at `8000`. No CORS, no token bridge, no second dev server.
 - **Same cookies** — log in once at `/admin/`, every Reflex event sees `self.request.user`.
@@ -56,17 +56,24 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
 ]
+
+REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
 ```
 
 `config/urls.py`:
 
 ```python
+import shop.views  # noqa: F401 — register @page decorators at import time
+
 from django.contrib import admin
 from django.urls import path
-from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [reflex_mount(app_name="shop")]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
 `config/asgi.py`:
@@ -127,15 +134,17 @@ Full explanation: [Why reflex-django exists](https://web7ai.github.io/reflex-dja
 
 ---
 
-## Three files, three jobs
+## Three knobs
 
-| File | What you configure |
-|:---|:---|
-| `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE` (incl. `AsyncStreamingMiddleware`), `REFLEX_DJANGO_RX_CONFIG` (ports, `redis_url`, …), other `REFLEX_DJANGO_*` |
-| `urls.py` | `reflex_mount(app_name=...)` as the last `urlpatterns` entry — Django prefixes are auto-detected from routes above |
-| `{app}/views.py` | `@page`-decorated pages and `AppState` subclasses |
+| Knob | Where | What you configure |
+|:---|:---|:---|
+| **Settings** | `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE`, `REFLEX_DJANGO_RX_CONFIG` (`app_name`, ports, `redis_url`, …) |
+| **App** | `{app}/views.py` | `@page` pages and `AppState` subclasses (`from reflex_django import app` for `add_page`) |
+| **URLs** | `urls.py` | Django routes + `import shop.views` to register pages; catch-all is automatic |
 
-No `rxconfig.py`. No `{app}/{app}.py`. No separate frontend.
+No `rxconfig.py`. No `{app}/{app}.py`. No required `reflex_mount()` line. Call `reflex_mount()` only for URL overrides (`mount_prefix`, explicit `django_prefix`).
+
+Full map: [The three knobs](https://web7ai.github.io/reflex-django/mental_model/).
 
 ---
 
@@ -153,6 +162,7 @@ No `rxconfig.py`. No `{app}/{app}.py`. No separate frontend.
 
 The full docs walk you through the *why*, the *how*, and every knob:
 
+- **[The three knobs (start here)](https://web7ai.github.io/reflex-django/mental_model/)** — settings, app, URLs; page registration vs catch-all
 - **[Why reflex-django exists](https://web7ai.github.io/reflex-django/why_reflex_django/)** — the one-page story
 - **[How Django works in 5 minutes](https://web7ai.github.io/reflex-django/how_django_works/)**
 - **[How Reflex works in 5 minutes](https://web7ai.github.io/reflex-django/how_reflex_works/)**
