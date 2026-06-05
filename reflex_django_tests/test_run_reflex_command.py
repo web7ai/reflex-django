@@ -94,6 +94,35 @@ def _force_django_outer_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         "reflex_django.integration.refresh_get_config_bindings",
         mock.MagicMock(),
     )
+    # Avoid real TCP port checks / Vite boot waits when the host has :3000 busy.
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._ensure_frontend_port_free",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._wait_for_vite_ready",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._compile_dev_app_once",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._start_vite_ready_notifier",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        mock.MagicMock(return_value=mock.Mock(poll=lambda: None)),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
+        mock.MagicMock(return_value=mock.Mock(poll=lambda: None)),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._supervise_vite_dev_procs",
+        mock.MagicMock(),
+    )
 
 
 def test_from_build_triggers_export_and_disables_vite_proxy(
@@ -488,23 +517,19 @@ def test_default_spawns_vite_and_skips_export(
     export_call.assert_not_called()
 
 
-def test_vite_default_forces_dev_proxy_on(
+def test_vite_default_two_port_dev_proxy_off(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """The Vite loop sets REFLEX_DJANGO_DEV_PROXY=1 so the ASGI probe trusts it.
-
-    The asgi_entry startup probe only disables a proxy that is on by the
-    DEBUG default; forcing it to "1" here keeps the proxy alive while Vite
-    is still booting.
-    """
+    """Default two-port dev sets DEV_PROXY=0 and SEPARATE_DEV_PORTS=1."""
     monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
         mock.MagicMock(),
     )
     monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+    monkeypatch.delenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", raising=False)
 
     from django.conf import settings
 
@@ -516,23 +541,30 @@ def test_vite_default_forces_dev_proxy_on(
 
     import os
 
-    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "1"
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+    assert os.environ.get("REFLEX_DJANGO_SEPARATE_DEV_PORTS") == "1"
 
 
-def test_vite_default_disables_backend_reload(
+def test_vite_default_enables_fast_backend_reload(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """When Vite is active the backend ASGI server must boot with reload off.
-
-    This is the core fix: the frontend runner owns recompilation, so the
-    backend stays up instead of restarting on every Reflex edit.
-    """
+    """Default Vite dev spawns uvicorn with ``--reload`` (backend-only globs)."""
     monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        mock.MagicMock(),
+        mock.MagicMock(return_value=mock.Mock(poll=lambda: None)),
+    )
+    spawn_backend = mock.MagicMock(return_value=mock.Mock(poll=lambda: None))
+    supervise = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
+        spawn_backend,
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._supervise_vite_dev_procs",
+        supervise,
     )
 
     from django.conf import settings
@@ -543,26 +575,106 @@ def test_vite_default_disables_backend_reload(
 
     Command().handle()
 
-    _stub_asgi_server.assert_called_once()
-    assert _stub_asgi_server.call_args.kwargs.get("reload") is False
+    _stub_asgi_server.assert_not_called()
+    spawn_backend.assert_called_once()
+    assert spawn_backend.call_args.kwargs.get("reload") is True
+    supervise.assert_called_once()
 
 
-def test_with_vite_disables_backend_reload(
+def test_single_port_enables_fast_backend_reload(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """Explicit ``--with-vite`` also boots the backend with reload off."""
+    """``--single-port`` also spawns uvicorn with ``--reload`` beside Vite."""
     monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        mock.MagicMock(return_value=mock.Mock(poll=lambda: None)),
+    )
+    spawn_backend = mock.MagicMock(return_value=mock.Mock(poll=lambda: None))
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
+        spawn_backend,
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._supervise_vite_dev_procs",
         mock.MagicMock(),
     )
 
-    Command().handle(with_vite=True)
+    Command().handle(single_port=True)
 
-    _stub_asgi_server.assert_called_once()
-    assert _stub_asgi_server.call_args.kwargs.get("reload") is False
+    _stub_asgi_server.assert_not_called()
+    spawn_backend.assert_called_once()
+    assert spawn_backend.call_args.kwargs.get("reload") is True
+
+
+def test_env_prod_sets_separate_dev_ports_off(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--env prod`` must not leave two-port mode on so the SPA serves from disk."""
+    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
+        lambda self: False,
+    )
+    monkeypatch.delenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", raising=False)
+
+    Command().handle(env="prod")
+
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_SEPARATE_DEV_PORTS") == "0"
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+
+
+def test_dev_proxy_explicit_env_overrides_settings_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit ``REFLEX_DJANGO_DEV_PROXY=1`` wins over settings False."""
+    from django.conf import settings
+
+    from reflex_django.dev_proxy import _dev_vite_target_or_none
+
+    monkeypatch.setattr(settings, "DEBUG", True, raising=False)
+    monkeypatch.setattr(settings, "REFLEX_DJANGO_DEV_PROXY", False, raising=False)
+    monkeypatch.setenv("REFLEX_DJANGO_DEV_PROXY", "1")
+    monkeypatch.setenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", "0")
+    monkeypatch.setenv("REFLEX_DJANGO_FRONTEND_PORT", "3000")
+
+    assert _dev_vite_target_or_none() == "http://127.0.0.1:3000"
+
+
+def test_default_compiles_in_parent_and_starts_vite_with_skip_compile(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """Default dev compiles once in the parent and skips recompile in Vite child."""
+    compile_once = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._compile_dev_app_once",
+        compile_once,
+    )
+    vite_spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
+        vite_spawn,
+    )
+    notifier = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._start_vite_ready_notifier",
+        notifier,
+    )
+
+    Command().handle()
+
+    compile_once.assert_called_once()
+    vite_spawn.assert_called_once()
+    assert vite_spawn.call_args.kwargs.get("skip_compile") is True
+    notifier.assert_called_once()
 
 
 def test_no_reload_passes_no_watch_to_vite(

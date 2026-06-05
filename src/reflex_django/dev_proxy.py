@@ -134,7 +134,11 @@ def _dev_vite_target_or_none() -> str | None:
         "no",
     }:
         return None
-    if not getattr(settings, "REFLEX_DJANGO_DEV_PROXY", True):
+    # ``run_reflex --single-port`` sets the env explicitly; that must win over
+    # a project setting such as ``REFLEX_DJANGO_DEV_PROXY = False`` in dev.py.
+    if not dev_proxy_explicitly_enabled() and not getattr(
+        settings, "REFLEX_DJANGO_DEV_PROXY", True
+    ):
         return None
     if dev_uses_separate_ports():
         return None

@@ -16,6 +16,7 @@ def test_parse_argv_defaults() -> None:
     assert args.frontend_port == 3210
     assert args.compile_only is False
     assert args.watch is True
+    assert args.skip_compile is False
 
 
 def test_parse_argv_no_watch_and_compile_only() -> None:
@@ -83,6 +84,33 @@ def test_default_mode_starts_watch_then_vite(
     run_vite.assert_called_once_with(3000)
 
 
+def test_skip_compile_skips_compile_but_writes_env_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--skip-compile`` starts Vite without recompiling (parent already did)."""
+    monkeypatch.setattr(
+        _frontend_runner, "_bootstrap_integration", mock.MagicMock()
+    )
+    monkeypatch.setattr(
+        _frontend_runner, "_apply_persistent_frontend_port", mock.MagicMock()
+    )
+    compile_once = mock.MagicMock()
+    write_env = mock.MagicMock()
+    monkeypatch.setattr(_frontend_runner, "_compile_once_safe", compile_once)
+    monkeypatch.setattr(_frontend_runner, "_write_env_json", write_env)
+    monkeypatch.setattr(
+        _frontend_runner, "_start_watch_thread", mock.MagicMock()
+    )
+    monkeypatch.setattr(
+        _frontend_runner, "_run_vite", mock.MagicMock(return_value=0)
+    )
+
+    _frontend_runner.main(["--frontend-port", "3000", "--skip-compile"])
+
+    compile_once.assert_not_called()
+    write_env.assert_called_once()
+
+
 def test_no_watch_skips_watch_thread(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -139,6 +167,26 @@ def test_write_env_json_swallows_errors(
 
     # Must not raise.
     _frontend_runner._write_env_json()
+
+
+def test_compile_app_for_frontend_syncs_vite_proxy_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After compile, Vite proxy layout is synced (strip in two-port dev)."""
+    import reflex.utils.prerequisites as prerequisites
+
+    monkeypatch.setattr(prerequisites, "compile_or_validate_app", mock.MagicMock())
+    monkeypatch.setattr(_frontend_runner, "_write_env_json", mock.MagicMock())
+    monkeypatch.setattr(
+        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        mock.MagicMock(),
+    )
+    sync_layout = mock.MagicMock()
+    monkeypatch.setattr(_frontend_runner, "_sync_vite_proxy_layout_after_compile", sync_layout)
+
+    _frontend_runner._compile_app_for_frontend()
+
+    sync_layout.assert_called_once()
 
 
 def test_compile_app_for_frontend_applies_stability_patches(

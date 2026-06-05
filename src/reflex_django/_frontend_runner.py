@@ -40,6 +40,7 @@ class _RunnerArgs:
     frontend_port: int
     compile_only: bool
     watch: bool
+    skip_compile: bool
 
 
 def _parse_argv(argv: list[str]) -> _RunnerArgs:
@@ -68,6 +69,15 @@ def _parse_argv(argv: list[str]) -> _RunnerArgs:
         ),
     )
     parser.add_argument(
+        "--skip-compile",
+        dest="skip_compile",
+        action="store_true",
+        help=(
+            "Skip the initial compile step. Used when ``manage.py run_reflex`` "
+            "already compiled in the parent process (native Reflex layout)."
+        ),
+    )
+    parser.add_argument(
         "--no-watch",
         dest="watch",
         action="store_false",
@@ -88,6 +98,7 @@ def _parse_argv(argv: list[str]) -> _RunnerArgs:
         frontend_port=int(port),
         compile_only=bool(args.compile_only),
         watch=bool(args.watch),
+        skip_compile=bool(args.skip_compile),
     )
 
 
@@ -105,6 +116,19 @@ def _bootstrap_integration() -> None:
     configure_django()
 
 
+def _sync_vite_proxy_layout_after_compile() -> None:
+    """Strip or apply Vite→Django proxies to match the active dev port layout."""
+    try:
+        from reflex_django.vite_proxy import ensure_vite_django_dev_proxy_from_config
+
+        ensure_vite_django_dev_proxy_from_config()
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"reflex-django: could not sync Vite proxy layout ({exc!r}).",
+            file=sys.stderr,
+        )
+
+
 def _compile_app_for_frontend() -> None:
     """Run Reflex's compile step so ``.web`` is up to date before Vite starts."""
     from reflex.utils import prerequisites
@@ -118,6 +142,7 @@ def _compile_app_for_frontend() -> None:
     from reflex_django.frontend_stability import apply_frontend_stability_after_compile
 
     apply_frontend_stability_after_compile()
+    _sync_vite_proxy_layout_after_compile()
 
 
 def _write_env_json() -> None:
@@ -237,6 +262,11 @@ def _start_watch_thread(port: int) -> threading.Thread | None:
     """
     try:
         from watchfiles import PythonFilter, watch
+
+        from reflex_django.dev_watch import (
+            WATCH_DEBOUNCE_MS,
+            build_frontend_watch_filter,
+        )
     except Exception:  # noqa: BLE001
         print(
             "reflex-django: `watchfiles` is not installed — frontend "
@@ -247,13 +277,14 @@ def _start_watch_thread(port: int) -> threading.Thread | None:
         return None
 
     watch_paths = [str(p) for p in _resolve_watch_paths()]
+    watch_filter = build_frontend_watch_filter(PythonFilter)
 
     def _loop() -> None:
         try:
             for changes in watch(
                 *watch_paths,
-                watch_filter=PythonFilter(),
-                debounce=800,
+                watch_filter=watch_filter,
+                debounce=WATCH_DEBOUNCE_MS,
                 step=50,
                 yield_on_timeout=False,
                 raise_interrupt=False,
@@ -312,7 +343,10 @@ def main(argv: list[str] | None = None) -> int:
         _compile_app_for_frontend()
         return 0
 
-    _compile_once_safe()
+    if args.skip_compile:
+        _write_env_json()
+    else:
+        _compile_once_safe()
 
     if args.watch:
         _start_watch_thread(args.frontend_port)

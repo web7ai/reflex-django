@@ -169,10 +169,38 @@ def test_post_compile_appends_after_existing_sequence(
     assert callable(app.api_transformer[2])
 
 
-def test_pre_compile_registers_vite_proxy_modify_task(
+def test_pre_compile_skips_vite_proxy_in_django_outer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two-port / single-port DJANGO_OUTER must not inject Vite→Django proxies."""
+    _patch_django_build(monkeypatch)
+    modify_tasks: list[tuple[str, object]] = []
+
+    plugin = ReflexDjangoPlugin(
+        backend_prefix="/api",
+        django_prefix=("/billing",),
+        install_event_bridge=False,
+    )
+    plugin.pre_compile(
+        add_modify_task=lambda path, fn: modify_tasks.append((path, fn)),
+        add_save_task=lambda *a, **k: None,
+        radix_themes_plugin=None,
+        unevaluated_pages=[],
+    )
+
+    assert modify_tasks == []
+
+
+def test_pre_compile_registers_vite_proxy_modify_task_for_django_led(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_django_build(monkeypatch)
+    monkeypatch.setattr(
+        "reflex_django.plugin.resolve_url_routing",
+        lambda: __import__(
+            "reflex_django.routing", fromlist=["UrlRoutingMode"]
+        ).UrlRoutingMode.DJANGO_LED,
+    )
     modify_tasks: list[tuple[str, object]] = []
 
     plugin = ReflexDjangoPlugin(

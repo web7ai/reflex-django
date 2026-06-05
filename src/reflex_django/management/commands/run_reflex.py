@@ -22,6 +22,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -219,6 +220,7 @@ class Command(BaseCommand):
         serve_from_disk = is_prod or from_build
         if serve_from_disk:
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+            os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "0"
         if is_prod:
             os.environ.setdefault("REFLEX_DJANGO_DEBUG", "0")
 
@@ -244,11 +246,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.MIGRATE_HEADING(
                     "reflex-django: Vite-HMR dev loop (default) — editing a "
-                    "Reflex page recompiles the SPA and Vite hot-reloads only "
-                    "the frontend.\n"
-                    "    The backend does NOT auto-restart: re-run "
-                    "`python manage.py run_reflex` (or restart it) to pick up "
-                    "backend/state edits.\n"
+                    "Reflex page recompiles the SPA and Vite hot-reloads the "
+                    "frontend; backend/state edits restart uvicorn automatically.\n"
                     "    Pass --from-build to serve a compiled bundle from disk "
                     "instead (no Node, no HMR)."
                 )
@@ -310,31 +309,22 @@ class Command(BaseCommand):
             else:
                 os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
                 os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+            # Mirror native ``reflex run``: compile once in the parent, then boot
+            # Vite and the ASGI backend concurrently (do not block the backend on
+            # Vite becoming HTTP-ready).
+            self._compile_dev_app_once()
             self._ensure_frontend_port_free(frontend_port)
-            vite_proc = self._spawn_vite_background(
-                frontend_port, watch=watch_frontend
+            self._print_dev_port_banner(
+                frontend_port=frontend_port,
+                backend_port=backend_port,
+                single_port=single_port,
             )
-            self._wait_for_vite_ready(frontend_port, vite_proc=vite_proc)
-            if single_port:
-                self.stdout.write(
-                    self.style.NOTICE(
-                        f"reflex-django: Vite ready on port {frontend_port} "
-                        f"(reverse-proxied by Django on port {backend_port}).\n"
-                        "    Open http://localhost:"
-                        f"{backend_port}/ — frontend edits hot-reload via Vite; "
-                        "the backend stays up and does not auto-restart."
-                    )
-                )
-            else:
-                self.stdout.write(
-                    self.style.NOTICE(
-                        f"reflex-django: two-port dev (native Reflex layout).\n"
-                        f"    UI + hot reload: http://localhost:{frontend_port}/\n"
-                        f"    Django + Reflex backend: http://localhost:{backend_port}/ "
-                        f"(admin, API, /_event — not the SPA shell).\n"
-                        "    Pass --single-port to browse only the backend port."
-                    )
-                )
+            vite_proc = self._spawn_vite_background(
+                frontend_port,
+                watch=watch_frontend,
+                skip_compile=True,
+            )
+            self._start_vite_ready_notifier(frontend_port, vite_proc=vite_proc)
         elif is_prod:
             self.stdout.write(
                 self.style.SUCCESS(
@@ -353,11 +343,6 @@ class Command(BaseCommand):
             )
 
         reload_enabled = not options.get("no_reload") and not is_prod
-        # When Vite is active the frontend runner owns the recompile-on-change
-        # loop, so the backend ASGI server boots once and stays up — no
-        # uvicorn ``--reload``. This is what keeps frontend edits to a Vite
-        # HMR instead of a full backend rebuild + restart + WebSocket drop.
-        backend_reload = reload_enabled and not vite_active
         # In from-build dev mode we MUST own the reload loop ourselves. If we
         # delegated to uvicorn's ``--reload``, the child would re-import
         # :mod:`reflex_django.asgi_entry` on every file change, which re-runs
@@ -369,7 +354,13 @@ class Command(BaseCommand):
         # parent-side :mod:`watchfiles` loop gives us a clean process restart
         # AND a guaranteed re-export on every change.
         use_parent_watch = from_build and reload_enabled and not backend_only
+        # With Vite active, uvicorn in-process ``--reload`` is much faster than
+        # spawning a fresh subprocess.  Frontend and backend watchers are split
+        # via ``reload_excludes`` / the frontend-runner filter so they no longer
+        # race on the same save.
+        backend_reload = reload_enabled and not use_parent_watch
 
+        backend_proc: subprocess.Popen[bytes] | None = None
         try:
             if use_parent_watch:
                 self._run_with_watch_reload(
@@ -378,14 +369,31 @@ class Command(BaseCommand):
                     loglevel=loglevel,
                     skip_rebuild=skip_rebuild,
                 )
+            elif vite_active and vite_proc is not None:
+                # In-process ``uvicorn.run(..., reload=True)`` while a Vite child
+                # process is running can hang on Windows before binding :8000.
+                # Spawn uvicorn separately (native Reflex runs frontend+backend
+                # concurrently) and supervise both from the parent.
+                backend_proc = self._spawn_uvicorn_dev_subprocess(
+                    host=backend_host,
+                    port=backend_port,
+                    loglevel=loglevel,
+                    reload=backend_reload,
+                )
+                self._supervise_vite_dev_procs(
+                    vite_proc=vite_proc,
+                    backend_proc=backend_proc,
+                )
             else:
                 self._run_asgi_server(
                     host=backend_host,
                     port=backend_port,
                     loglevel=loglevel,
                     reload=backend_reload,
+                    reload_backend_only=vite_active,
                 )
         finally:
+            self._stop_uvicorn_subprocess(backend_proc)
             if vite_proc is not None and vite_proc.poll() is None:
                 self.stdout.write(
                     self.style.NOTICE("reflex-django: stopping Vite.")
@@ -535,6 +543,87 @@ class Command(BaseCommand):
             )
         )
 
+    def _compile_dev_app_once(self) -> None:
+        """Compile the SPA once before spawning Vite + uvicorn (native Reflex flow)."""
+        from reflex_django._frontend_runner import _compile_app_for_frontend
+
+        self.stdout.write(
+            self.style.NOTICE("reflex-django: compiling Reflex app...")
+        )
+        start = time.monotonic()
+        try:
+            _compile_app_for_frontend()
+        except SystemExit:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CommandError(
+                f"reflex-django: frontend compile failed: {exc!r}"
+            ) from exc
+        elapsed = time.monotonic() - start
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"reflex-django: compile finished in {elapsed:.1f}s — starting "
+                "frontend and backend together."
+            )
+        )
+        self.stdout.flush()
+
+    def _print_dev_port_banner(
+        self,
+        *,
+        frontend_port: int,
+        backend_port: int,
+        single_port: bool,
+    ) -> None:
+        """Print target URLs before services finish booting."""
+        if single_port:
+            self.stdout.write(
+                self.style.NOTICE(
+                    f"reflex-django: single-port dev — Vite on {frontend_port} "
+                    f"(reverse-proxied by Django on {backend_port}).\n"
+                    "    Open http://localhost:"
+                    f"{backend_port}/ — frontend edits hot-reload via Vite; "
+                    "backend/state edits restart uvicorn automatically."
+                )
+            )
+            return
+        self.stdout.write(
+            self.style.NOTICE(
+                "reflex-django: two-port dev (native Reflex layout).\n"
+                f"    Open the app: http://localhost:{frontend_port}/\n"
+                f"    Backend: http://localhost:{backend_port}/ "
+                f"(admin, API, /_event — browser connects here directly).\n"
+                "    Pass --single-port to serve the SPA from Django on the backend port."
+            )
+        )
+
+    def _start_vite_ready_notifier(
+        self,
+        frontend_port: int,
+        *,
+        vite_proc: subprocess.Popen[bytes],
+    ) -> None:
+        """Notify when Vite is HTTP-ready without blocking backend startup."""
+
+        def _notify() -> None:
+            try:
+                self._wait_for_vite_ready(frontend_port, vite_proc=vite_proc)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"reflex-django: Vite ready at "
+                        f"http://localhost:{frontend_port}/"
+                    )
+                )
+            except CommandError as exc:
+                self.stdout.write(self.style.ERROR(str(exc)))
+
+        thread = threading.Thread(
+            target=_notify,
+            name="reflex-django-vite-ready",
+            daemon=True,
+        )
+        thread.start()
+
     def _ensure_frontend_port_free(self, frontend_port: int) -> None:
         """Fail fast when another process already owns the Vite port."""
         import socket
@@ -616,6 +705,7 @@ class Command(BaseCommand):
         frontend_port: int,
         *,
         watch: bool = True,
+        skip_compile: bool = False,
     ) -> subprocess.Popen[bytes]:
         """Spawn Vite behind the proxy via the reflex-django bootstrap runner.
 
@@ -640,6 +730,8 @@ class Command(BaseCommand):
         ]
         if not watch:
             cmd.append("--no-watch")
+        if skip_compile:
+            cmd.append("--skip-compile")
         env = {
             **os.environ,
             "REFLEX_DJANGO_URL_ROUTING": "django_outer",
@@ -672,13 +764,21 @@ class Command(BaseCommand):
         port: int,
         loglevel: str,
         reload: bool,
+        reload_backend_only: bool = False,
     ) -> None:
         """Boot the ASGI server with :func:`reflex_django.asgi_entry.application`."""
         target = "reflex_django.asgi_entry:application"
 
         for runner in (self._run_uvicorn, self._run_granian, self._run_hypercorn):
             try:
-                runner(target=target, host=host, port=port, loglevel=loglevel, reload=reload)
+                runner(
+                    target=target,
+                    host=host,
+                    port=port,
+                    loglevel=loglevel,
+                    reload=reload,
+                    reload_backend_only=reload_backend_only,
+                )
                 return
             except _ServerNotAvailable:
                 continue
@@ -750,10 +850,12 @@ class Command(BaseCommand):
             host=host, port=port, loglevel=loglevel
         )
         try:
+            from reflex_django.dev_watch import WATCH_DEBOUNCE_MS
+
             for changes in watch(
                 str(watch_root),
                 watch_filter=watch_filter,
-                debounce=800,
+                debounce=WATCH_DEBOUNCE_MS,
                 step=50,
                 yield_on_timeout=False,
                 raise_interrupt=False,
@@ -847,6 +949,85 @@ class Command(BaseCommand):
         except ValueError:
             return path
 
+    def _supervise_vite_dev_procs(
+        self,
+        *,
+        vite_proc: subprocess.Popen[bytes],
+        backend_proc: subprocess.Popen[bytes],
+    ) -> None:
+        """Keep Vite + uvicorn subprocesses alive until interrupt or child exit."""
+        try:
+            while True:
+                vite_code = vite_proc.poll()
+                if vite_code is not None:
+                    raise CommandError(
+                        f"reflex-django: Vite subprocess exited unexpectedly "
+                        f"(code {vite_code}). Check the Vite logs above."
+                    )
+                backend_code = backend_proc.poll()
+                if backend_code is not None:
+                    raise CommandError(
+                        f"reflex-django: uvicorn subprocess exited unexpectedly "
+                        f"(code {backend_code}). Check the backend logs above."
+                    )
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
+
+    def _spawn_uvicorn_dev_subprocess(
+        self,
+        *,
+        host: str,
+        port: int,
+        loglevel: str,
+        reload: bool,
+    ) -> subprocess.Popen[bytes]:
+        """Spawn uvicorn for two-port dev while Vite runs in a sibling process."""
+        cmd = [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "reflex_django.asgi_entry:application",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--log-level",
+            loglevel,
+            "--ws",
+            "auto",
+        ]
+        if reload:
+            from reflex_django.dev_watch import BACKEND_RELOAD_DELAY_S
+
+            cmd.append("--reload")
+            cmd.extend(["--reload-dir", str(self._resolve_watch_root())])
+            cmd.extend(["--reload-delay", str(BACKEND_RELOAD_DELAY_S)])
+            # Uvicorn's CLI expands ``**`` globs on Windows into stray positional
+            # args, so backend-only excludes are applied via in-process reload in
+            # non-Vite modes; here we rely on ``--reload-dir`` + frontend watch
+            # filtering to avoid double work on ``views.py`` edits.
+            if sys.platform != "win32":
+                from reflex_django.dev_watch import backend_reload_excludes
+
+                for pattern in backend_reload_excludes():
+                    cmd.extend(["--reload-exclude", pattern])
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"reflex-django: starting uvicorn subprocess at "
+                f"http://{host}:{port}/"
+            )
+        )
+        self.stdout.flush()
+        env = {
+            **os.environ,
+            "REFLEX_DJANGO_AUTO_EXPORT_ON_START": os.environ.get(
+                "REFLEX_DJANGO_AUTO_EXPORT_ON_START", "0"
+            ),
+        }
+        return subprocess.Popen(cmd, env=env)
+
     def _spawn_uvicorn_subprocess(
         self,
         *,
@@ -895,7 +1076,7 @@ class Command(BaseCommand):
     def _stop_uvicorn_subprocess(
         self, proc: subprocess.Popen[bytes] | None
     ) -> None:
-        """Gracefully terminate (then kill) the uvicorn subprocess."""
+        """Terminate the uvicorn subprocess quickly (dev reload loop)."""
         if proc is None or proc.poll() is not None:
             return
         try:
@@ -904,19 +1085,13 @@ class Command(BaseCommand):
             else:
                 proc.send_signal(signal.SIGINT)
             try:
-                proc.wait(timeout=10)
-                return
-            except subprocess.TimeoutExpired:
-                pass
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
+                proc.wait(timeout=2)
                 return
             except subprocess.TimeoutExpired:
                 pass
             proc.kill()
             with contextlib.suppress(Exception):
-                proc.wait(timeout=5)
+                proc.wait(timeout=2)
         except Exception:  # noqa: BLE001
             with contextlib.suppress(Exception):
                 proc.kill()
@@ -929,6 +1104,7 @@ class Command(BaseCommand):
         port: int,
         loglevel: str,
         reload: bool,
+        reload_backend_only: bool = False,
     ) -> None:
         try:
             import uvicorn  # type: ignore[import-not-found]
@@ -941,14 +1117,31 @@ class Command(BaseCommand):
                 f"http://{host}:{port}/"
             )
         )
-        uvicorn.run(
-            target,
-            host=host,
-            port=port,
-            log_level=loglevel,
-            reload=reload,
-            ws="auto",
-        )
+        run_kwargs: dict[str, Any] = {
+            "host": host,
+            "port": port,
+            "log_level": loglevel,
+            "reload": reload,
+            "ws": "auto",
+        }
+        if reload:
+            if reload_backend_only:
+                from reflex_django.dev_watch import (
+                    BACKEND_RELOAD_DELAY_S,
+                    backend_reload_excludes,
+                )
+
+                run_kwargs["reload_dirs"] = [str(self._resolve_watch_root())]
+                run_kwargs["reload_excludes"] = backend_reload_excludes()
+                run_kwargs["reload_delay"] = BACKEND_RELOAD_DELAY_S
+            else:
+                run_kwargs["reload_excludes"] = [
+                    "*/.web/*",
+                    "*/node_modules/*",
+                    "*/staticfiles/*",
+                    "*/static_collected/*",
+                ]
+        uvicorn.run(target, **run_kwargs)
 
     def _run_granian(
         self,
@@ -958,6 +1151,7 @@ class Command(BaseCommand):
         port: int,
         loglevel: str,
         reload: bool,
+        reload_backend_only: bool = False,
     ) -> None:
         try:
             from granian.constants import Interfaces, Loops  # type: ignore[import-not-found]
@@ -971,7 +1165,7 @@ class Command(BaseCommand):
                 f"http://{host}:{port}/"
             )
         )
-        del loglevel  # granian uses its own log config
+        del loglevel, reload_backend_only  # granian uses its own log config
         Granian(
             target,
             address=host,
@@ -989,6 +1183,7 @@ class Command(BaseCommand):
         port: int,
         loglevel: str,
         reload: bool,
+        reload_backend_only: bool = False,
     ) -> None:
         try:
             from hypercorn.asyncio import serve  # type: ignore[import-not-found]
@@ -1002,6 +1197,7 @@ class Command(BaseCommand):
         cfg = Config()
         cfg.bind = [f"{host}:{port}"]
         cfg.loglevel = loglevel
+        del reload_backend_only
         cfg.use_reloader = reload
         module_name, _, attr = target.partition(":")
         application = getattr(importlib.import_module(module_name), attr)

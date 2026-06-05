@@ -393,17 +393,16 @@ def ensure_vite_django_dev_proxy_from_config() -> bool:
         return False
 
     if routing_mode == UrlRoutingMode.DJANGO_OUTER:
-        from reflex_django.dev_proxy import dev_uses_separate_ports
-
-        if not dev_uses_separate_ports():
-            changed = strip_vite_django_dev_proxy(web_dir)
-            if changed:
-                console.info(
-                    "reflex-django removed Vite→Django proxy rules from .web/ "
-                    "(DJANGO_OUTER single-port mode)."
-                )
-            return changed
-        # Two-port dev: fall through and inject Vite→Django proxies below.
+        # Native Reflex dev: UI on the Vite port, backend on the ASGI port.
+        # ``env.json`` points Socket.IO/API at :8000 directly — Vite must not
+        # proxy Django paths (that was only for single-port browsing).
+        changed = strip_vite_django_dev_proxy(web_dir)
+        if changed:
+            console.info(
+                "reflex-django removed Vite→Django proxy rules from .web/ "
+                "(DJANGO_OUTER — use :frontend_port for UI, :backend_port for API)."
+            )
+        return changed
 
     config = get_config()
     plugin = next(

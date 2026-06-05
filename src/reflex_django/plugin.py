@@ -107,14 +107,11 @@ class ReflexDjangoPlugin(Plugin):
 
         prepare_pages_for_compile()
 
-        # In DJANGO_OUTER single-port mode the browser uses the Django port; Vite
-        # must not proxy backend paths back (request loops). Two-port dev reuses
-        # the Vite proxy plugin like native Reflex.
+        # DJANGO_OUTER never injects Vite→Django proxies: two-port dev matches
+        # native ``reflex run`` (UI on Vite, API on backend); single-port uses
+        # Django's reverse-proxy instead.
         if resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER:
-            from reflex_django.dev_proxy import dev_uses_separate_ports
-
-            if not dev_uses_separate_ports():
-                return
+            return
 
         from reflex_base import constants
         from reflex_base.config import get_config
