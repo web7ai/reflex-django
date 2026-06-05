@@ -11,7 +11,7 @@ Good news: you don't have to touch your models or your existing views. You add `
 | You keep | You add |
 |:---|:---|
 | `manage.py`, models, migrations, admin | `reflex_django` in `INSTALLED_APPS` |
-| Your existing `/api/` and templates | `reflex_mount(...)` in `urls.py` |
+| Your existing `/api/` and templates | `REFLEX_DJANGO_RX_CONFIG` in `settings.py`; optional page imports in `urls.py` |
 | Your custom middleware | `AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE`; optional `DEFAULT_DEV_MIDDLEWARE` at the top in dev ([details](local_development.md)) |
 | Your DRF views, webhooks, command-line scripts | `@page` pages inside any app's `views.py` |
 | Your `settings.py` (mostly) | A few `REFLEX_DJANGO_*` keys (optional) |
@@ -71,28 +71,35 @@ MIDDLEWARE = [
 
 ---
 
-## 3. Append `reflex_mount()` last
+## 3. Configure Reflex and import pages
 
-`reflex-django` adds a catch-all URL pattern at the bottom of `urls.py` that serves the Reflex SPA for anything Django doesn't already own. Put your existing Django routes **above** the mount; reflex-django reads them and figures out which prefixes Django owns.
+Put Reflex runtime options in `settings.py` and import page modules in `urls.py`. The SPA catch-all is appended automatically (`REFLEX_DJANGO_AUTO_MOUNT=True`).
+
+```python
+# config/settings.py
+REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
+```
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401 — register @page decorators at import time
+
 from django.contrib import admin
 from django.urls import include, path
-from reflex_django.urls import reflex_mount
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
     path("webhooks/", include("shop.webhooks_urls")),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
-Auto-detection takes the **first segment** of each top-level `path()` — `path("api/", include(...))` covers `/api/products/`, `/api/orders/`, and so on. You only pass `django_prefix=(...)` manually if you use `re_path()` without a readable first segment or need to override what was detected.
-
-Put ports, `redis_url`, and other Reflex runtime options in `REFLEX_DJANGO_RX_CONFIG` in `settings.py`, not in `reflex_mount()`.
+Auto-detection takes the **first segment** of each top-level `path()` — `path("api/", include(...))` covers `/api/products/`, `/api/orders/`, and so on. Call `reflex_mount(django_prefix=(...))` manually only if you use `re_path()` without a readable first segment or need URL overrides. See [The three knobs](mental_model.md).
 
 ---
 

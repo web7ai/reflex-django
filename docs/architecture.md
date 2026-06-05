@@ -13,9 +13,9 @@ What follows is the full runtime picture: the ASGI dispatcher, the event bridge,
 ```mermaid
 flowchart LR
     subgraph pillar1["1. Bootstrap"]
-        A["urls.py imports reflex_mount"] --> B["install_reflex_django_integration"]
+        A["settings + page imports"] --> B["install_reflex_django_integration"]
         B --> C["configure_django, patch get_config"]
-        C --> D["django_led_app imports {app}/views.py"]
+        C --> D["django_led_app merges @page / add_page"]
     end
 
     subgraph pillar2["2. ASGI dispatch"]
@@ -34,7 +34,7 @@ flowchart LR
 
 | Pillar | Job |
 |:---|:---|
-| **Bootstrap** | At import time, register Reflex config from `reflex_mount()`, set up Django, discover pages, build `rx.App`. |
+| **Bootstrap** | At startup/compile, register Reflex config from `settings.py`, set up Django, load page modules, build `rx.App`, auto-mount catch-all. |
 | **ASGI dispatch** | At request time, an outer ASGI app routes each scope to Django or to Reflex's inner ASGI. |
 | **Event bridge** | At event time, build a synthetic `HttpRequest`, run middleware, and bind context onto the handler. |
 
@@ -323,12 +323,12 @@ The order in which modules import each other is load-bearing. From the top of an
 1. DJANGO_SETTINGS_MODULE is set (manage.py or asgi.py)
 2. reflex_django.asgi_entry is imported
    └── install_reflex_django_integration()
-        ├── patches reflex.config.get_config to read reflex_mount() output
+        ├── patches reflex.config.get_config to read REFLEX_DJANGO_RX_CONFIG
         ├── configure_django() — django.setup()
         ├── refresh_get_config_bindings() — re-resolves cached config references
         └── ensure_reflex_cli_layout() — synthesises rxconfig in sys.modules
-3. ROOT_URLCONF is imported → reflex_mount() registers the in-memory rx.Config
-4. reflex_django.django_led_app imports {app}/views.py for each INSTALLED_APPS entry
+3. ROOT_URLCONF is imported → page modules register @page decorators; auto-mount may append catch-all
+4. reflex_django.django_led_app loads pages (explicit imports, PAGE_PACKAGES, or auto-discover)
 5. rx.App() is instantiated; @page decorators register routes
 6. DjangoOuterDispatcher wraps Django ASGI + Reflex inner ASGI
 7. ASGI server binds the port

@@ -86,29 +86,28 @@ For HTTP requests that aren't reserved, Django takes over. Your `urls.py` contro
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401
+
 from django.contrib import admin
 from django.urls import include, path
-from reflex_django.urls import reflex_mount
-
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]
+# With REFLEX_DJANGO_AUTO_MOUNT=True (default), the SPA catch-all is appended at startup.
 ```
 
 Two things happen here:
 
 - Django routes go **first**.
-- `reflex_mount()` appends a final wildcard pattern that points at `ReflexMountView`.
+- A final wildcard pattern pointing at `ReflexMountView` is appended automatically (or via optional `reflex_mount()` for overrides).
 
 `django_prefix` is inferred automatically from those routes (first segment of each top-level `path()`). Pass an explicit tuple only when you use `re_path()` or need to override. Reflex ports and `redis_url` belong in `REFLEX_DJANGO_RX_CONFIG` in settings.
 
 ### The SPA catch-all
 
-The final pattern `reflex_mount()` adds is roughly:
+The final catch-all pattern (auto-mounted or from optional `reflex_mount()`) is roughly:
 
 ```python
 re_path(r".*", ReflexMountView.as_view())
@@ -157,12 +156,15 @@ Everything happens on one port. Same origin. Same cookies. Same session.
 
 ## The cardinal rules
 
-1. **Django routes go above `reflex_mount()`** in `urls.py`.
-2. **Django prefixes are auto-detected** from those routes (first segment of each top-level `path()`). Override with `django_prefix=(...)` only when needed.
+1. **List Django routes in `urlpatterns`.** With `REFLEX_DJANGO_AUTO_MOUNT=True` (default), the SPA catch-all is appended at startup — you don't need `reflex_mount()` unless you want URL overrides.
+2. **Django prefixes are auto-detected** from those routes (first segment of each top-level `path()`). Override with `django_prefix=(...)` on `reflex_mount()` only when needed.
 3. **Don't `path()` for SPA pages.** Use `@page(route=...)` in `views.py` instead.
 4. **Don't add Django routes under reserved Reflex prefixes.**
 
 If you stick to these, routing just works.
+
+!!! note "Auto-mount vs manual `reflex_mount()`"
+    **Default:** `REFLEX_DJANGO_AUTO_MOUNT=True` appends the catch-all after your Django routes. **Manual:** call `reflex_mount()` when you need `mount_prefix`, explicit `django_prefix`, or per-mount `rx_config`. See [The three knobs](mental_model.md).
 
 ---
 
@@ -246,11 +248,13 @@ These are SPA routes — they live in the Reflex client router, not in `urls.py`
 `reflex_django.urls` exposes a couple of convenience wrappers:
 
 ```python
-from reflex_django.urls import admin_urlpatterns, reflex_mount
+import shop.views  # noqa: F401
+from reflex_django.urls import admin_urlpatterns
 
 urlpatterns = admin_urlpatterns("/admin")    # path("/admin", admin.site.urls) + a redirect
 urlpatterns += [path("api/", include("shop.api_urls"))]
-urlpatterns += [reflex_mount(app_name="shop")]   # /admin and /api inferred from lines above
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
+# Manual override example: urlpatterns += reflex_mount(mount_prefix="/app")
 ```
 
 `admin_urlpatterns(prefix)` saves you a couple of lines if you're using a non-default admin prefix.

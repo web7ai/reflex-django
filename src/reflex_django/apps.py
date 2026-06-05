@@ -18,3 +18,8 @@ class ReflexDjangoConfig(AppConfig):
     label = "reflex_django"
     verbose_name = "Reflex Django"
     default_auto_field = "django.db.models.BigAutoField"  # pyright: ignore[reportAssignmentType]
+
+    def ready(self) -> None:
+        from reflex_django.auto_mount import maybe_auto_mount
+
+        maybe_auto_mount()

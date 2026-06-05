@@ -37,12 +37,13 @@ async def my_orders(request):
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/orders/", my_orders),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]   # /admin and /api inferred from lines above
+# catch-all: automatic — /admin and /api inferred from routes above
 ```
 
 That's it. `GET /api/orders/` runs your Django view. The user's session is shared with the SPA on the same origin, so login state is consistent.
@@ -82,13 +83,13 @@ urlpatterns = router.urls
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
 ]
-urlpatterns += [
-    reflex_mount(app_name="shop"),
-]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
 Your mobile app can call `GET /api/orders/`. Your SPA can read the same data via a Reflex event using `Order.objects.filter(customer=self.request.user)` directly — no need to round-trip through HTTP.
@@ -139,16 +140,17 @@ async def stripe_webhook(request):
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
     path("webhooks/stripe/", stripe_webhook),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
-`path("webhooks/stripe/", ...)` above the mount is enough — auto-detection reserves `/webhooks`. Put `path("webhooks/...", ...)` **above** `reflex_mount()` so Django handles the webhook, not the SPA catch-all.
+`path("webhooks/stripe/", ...)` in `urlpatterns` is enough — auto-detection reserves `/webhooks`. List webhook routes in `urlpatterns` so Django handles them, not the SPA catch-all.
 
 ---
 
@@ -261,13 +263,13 @@ async def my_orders_json(request):
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/orders/", my_orders_json),
 ]
-urlpatterns += [
-    reflex_mount(app_name="shop"),
-]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
 - The browser SPA sees `/orders` — calls Reflex.
@@ -298,7 +300,7 @@ async def my_view(request):
 ## Summary
 
 - HTTP and Reflex share the same Django process, same models, same user.
-- Add `path(...)` lines to `urls.py` for HTTP endpoints **above** `reflex_mount()` — prefixes are auto-detected from the first segment of each route.
+- Add `path(...)` lines to `urls.py` for HTTP endpoints in `urlpatterns` — prefixes are auto-detected from the first segment of each route.
 - DRF works untouched.
 - Use `ReflexDjangoModelSerializer` for state serialization, DRF `ModelSerializer` for HTTP serialization. They're different libraries with different purposes.
 - Same origin → no CORS for the SPA's own calls.

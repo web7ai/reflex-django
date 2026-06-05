@@ -22,8 +22,10 @@ def _clear_registry() -> None:
     clear_mount_rx_config()
 
 
-def _catchall(pattern):
-    return pattern
+def _catchall(handle):
+    if hasattr(handle, "url_pattern"):
+        return handle.url_pattern
+    return handle
 
 
 def test_reflex_mount_default_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,8 +84,15 @@ def test_reflex_mount_resolves_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     assert match.func.view_class is ReflexMountView
 
 
-def test_reflex_mount_view_returns_501() -> None:
+@pytest.mark.asyncio
+async def test_reflex_mount_view_returns_501(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import django
+
+    django.setup()
+    monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "django_led")
     request = RequestFactory().get("/about")
-    response = ReflexMountView.as_view()(request)
+    response = await ReflexMountView.as_view()(request)
     assert response.status_code == 501
     assert b"run_reflex" in response.content

@@ -51,7 +51,7 @@ A small reactive Reflex state that exposes JSON-safe user snapshot fields (`is_a
 The outer ASGI callable that owns port 8000. It decides, per incoming scope, whether to send it to Django or to Reflex's inner ASGI.
 
 ### `django_led_app`
-A built-in module (`reflex_django.django_led_app`) that auto-imports `{app}/views.py` for every entry in `INSTALLED_APPS` and builds the `rx.App()` instance. Replaces the `{app}/{app}.py` file you'd write in plain Reflex.
+The built-in module (`reflex_django.django_led_app`) that owns the singleton `rx.App()`. Import it as `from reflex_django import app`. Page modules are loaded at compile time via explicit `urls.py` imports, `REFLEX_DJANGO_PAGE_PACKAGES`, or deprecated auto-discover — not by magic at every server boot. Replaces the `{app}/{app}.py` file you'd write in plain Reflex.
 
 ### `django_prefix`
 The list of URL prefixes Django owns (e.g. `/admin`, `/api`). Used by the SPA catch-all and Vite dev proxy so backend routes are not treated as SPA pages. **By default, reflex-django infers this from your `urlpatterns`** when you call `reflex_mount()` last — you only pass `django_prefix=(...)` when you need to override auto-detection (e.g. bare `re_path()` routes).
@@ -81,7 +81,7 @@ Django's response object. Available as `self.response` in handlers after the mid
 ---
 
 ### `INSTALLED_APPS`
-The list in `settings.py` of Django apps. `reflex-django` auto-discovers Reflex pages in every entry's `views.py`.
+The list in `settings.py` of Django apps. With deprecated auto-discover enabled, reflex-django scans each entry's `views.py` at compile time. Recommended: import page modules explicitly in `urls.py`.
 
 ---
 
@@ -147,11 +147,17 @@ A field on a Reflex state class that, when mutated on the server, causes the UI 
 ### `Reflex`
 The framework that compiles Python states + components into a React SPA, with a server-side state engine and a WebSocket-driven update protocol. [reflex.dev](https://reflex.dev).
 
+### `app_name`
+The Reflex compile label in `REFLEX_DJANGO_RX_CONFIG`. Names build artifacts and `DECORATED_PAGES` grouping — not necessarily the Django package where pages live. ([The three knobs](mental_model.md#what-is-app_name).)
+
+### `REFLEX_DJANGO_AUTO_MOUNT`
+When `True` (default), reflex-django appends the SPA catch-all to `urlpatterns` at startup from `settings.py`. Set `False` only if you manage the catch-all yourself via `reflex_mount()`.
+
 ### `reflex_mount()`
-The single function call in `urls.py` that wires Reflex into Django. ([Configuration](configuration.md).)
+Optional helper in `reflex_django.urls` for manual SPA catch-all wiring and URL overrides (`mount_prefix`, `django_prefix`, per-mount `rx_config`). Not required when `REFLEX_DJANGO_AUTO_MOUNT=True`. ([Configuration](configuration.md).)
 
 ### `ReflexDjangoPlugin`
-The built-in Reflex plugin that installs all the integration hooks. Always added automatically by `reflex_mount()`.
+The built-in Reflex plugin that installs all the integration hooks. Added automatically when reflex-django prepares the app for compile.
 
 ### `ReflexDjangoModelSerializer`
 The DRF-style serializer class shipped with `reflex-django` for turning Django model instances into JSON-safe dicts. ([Details](serializers.md).)
@@ -184,7 +190,7 @@ Reflex's decorator that marks a method as an event handler — callable from the
 A Reflex event return value that tells the SPA to navigate to a different URL. Middleware redirects are auto-converted to `rx.redirect(...)` by the bridge.
 
 ### `rxconfig.py`
-A Reflex configuration file at the project root. In `reflex-django`, this file is optional and usually absent — `reflex_mount()` replaces it.
+A Reflex configuration file at the project root. In `reflex-django`, this file is optional and usually absent — `REFLEX_DJANGO_RX_CONFIG` in `settings.py` replaces it.
 
 ---
 

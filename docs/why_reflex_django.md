@@ -99,17 +99,20 @@ If a middleware in the chain decides to redirect — for example, `LoginRequired
 
 ### 3. Django-shaped project layout
 
-Configuration lives in **`urls.py`**, not in a separate `rxconfig.py`. Pages live in your Django app's **`views.py`**, not in some new `{app}/{app}.py` file. One call sets it all up:
+Configuration lives in **`settings.py`** (`REFLEX_DJANGO_RX_CONFIG`), not in a separate `rxconfig.py`. Pages live in your Django app's **`views.py`**, not in some new `{app}/{app}.py` file:
 
 ```python
+# config/settings.py
+REFLEX_DJANGO_RX_CONFIG = {"app_name": "shop", "frontend_port": 3000, "backend_port": 8000}
+
 # config/urls.py
-from reflex_django.urls import reflex_mount
+import shop.views  # noqa: F401
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [reflex_mount(app_name="shop")]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
-You configure Reflex like a Django app, because in your project, it kind of is one.
+You configure Reflex like a Django app, because in your project, it kind of is one. See [The three knobs](mental_model.md).
 
 ---
 

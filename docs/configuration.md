@@ -1,41 +1,80 @@
-# Configuration with `reflex_mount()`
+# Configuration
 
-All `reflex-django` configuration lives in two places, and one of them is optional:
+For the friendly overview (three knobs, two jobs, `app_name` FAQ), start at [The three knobs](mental_model.md). This page is the detailed reference.
 
-1. **`reflex_mount(...)`** in `urls.py` — the SPA catch-all URL pattern and optional overrides (`app_name`, explicit `django_prefix`).
-2. **`REFLEX_DJANGO_*` settings** in `settings.py` — Reflex runtime (`REFLEX_DJANGO_RX_CONFIG`: ports, `redis_url`, packages) and integration tunables.
+Three knobs control a Django-first reflex-django project:
 
-There's no `rxconfig.py`. `reflex-django` synthesizes one in memory from the two sources above.
+| Knob | Where | What it controls |
+|:---|:---|:---|
+| **Settings** | `REFLEX_DJANGO_RX_CONFIG` | `app_name`, ports, `redis_url`, and other `rx.Config` fields |
+| **App** | `from reflex_django import app` | Pages: `app.add_page()` / `@page` (same as native Reflex `shop/shop.py`) |
+| **URLs** | automatic (default) or `reflex_mount()` | SPA catch-all; override prefix/plugins only when needed |
+
+With `REFLEX_DJANGO_AUTO_MOUNT=True` (the default), you **do not** need a `reflex_mount()` line in `urls.py`. The catch-all is appended at startup after your Django routes are defined.
+
+There's no `rxconfig.py`. `reflex-django` synthesizes one in memory from settings and any optional `reflex_mount()` overrides.
 
 This page is the reference for both. The settings table at the bottom is also available as a flat lookup at [REFLEX_DJANGO_* settings](settings_reference.md).
 
 ---
 
-## `reflex_mount()` — the one call you actually write
+## Minimal `settings.py`
+
+```python
+REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",  # Reflex compile identity; folder name with underscores
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
+# REFLEX_DJANGO_AUTO_MOUNT defaults to True
+```
+
+`app_name` is required internally by Reflex (`DECORATED_PAGES` bucketing, virtual `{app_name}.{app_name}:app` module). Put it in settings — not in `urls.py`.
+
+---
+
+## Minimal `urls.py`
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401 — register @page decorators at import time
+
 from django.contrib import admin
 from django.urls import include, path
-from reflex_django.urls import reflex_mount
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]
+# SPA catch-all appended automatically by reflex_django.apps.ReflexDjangoConfig.ready()
 ```
 
-Put ports, `redis_url`, and other Reflex runtime options in **`REFLEX_DJANGO_RX_CONFIG`** in settings (see below).
+Import every page module explicitly (or register pages with `app.add_page()`). Auto-discovery of `{app}.views` across `INSTALLED_APPS` still works but emits a deprecation warning until the next major release.
 
-You usually **do not** pass `django_prefix`. When you append `reflex_mount()` after your Django routes, reflex-django reads those `urlpatterns` and figures out which path prefixes Django owns (the first segment of each top-level `path()`, such as `/admin` from `path("admin/", ...)`).
+---
+
+## Optional `reflex_mount()` — URL overrides only
+
+Use when you need a non-root mount prefix, an explicit `django_prefix`, or per-project plugin overrides:
+
+```python
+from reflex_django.urls import reflex_mount
+
+urlpatterns += reflex_mount(
+    mount_prefix="/app",
+    django_prefix=("/admin", "/api"),
+)
+```
+
+When `REFLEX_DJANGO_AUTO_MOUNT=True` and `urls.py` already calls `reflex_mount()`, auto-mount **skips** (no duplicate catch-all).
+
+You usually **do not** pass `django_prefix`. reflex-django reads `urlpatterns` and infers which path prefixes Django owns (the first segment of each top-level `path()`, such as `/admin` from `path("admin/", ...)`).
 
 ### What each argument does
 
 | Argument | Default | What it does |
 |:---|:---|:---|
-| `app_name` | folder containing `manage.py` (underscored) | The Reflex `app_name`. Also the default Django app to scan for pages. |
+| `app_name` | **deprecated** — use `REFLEX_DJANGO_RX_CONFIG["app_name"]` | Legacy override during migration only. |
 | `mount_prefix` | `"/"` | URL prefix where the SPA catch-all lives. You almost never change this. |
 | `django_prefix` | auto-detect | Path prefixes Django owns. Omit to infer from `urlpatterns`; pass `()` for none; pass a tuple to override. |
 | `urlpatterns` | caller's list | Optional explicit pattern list for auto-detection when not using module-level `urlpatterns += [...]`. |
@@ -231,6 +270,84 @@ Every middleware in this list runs on every Reflex event by default (except `Csr
 
 ---
 
+## Configuration ladder
+
+### Level 0 — defaults (zero `urls.py` mount line)
+
+```python
+# settings.py
+REFLEX_DJANGO_RX_CONFIG = {"app_name": "shop", "frontend_port": 3000, "backend_port": 8000}
+```
+
+```python
+# urls.py
+import shop.views  # noqa: F401
+
+urlpatterns = [path("admin/", admin.site.urls)]
+# catch-all appended automatically when REFLEX_DJANGO_AUTO_MOUNT=True (default)
+```
+
+```python
+# pages — native Reflex style
+from reflex_django import app
+
+app.add_page(home, route="/")
+```
+
+### Level 1 — settings overrides (no manual mount)
+
+| Setting | Override |
+|:---|:---|
+| `REFLEX_DJANGO_AUTO_MOUNT = False` | Disable catch-all auto-append; use manual `reflex_mount()` |
+| `REFLEX_DJANGO_MOUNT_PREFIX` | SPA mount path (default `/`) |
+| `REFLEX_DJANGO_RX_CONFIG` | Any allowed `rx.Config` field, including **`app_name`** |
+| `REFLEX_DJANGO_PLUGINS` | Reflex plugins |
+| `REFLEX_DJANGO_PLUGIN` | `ReflexDjangoPlugin` kwargs (`django_prefix`, …) |
+| `REFLEX_DJANGO_URL_ROUTING` | `django_outer` / `django_led` / `reflex_led` |
+| `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` | Own on-disk `rxconfig.py` instead of synthesized config |
+
+### Level 2 — explicit `reflex_mount()` (URL overrides)
+
+Manual mount **wins over auto-mount** (duplicate detection). Kwargs merge over settings:
+
+```python
+urlpatterns += reflex_mount(
+    mount_prefix="/app",
+    django_prefix=("/admin", "/api/v2"),
+    rx_config={"frontend_port": 3001},
+)
+```
+
+### Level 3 — custom `rx.App`
+
+**Factory setting:**
+
+```python
+REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"  # callable() → rx.App
+```
+
+**Direct assignment (always supported):**
+
+```python
+import reflex as rx
+import reflex_django.django_led_app as django_led
+
+django_led._app = rx.App(theme=rx.theme(accent_color="blue"))
+```
+
+Import `from reflex_django import app` in page modules — same singleton object.
+
+### Level 4 — routing escape hatches
+
+| Mode | When |
+|:---|:---|
+| `REFLEX_LED` | Reflex-first; auto-mount URL append skipped |
+| `REFLEX_DJANGO_AUTO_MOUNT=False` | API-only Django or custom URL layout |
+
+`django_led_app.app` is the **public** app entry (replaces `shop/shop.py`). You are expected to import it when using `app.add_page()`.
+
+---
+
 ## Common configuration mistakes
 
 **Prefix mismatch (404 on `/api/...`)**
@@ -243,7 +360,7 @@ You imported a model at the top of `views.py`. Move the import inside the handle
 If you previously experimented with plain Reflex and have a leftover `rxconfig.py`, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it, or just delete it. By default `reflex-django` ignores files on disk.
 
 **Wrong `app_name`**
-`app_name` is a Django app label (the folder name with your `views.py`), not a Python module path like `shop.shop`. The loader is always `reflex_django.django_led_app`.
+Set `app_name` in `REFLEX_DJANGO_RX_CONFIG` — it is the Reflex compile identity (often your primary Django app label), not a Python module path like `shop.shop`. The runtime loader is always `reflex_django.django_led_app`.
 
 ---
 
@@ -258,6 +375,7 @@ ROOT_URLCONF = "config.urls"
 ASGI_APPLICATION = "config.asgi.application"
 
 REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "myapp",
     "frontend_port": 3000,
     "backend_port": 8000,
 }
@@ -274,7 +392,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 ```python
 # urls.py
-urlpatterns += [reflex_mount(app_name="myapp")]
+import myapp.views  # noqa: F401
+
+urlpatterns = [path("admin/", admin.site.urls)]
 ```
 
 ```python

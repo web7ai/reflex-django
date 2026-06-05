@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 from collections.abc import Callable
@@ -111,6 +112,9 @@ def install_reflex_django_integration() -> None:
     from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
 
     ensure_mount_config_loaded()
+    from reflex_django.auto_mount import maybe_auto_mount
+
+    maybe_auto_mount()
     ensure_reflex_cli_layout()
     ensure_rxconfig_from_django()
     if resolve_url_routing() == UrlRoutingMode.DJANGO_LED:
@@ -448,11 +452,18 @@ def _patch_event_context_emit_delta() -> None:
     EventContext._reflex_django_emit_delta_original = original_emit_delta
 
 
+def _reflex_page_namespace() -> Any | None:
+    """Return :class:`reflex.page.PageNamespace` (not the lazy ``rx.page`` function)."""
+    try:
+        return importlib.import_module("reflex.page")
+    except ImportError:
+        return None
+
+
 def _patch_reflex_page() -> None:
     """Bucket ``@page`` / ``@template`` under the mount ``app_name``, not ``""``."""
-    try:
-        import reflex.page as page_module
-    except ImportError:
+    page_module = _reflex_page_namespace()
+    if page_module is None:
         return
 
     if getattr(page_module, "_reflex_django_page_patched", False):
@@ -592,15 +603,12 @@ def reset_integration_for_tests() -> None:
             EventContext._reflex_django_emit_delta_patched = False
     except ImportError:
         pass
-    try:
-        import reflex.page as page_module
-
+    page_module = _reflex_page_namespace()
+    if page_module is not None:
         original_page = getattr(page_module, "_reflex_django_page_original", None)
         if original_page is not None:
             page_module.page = original_page
             page_module._reflex_django_page_patched = False
-    except ImportError:
-        pass
     try:
         from reflex.state import BaseState
 

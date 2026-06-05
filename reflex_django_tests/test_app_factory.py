@@ -32,7 +32,7 @@ def _reset_factory() -> None:
 
 
 def test_resolve_url_routing_default() -> None:
-    assert resolve_url_routing() == UrlRoutingMode.DJANGO_LED
+    assert resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER
 
 
 def test_resolve_url_routing_django_led(
@@ -90,6 +90,9 @@ def test_ensure_django_led_app_ready_does_not_materialize_app_module(
 def test_ensure_django_led_app_ready_installs_event_bridge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import django
+
+    django.setup()
     from reflex_django.app_factory import ensure_django_led_app_ready
     from reflex_django.middleware import DjangoEventBridge
     from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django

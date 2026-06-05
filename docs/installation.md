@@ -1,6 +1,6 @@
 # Install
 
-Install three packages, add one app to `INSTALLED_APPS`, and add one line to `urls.py`. That's the whole setup.
+Install three packages, add one app to `INSTALLED_APPS`, import your page module in `urls.py`, and set `app_name` in settings. The SPA catch-all mounts itself at startup.
 
 If you'd like to understand what these pieces do before installing, read [Why reflex-django exists](why_reflex_django.md) first. Otherwise, dive in.
 
@@ -74,29 +74,30 @@ The `AsyncStreamingMiddleware` line keeps Django's admin streaming responses hap
 
 ---
 
-## 3. Wire `reflex_mount()` into `urls.py`
+## 3. Wire `urls.py` and `REFLEX_DJANGO_RX_CONFIG`
 
 ```python
 # config/urls.py
+import myapp.views  # noqa: F401
+
 from django.contrib import admin
 from django.urls import path
-from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-
-urlpatterns += [reflex_mount(app_name="myapp")]
+# Catch-all appended automatically when REFLEX_DJANGO_AUTO_MOUNT=True (default).
 ```
 
-The two rules that matter:
-
-- **Django routes first**, `reflex_mount()` last.
-- **Django prefixes are inferred** from those routes automatically. You only pass `django_prefix` when you need to override (e.g. `re_path()` without a static first segment).
-
-Add Reflex ports and `redis_url` in settings, not `urls.py`:
+Add `app_name`, ports, and `redis_url` in settings:
 
 ```python
-REFLEX_DJANGO_RX_CONFIG = {"frontend_port": 3000, "backend_port": 8000}
+REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "myapp",
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
 ```
+
+Optional: call `reflex_mount()` in `urls.py` only when you need URL overrides (`mount_prefix`, explicit `django_prefix`). Django prefixes are otherwise inferred from your routes.
 
 For the full set of options, see [Configuration](configuration.md).
 
@@ -145,7 +146,7 @@ You're probably importing a Django model at the top of `views.py`. Move the impo
 `DJANGO_SETTINGS_MODULE` from your shell environment always wins. If you're confused, run `python -c "import os; print(os.environ.get('DJANGO_SETTINGS_MODULE'))"` and see what's actually set.
 
 **`ModuleNotFoundError: shop.shop`**
-You don't need `shop/shop.py`. `reflex_mount(app_name="shop")` loads pages from `shop/views.py` via `reflex_django.django_led_app`. If something is asking for `shop.shop`, you probably have a leftover `rxconfig.py` from a previous Reflex setup — delete it.
+You don't need `shop/shop.py`. Set `"app_name": "shop"` in `REFLEX_DJANGO_RX_CONFIG` and import `shop.views` in `urls.py` (or use `from reflex_django import app` with `app.add_page()`). If something is asking for `shop.shop`, you probably have a leftover `rxconfig.py` from a previous Reflex setup — delete it.
 
 ---
 

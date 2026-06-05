@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Settings-driven auto-mount** — `REFLEX_DJANGO_AUTO_MOUNT=True` (default) appends the Reflex SPA catch-all to `ROOT_URLCONF` at startup. No `reflex_mount()` line required in `urls.py`.
+- **`REFLEX_DJANGO_RX_CONFIG["app_name"]`** — Reflex compile identity moves to settings; `reflex_mount(app_name=...)` is deprecated.
+- **`from reflex_django import app`** — native Reflex-style page registration via `app.add_page()` on the `django_led_app` singleton.
+- **`reflex_django.auto_mount`** — `maybe_auto_mount()`, `ensure_reflex_mount()`, `register_mount_from_settings()` for boot-time URL wiring.
+- Tests: `test_auto_mount.py`, `test_django_led_app_pages.py`, `test_production_entry.py`.
+
+### Changed
+
+- **Docs** — new [mental_model.md](docs/mental_model.md); entry points updated for auto-mount and settings-driven `app_name`.
+- **`reflex_mount()`** — returns a URL-only :class:`~reflex_django.auto_mount.ReflexMountHandle` (iterable / `.urlpatterns`); use for URL overrides only, not page registration.
+- **`reflex_django.urls.urlpatterns`** — default empty list; catch-all comes from auto-mount when enabled.
+- **`REFLEX_DJANGO_AUTO_DISCOVER_PAGES`** — still default `True` but emits `DeprecationWarning`; explicit `urls.py` imports recommended until next major.
+- **`apply_reflex_plugins_to_app()`** — restores plugins after `rx.App()` clears `get_config().plugins`.
+
+### Added (continued)
+
 - **Two-port dev workflow (default)** — `python manage.py run_reflex` now matches native Reflex:
   open the **frontend port** (`:3000`) for the SPA; the **backend port** (`:8000`) serves Django
   and Reflex endpoints only (admin, API, `/_event`). Vite proxies backend paths. Pass

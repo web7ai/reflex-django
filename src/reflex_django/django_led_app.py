@@ -17,7 +17,7 @@ def __getattr__(name: str) -> Any:
 def _load_app() -> Any:
     global _app
     if _app is None:
-        from reflex_django.app_factory import ensure_django_led_app_ready
+        from reflex_django.app_factory import get_or_create_app
 
-        _app = ensure_django_led_app_ready()
+        _app = get_or_create_app()
     return _app

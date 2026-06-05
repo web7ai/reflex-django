@@ -26,19 +26,24 @@ You keep writing Django. You write your UI in Python using [Reflex](https://refl
 
 ## What you'll actually write
 
-Three files. That's the whole shape of a `reflex-django` project:
+Three places. That's the whole shape of a `reflex-django` project. See [The three knobs (start here)](mental_model.md) for the full map.
 
 ```python
-# config/settings.py — register reflex_django like any other app
+# config/settings.py — Reflex config + Django apps
 INSTALLED_APPS = [..., "reflex_django", "shop"]
+
+REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
 ```
 
 ```python
-# config/urls.py — one line wires Reflex in
-from reflex_django.urls import reflex_mount
+# config/urls.py — Django routes + import pages (catch-all is automatic)
+import shop.views  # noqa: F401
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 ```python
@@ -99,12 +104,13 @@ That's your **single dev URL**. Django listens on port `8000` and quietly revers
 
 If you're new and you'd like a guided tour, this is the path most people find easiest:
 
-1. **[Why reflex-django exists](why_reflex_django.md)** — the one-page story
-2. **[How Django works in 5 minutes](how_django_works.md)** — skip this if Django is your day job
-3. **[How Reflex works in 5 minutes](how_reflex_works.md)** — skip this if Reflex is your day job
-4. **[How the two fit together](how_they_fit.md)** — the bridge, in plain English
-5. **[Install](installation.md)** and **[Your first app](quickstart.md)**
-6. **[The Essentials](configuration.md)** — pages, state, the database, auth
+1. **[The three knobs (start here)](mental_model.md)** — settings, app, URLs; page registration vs catch-all
+2. **[Why reflex-django exists](why_reflex_django.md)** — the one-page story
+3. **[How Django works in 5 minutes](how_django_works.md)** — skip this if Django is your day job
+4. **[How Reflex works in 5 minutes](how_reflex_works.md)** — skip this if Reflex is your day job
+5. **[How the two fit together](how_they_fit.md)** — the bridge, in plain English
+6. **[Install](installation.md)** and **[Your first app](quickstart.md)**
+7. **[Configuration](configuration.md)** — pages, state, the database, auth
 
 Then drop into the build guides when you actually need them — CRUD pages, forms, i18n, deployment.
 

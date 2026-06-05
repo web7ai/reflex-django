@@ -108,25 +108,27 @@ Two layers decide who handles a given URL:
 
 2. Django's urls.py:
      - /admin/, /api/, ... (your explicit path() entries)                 → Django views
-     - everything else (the SPA catch-all from reflex_mount)              → Reflex SPA shell
+     - everything else (the SPA catch-all, auto-mounted by default)       → Reflex SPA shell
 ```
 
 Reflex client-side routing then handles navigation between SPA pages (`/`, `/about`, `/cart`) without a full page reload.
 
 ### The cardinal rules
 
-1. **Django routes go above `reflex_mount()`** in `urls.py`.
-2. **Django prefixes are inferred** from those routes — you don't need to list them manually unless you override.
+1. **List Django routes in `urlpatterns`** — the catch-all is appended automatically (`REFLEX_DJANGO_AUTO_MOUNT=True`).
+2. **Django prefixes are inferred** from those routes — you don't need to list them manually unless you override via `reflex_mount(django_prefix=...)`.
 3. **Don't add a `path()` for an SPA page.** `path("about/", ...)` is wrong — use `@page(route="/about")` instead.
+4. **Import page modules** so `@page` runs at import time (auto-discover still works but is deprecated).
 
 ```python
 # config/urls.py — correct shape
+import shop.views  # noqa: F401
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
 ---
@@ -168,7 +170,7 @@ shop/
     └── checkout.py
 ```
 
-The default discovery imports `{app}.views`, which works for both file and package layouts.
+Explicit `import shop.views` (or `REFLEX_DJANGO_PAGE_PACKAGES`) loads these modules at compile time. Deprecated auto-discover imports `{app}.views` for every `INSTALLED_APPS` entry — works for both file and package layouts, but prefer explicit imports.
 
 ---
 
@@ -192,23 +194,24 @@ For explicit control, call `add_auth_pages(app)` in an advanced setup. ([Details
 
 ---
 
-## The `django_led_app` module
+## The `app` object (`django_led_app`)
 
-You might see this name mentioned. Here's what it is — and why you don't have to think about it.
+Classic Reflex projects have a `shop/shop.py` file containing `app = rx.App()`. In `reflex-django`, that file doesn't exist. Use the built-in singleton instead:
 
-Classic Reflex projects have a `shop/shop.py` file containing `app = rx.App()`. In `reflex-django`, that file doesn't exist. Instead, Reflex loads the app from a built-in module:
+```python
+from reflex_django import app  # same object as reflex_django.django_led_app.app
 
-```text
-reflex_django.django_led_app:app
+import reflex as rx
+
+def about() -> rx.Component:
+    return rx.text("About")
+
+app.add_page(about, route="/about")
 ```
 
-At startup, that module:
+Reflex compile loads `reflex_django.django_led_app:app`. The singleton is created on first access; `ensure_django_led_app_ready()` merges `@page` decorators and applies plugins on the same instance.
 
-1. Imports page modules from `INSTALLED_APPS`.
-2. Creates `rx.App()`.
-3. Applies the routes from all the `@page` decorators it found.
-
-You don't import it. You don't create it. It just makes "pages in `views.py`" work.
+**Recommended:** import page modules in `urls.py` (`import shop.views  # noqa: F401`) so decorators run before the catch-all mounts. Auto-discovery across `INSTALLED_APPS` still works but is deprecated.
 
 ---
 
@@ -251,8 +254,8 @@ class HomeState(AppState):
 ```
 
 **Page doesn't show up after adding it**
-1. Is the app listed in `INSTALLED_APPS`?
-2. Is auto-discovery enabled (`REFLEX_DJANGO_AUTO_DISCOVER_PAGES = True`, the default)?
+1. Is the page module imported in `urls.py` (or listed in `REFLEX_DJANGO_PAGE_PACKAGES`)? `@page` runs at import time.
+2. If you rely on auto-discover: is the app in `INSTALLED_APPS` and is `REFLEX_DJANGO_AUTO_DISCOVER_PAGES = True`?
 3. Did you save the file? `manage.py run_reflex` watches for changes, but the SPA rebuild can take a few seconds.
 4. Try `Ctrl+C` and restart. If still missing, delete `.web/` and run again.
 

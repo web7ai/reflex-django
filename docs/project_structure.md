@@ -14,7 +14,7 @@ myproject/
 │
 ├── config/                       # Django project package
 │   ├── settings.py               # INSTALLED_APPS, MIDDLEWARE, REFLEX_DJANGO_*
-│   ├── urls.py                   # reflex_mount(...) — last line
+│   ├── urls.py                   # Django routes + import page modules
 │   ├── asgi.py                   # imports reflex_django.asgi_entry:application
 │   └── wsgi.py
 │
@@ -36,7 +36,7 @@ Three things to notice:
 
 1. **One `manage.py`**, at the repo root. Same as any Django project.
 2. **Pages and ORM live in the same app folder.** `shop/models.py` and `shop/views.py` are next to each other. Your Reflex pages and your Django models naturally share that context.
-3. **No `rxconfig.py`. No `shop/shop.py`.** Configuration lives in `urls.py`. The Reflex app instance is loaded from `reflex_django.django_led_app`.
+3. **No `rxconfig.py`. No `shop/shop.py`.** Configuration lives in `settings.py` (`REFLEX_DJANGO_RX_CONFIG`). The Reflex app instance is `from reflex_django import app`. The SPA catch-all is automatic — see [The three knobs](mental_model.md).
 
 ---
 
@@ -45,7 +45,7 @@ Three things to notice:
 | Location | What lives there |
 |:---|:---|
 | `config/settings.py` | Django apps, middleware, database, `REFLEX_DJANGO_*` overrides |
-| `config/urls.py` | Your Django routes, then `reflex_mount(...)` at the very bottom |
+| `config/urls.py` | Django routes; `import shop.views` to register pages; catch-all auto-appended |
 | `config/asgi.py` | One import line pointing at `reflex_django.asgi_entry:application` |
 | `{app}/models.py` | Django ORM models (unchanged from any normal Django project) |
 | `{app}/views.py` | `@page`-decorated Reflex pages and `AppState` subclasses |
@@ -53,7 +53,7 @@ Three things to notice:
 | `{app}/admin.py` | Django admin registrations (unchanged) |
 | `{app}/migrations/` | Django migrations (unchanged) |
 | **Not present** | `{app}/{app}.py` — Reflex's app instance is auto-loaded |
-| **Not present** | `rxconfig.py` — config lives in `urls.py` |
+| **Not present** | `rxconfig.py` — config lives in `settings.py` |
 
 ---
 
@@ -77,11 +77,17 @@ staticfiles/
 
 ---
 
-## How pages are discovered
+## How pages are registered
 
-When the server boots, `reflex_django.django_led_app` walks every entry in `INSTALLED_APPS` and tries to import `{app}.views`. Any `@page` decorators in those modules register their routes. There's nothing for you to wire up.
+**Recommended:** import page modules in `urls.py` so `@page` runs when Django loads:
 
-The skip list: `django.*` apps and `reflex_django` itself are never scanned.
+```python
+import shop.views  # noqa: F401
+```
+
+**Still works today (deprecated):** with `REFLEX_DJANGO_AUTO_DISCOVER_PAGES=True` (default), reflex-django scans `INSTALLED_APPS` at compile time and imports every `{app}.views`. You may see a deprecation warning. Prefer explicit imports before auto-discover is removed in a future major release.
+
+The skip list for auto-discover: `django.*` apps and `reflex_django` itself are never scanned.
 
 ```python
 INSTALLED_APPS = [
@@ -98,15 +104,15 @@ If `{app}/views.py` doesn't exist, that app is silently skipped. If it raises an
 
 ---
 
-## The `app_name` argument
+## The `app_name` setting
 
-`reflex_mount(app_name="shop")` names the *primary* app. It's used for a few things:
+Put `app_name` in `REFLEX_DJANGO_RX_CONFIG` — it is Reflex's **compile label** (project id), not "all pages must live in `{app_name}/views.py`".
 
-- It's the Reflex `app_name`, which shows up in compiled artifacts and metadata.
-- If `INSTALLED_APPS` discovery is off (`REFLEX_DJANGO_AUTO_DISCOVER_PAGES = False`), only `{app_name}.views` is imported.
-- It doubles as the default app label for things like the auth pages.
+- Shows up in compiled artifacts and `DECORATED_PAGES` grouping
+- If auto-discover is off, only `{app_name}.views` is imported unless you set `REFLEX_DJANGO_PAGE_PACKAGES`
+- Can differ from where pages actually live (e.g. `app_name: "core"` with pages in `modules.ai.studio.views`)
 
-If you don't pass it, `reflex-django` uses the folder name containing `manage.py` (with hyphens turned into underscores). For most projects, this default is fine and you can leave `app_name` off.
+If you omit it, reflex-django uses the folder name containing `manage.py` (hyphens → underscores). See [The three knobs](mental_model.md#what-is-app_name).
 
 ---
 

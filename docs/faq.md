@@ -16,7 +16,7 @@ A little helps. [How Django works in 5 minutes](how_django_works.md) is enough f
 
 ### Can I use this with an existing Django project?
 
-Yes — that's a primary use case. See [Add to an existing Django project](existing_django_project.md). You don't change your models or your `urls.py` structure; you add one line to `urls.py` and start dropping pages into any app's `views.py`.
+Yes — that's a primary use case. See [Add to an existing Django project](existing_django_project.md). Add `REFLEX_DJANGO_RX_CONFIG` to `settings.py`, import page modules in `urls.py`, and start dropping pages into any app's `views.py`. The SPA catch-all is automatic.
 
 ### What versions do I need?
 
@@ -38,13 +38,29 @@ You don't need it. The SPA, the API, the admin, and the WebSocket all share an o
 
 `reflex-django` doesn't use Channels. Reflex owns the one WebSocket on `/_event`. If you need additional WebSocket protocols (chat, multiplayer game state, etc.) and the Reflex event model doesn't fit, Channels is fine to add alongside — but you'll need to route its WebSocket scopes around the outer dispatcher. Most projects don't need this.
 
+### Do I need `reflex_mount()` in `urls.py`?
+
+No — not for a default project. With `REFLEX_DJANGO_AUTO_MOUNT=True` (default), reflex-django appends the SPA catch-all at startup from `settings.py`. Call `reflex_mount()` only when you need URL overrides (`mount_prefix`, explicit `django_prefix`). See [The three knobs](mental_model.md).
+
+### What is `app_name` in `REFLEX_DJANGO_RX_CONFIG`?
+
+Reflex's **compile label** — like a project id for build artifacts. It is **not** "all pages must live in `{app_name}/views.py`". Multi-package projects can use `app_name: "core"` while pages live in `modules.ai.studio.views`. See [The three knobs — `app_name`](mental_model.md#what-is-app_name).
+
+### Why does my app work without `import myapp.views` in `urls.py`?
+
+Auto-discover (`REFLEX_DJANGO_AUTO_DISCOVER_PAGES=True`, default) imports every `{app}.views` from `INSTALLED_APPS` at compile time. That still works today but is deprecated — add explicit imports in `urls.py` or `REFLEX_DJANGO_PAGE_PACKAGES` before the next major release.
+
+### Why isn't all Reflex config in `{app_name}/views.py`?
+
+`views.py` is for pages and state. Ports, redis, plugins, and the compile label belong in `settings.py` (`REFLEX_DJANGO_RX_CONFIG`, `REFLEX_DJANGO_PLUGINS`) so Django, CI, and `run_reflex` share one source of truth. See [Configuration](configuration.md).
+
 ### Why is there no `rxconfig.py`?
 
-`reflex_mount()` in `urls.py` plus `REFLEX_DJANGO_*` settings provide everything `rxconfig.py` used to. Keeping the config in `urls.py` means there's only one place to look. If you have legacy tooling that reads `rxconfig.py`, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it in.
+`REFLEX_DJANGO_RX_CONFIG` and `REFLEX_DJANGO_PLUGINS` in `settings.py` replace it. If you have legacy tooling that reads `rxconfig.py`, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it in.
 
 ### Why is there no `{app}/{app}.py`?
 
-The `rx.App()` instance is built by `reflex_django.django_led_app`, which auto-discovers pages from `{app}/views.py` in every entry of `INSTALLED_APPS`. You write pages; the library writes the boilerplate.
+Use `from reflex_django import app` instead of `app = rx.App()` in a project file. Import your page modules (or rely on deprecated auto-discover) so `@page` decorators register routes on that singleton. See [Pages in views](pages_in_views.md).
 
 ---
 
@@ -291,7 +307,7 @@ You used a sync ORM call in an async event handler. Replace with `aget`, `acreat
 
 ### `ModuleNotFoundError: shop.shop`
 
-A leftover `rxconfig.py` is pointing at the old layout. Delete `rxconfig.py`. `reflex_mount()` in `urls.py` is the only configuration you need.
+A leftover `rxconfig.py` is pointing at the old layout. Delete `rxconfig.py` and put `app_name` in `REFLEX_DJANGO_RX_CONFIG` in `settings.py`.
 
 ### `Could not find compiled SPA`
 

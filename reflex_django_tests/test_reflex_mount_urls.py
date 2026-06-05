@@ -2,4 +2,4 @@
 
 from reflex_django.urls import reflex_mount
 
-urlpatterns = [reflex_mount()]
+urlpatterns = list(reflex_mount())

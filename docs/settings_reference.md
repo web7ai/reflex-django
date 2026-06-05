@@ -2,20 +2,25 @@
 
 Every knob the library exposes, organized by what it controls. Defaults are sensible — most projects don't change any of these.
 
-For *how* to use them in context, see [Configuration with `reflex_mount()`](configuration.md).
+For *how* to use them in context, see [Configuration](configuration.md) and [The three knobs](mental_model.md).
 
 ---
 
 ## Routing
 
+Who handles which URL path — Django views vs the Reflex SPA catch-all vs reserved WebSocket prefixes.
+
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
+| `REFLEX_DJANGO_AUTO_MOUNT` | `bool` | `True` | Append the Reflex SPA catch-all to `ROOT_URLCONF` at startup (`ReflexDjangoConfig.ready()` and ASGI bootstrap). Set `False` for Django-only installs, tests, or custom URL layouts. Env `REFLEX_DJANGO_AUTO_MOUNT=0` also disables it. Skipped automatically in `REFLEX_LED` routing mode. |
 | `REFLEX_DJANGO_URL_ROUTING` | `str` | `"auto"` → `"django_outer"` | Routing mode. Almost never change. Other values: `"reflex_led"` (legacy two-port), `"django_led"`. |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `tuple[str, ...]` | `()` | Extra path prefixes always routed to Reflex (added to the built-in list: `/_event`, `/_upload`, `/_health`, `/ping`, `/_all_routes`, `/auth-codespace`). |
 
 ---
 
 ## Serving
+
+How the compiled SPA is built, proxied in dev, and served in production.
 
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
@@ -35,8 +40,9 @@ There are no other `REFLEX_DJANGO_*` keys for Vite CSRF or `EventLoopContext` pa
 
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
-| `REFLEX_DJANGO_RX_CONFIG` | `dict` | `{}` | Reflex `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, `db_url`, CORS, log level, telemetry, etc. **Preferred home for ports and Redis** — not `urls.py`. Merged with any per-mount `rx_config=` passed to `reflex_mount()`. |
+| `REFLEX_DJANGO_RX_CONFIG` | `dict` | `{}` | Reflex `rx.Config` overrides: **`app_name`** ([compile label](mental_model.md#what-is-app_name), not "pages must live in `{app_name}/views.py`"), `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, `db_url`, CORS, log level, telemetry, etc. **Preferred home for `app_name`, ports, and Redis** — not `urls.py`. Merged with any per-mount `rx_config=` passed to `reflex_mount()`. |
 | `REFLEX_DJANGO_PLUGINS` | `list` | `[]` | Reflex plugins as dotted import paths or instances (e.g. `"reflex.plugins.RadixThemesPlugin"`). |
+| `REFLEX_DJANGO_CREATE_APP` | `str \| None` | `None` | Dotted path to a zero-arg callable returning a custom `rx.App` (e.g. `"myapp.reflex.create_app"`). Used by `get_or_create_app()` before the built-in default. |
 
 `django_prefix` is **not** a setting — it is auto-detected from your `urlpatterns` when you append `reflex_mount()` last. Pass `django_prefix=(...)` to `reflex_mount()` only to override.
 

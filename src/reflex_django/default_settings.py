@@ -120,7 +120,15 @@ REFLEX_DJANGO_URL_ROUTING = os.environ.get("REFLEX_DJANGO_URL_ROUTING", "auto")
 # Catch-all mount prefix for :func:`reflex_django.urls.reflex_mount`.
 REFLEX_DJANGO_MOUNT_PREFIX = os.environ.get("REFLEX_DJANGO_MOUNT_PREFIX", "/")
 
-# Django-led: "package.module:create_app" returning rx.App (optional).
+# Append Reflex SPA catch-all to ROOT_URLCONF.urlpatterns at startup (default True).
+REFLEX_DJANGO_AUTO_MOUNT = os.environ.get("REFLEX_DJANGO_AUTO_MOUNT", "1") not in {
+    "0",
+    "false",
+    "False",
+}
+
+# Optional dotted path to a callable returning rx.App (e.g. "myapp.reflex:create_app").
+# REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"
 
 # Django-led: dotted modules to import so @rx.page / decorators register.
 # REFLEX_DJANGO_PAGE_PACKAGES: list[str] = ["myapp.pages"]
@@ -323,6 +331,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.admin",
     "django.contrib.staticfiles",
+    "reflex_django.apps.ReflexDjangoConfig",
 ]
 
 MIDDLEWARE = [

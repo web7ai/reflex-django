@@ -269,6 +269,11 @@ def apply_reflex_plugins_to_app(app: App) -> None:
     """
     from reflex_base.config import get_config
 
+    from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+
+    # ``rx.App()`` can reset ``get_config().plugins``; restore Django-first plugins.
+    ensure_rxconfig_from_django()
+
     for plugin in get_config().plugins or ():
         post_compile = getattr(plugin, "post_compile", None)
         if callable(post_compile):

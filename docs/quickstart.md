@@ -100,30 +100,26 @@ Why those middlewares matter: every middleware in that list runs on every Reflex
 
 ---
 
-## 3. Wire `urls.py`
+## 3. Wire `urls.py` and settings
 
 ```python
 # config/urls.py
+import shop.views  # noqa: F401 — registers @page routes at import time
+
 from django.contrib import admin
 from django.urls import path
-from reflex_django.urls import reflex_mount
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 ]
-
-urlpatterns += [reflex_mount(app_name="shop")]
+# SPA catch-all is appended automatically (REFLEX_DJANGO_AUTO_MOUNT=True by default).
 ```
 
-Two pieces:
-
-- `app_name="shop"` — Reflex will look for pages in `shop/views.py`.
-- Routes above the mount (like `path("admin/", ...)`) are auto-detected as Django-owned; everything else falls through to the Reflex SPA.
-
-Put ports and other Reflex runtime options in `settings.py`:
+Put `app_name`, ports, and other Reflex runtime options in `settings.py`:
 
 ```python
 REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",
     "frontend_port": 3000,
     "backend_port": 8000,
 }
@@ -385,7 +381,7 @@ You now have a working app. From here:
 | `/` returns 404 on first run | The SPA wasn't built. Run `python manage.py run_reflex` once and wait for the export to finish; it stages the bundle into `STATIC_ROOT/_reflex/`. |
 | You see "Please log in" even after logging into `/admin/` | `SessionMiddleware` or `AuthenticationMiddleware` missing from `MIDDLEWARE`. Check step 2. |
 | `AppRegistryNotReady` at startup | You're touching a Django model at class definition time. Move model access into your `@rx.event` handlers. |
-| `ModuleNotFoundError: shop.shop` | A leftover `rxconfig.py` is referencing the old layout. Delete `rxconfig.py` — `reflex_mount()` is the only config you need. |
+| `ModuleNotFoundError: shop.shop` | A leftover `rxconfig.py` is referencing the old layout. Delete `rxconfig.py` and set `app_name` in `REFLEX_DJANGO_RX_CONFIG`. |
 | Admin complains about streaming | Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the **end** of `MIDDLEWARE`. |
 | Admin **403 CSRF** on `:3000` | See [Local development](local_development.md) — `CSRF_TRUSTED_ORIGINS`, `USE_X_FORWARDED_HOST`, `DEFAULT_DEV_MIDDLEWARE`. |
 | `useContext is not a function` in the browser | Restart `run_reflex` after compile; see [Local development](local_development.md#troubleshooting). |

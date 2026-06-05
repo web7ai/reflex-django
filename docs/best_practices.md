@@ -42,9 +42,11 @@ The patterns below are things you'll figure out yourself after a week or two. Re
 
 ## URLs and routing
 
-**Django routes go above `reflex_mount()`.** Always.
+**List Django routes in `urlpatterns`.** With auto-mount (default), the SPA catch-all is appended at startup — no `reflex_mount()` required.
 
-**Let prefix auto-detection do its job.** If you list routes in `urlpatterns` and append `reflex_mount()` last, reflex-django infers `django_prefix` for you. Override manually only when you use `re_path()` or have an unusual layout — drift between routes and an explicit prefix list is still the #1 cause of routing 404s.
+**Let prefix auto-detection do its job.** reflex-django infers `django_prefix` from your routes. Override with `reflex_mount(django_prefix=...)` only when you use `re_path()` or have an unusual layout — drift between routes and an explicit prefix list is still the #1 cause of routing 404s.
+
+**Import page modules in `urls.py`.** `@page` runs at import time; don't rely on deprecated auto-discover forever.
 
 **Don't add Django `path()` entries for SPA pages.** SPA routes live in `@page(route=...)`. Adding a Django path shadows them.
 

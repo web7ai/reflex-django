@@ -101,7 +101,12 @@ def get_merged_mount_rx_config() -> MountRxConfigRegistration:
 
 
 def resolve_app_name() -> str:
-    """Return Reflex ``app_name`` from ``reflex_mount()`` or the project folder name."""
+    """Return Reflex ``app_name`` from settings, mount registration, or project folder."""
+    settings_rx = _settings_rx_config()
+    settings_name = settings_rx.get("app_name")
+    if isinstance(settings_name, str) and settings_name.strip():
+        return settings_name.strip()
+
     ensure_mount_config_loaded()
     mount = get_merged_mount_rx_config()
     if mount.app_name and str(mount.app_name).strip():
@@ -167,14 +172,21 @@ def has_mount_rx_config() -> bool:
 def clear_mount_rx_config() -> None:
     """Clear mount-time config (tests only)."""
     global _URLCONF_IMPORTED
+    from reflex_django.auto_mount import clear_auto_mount_state
+
     _REGISTRATIONS.clear()
     _URLCONF_IMPORTED = False
+    clear_auto_mount_state()
 
 
 def ensure_mount_config_loaded() -> None:
-    """Import ``ROOT_URLCONF`` so ``reflex_mount()`` has registered config."""
+    """Import ``ROOT_URLCONF`` and ensure mount config is registered from settings."""
     global _URLCONF_IMPORTED
     if _URLCONF_IMPORTED:
+        if not has_mount_rx_config():
+            from reflex_django.auto_mount import register_mount_from_settings
+
+            register_mount_from_settings()
         return
     try:
         from django.conf import settings
@@ -192,3 +204,7 @@ def ensure_mount_config_loaded() -> None:
         _URLCONF_IMPORTED = True
     except Exception:
         pass
+    if not has_mount_rx_config():
+        from reflex_django.auto_mount import register_mount_from_settings
+
+        register_mount_from_settings()

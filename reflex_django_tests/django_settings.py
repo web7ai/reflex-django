@@ -22,6 +22,7 @@ INSTALLED_APPS = [
 # default is now ``True`` (from-build on by default) — individual tests that
 # need the new behaviour set it explicitly via ``monkeypatch.setattr``.
 REFLEX_DJANGO_SERVE_FROM_BUILD = False
+REFLEX_DJANGO_AUTO_MOUNT = False
 
 MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",

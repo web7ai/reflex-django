@@ -2,7 +2,7 @@
 
 You've seen the [why](why_reflex_django.md), and you have a working picture of [Django](how_django_works.md) and [Reflex](how_reflex_works.md). Now let's stitch them together. This page names the actual pieces — what they're called, what they do, and how a request becomes a UI update.
 
-You'll meet a handful of names: `reflex_mount()`, `AppState`, `DjangoEventBridge`, `DjangoOuterDispatcher`, `django_led_app`. Don't worry about memorizing them. We introduce each one once, in context.
+You'll meet a handful of names: `REFLEX_DJANGO_RX_CONFIG`, `AppState`, `DjangoEventBridge`, `DjangoOuterDispatcher`, `django_led_app`. Don't worry about memorizing them. We introduce each one once, in context. For the short map, read [The three knobs](mental_model.md) first.
 
 ---
 
@@ -48,19 +48,24 @@ Most of the time, you only interact with four things:
 
 | Piece | What it is | Where you see it |
 |:---|:---|:---|
-| **`reflex_mount()`** | One function call that wires Reflex into Django | `config/urls.py` |
+| **`REFLEX_DJANGO_RX_CONFIG`** | Reflex ports, `app_name`, redis — replaces `rxconfig.py` | `config/settings.py` |
+| **`import shop.views`** | Loads `@page` decorators at import time | `config/urls.py` |
 | **`AppState`** | Base class for Reflex states that need Django context | `{app}/views.py` |
 | **`@page`** | Decorator that registers a Reflex page with a URL | `{app}/views.py` |
 | **`asgi_entry.application`** | The ASGI callable that boots everything | `config/asgi.py` |
 
+The SPA catch-all is appended automatically (`REFLEX_DJANGO_AUTO_MOUNT=True`). You only call `reflex_mount()` for URL prefix overrides.
+
 Here they are in their natural habitat:
 
 ```python
+# config/settings.py
+REFLEX_DJANGO_RX_CONFIG = {"app_name": "shop", "frontend_port": 3000, "backend_port": 8000}
+
 # config/urls.py
-from reflex_django.urls import reflex_mount
+import shop.views  # noqa: F401
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 ```python
@@ -106,7 +111,7 @@ Now `GET /`:
 
 1. Request hits Django, not a Reflex-internal path.
 2. Django runs middleware, then the URL resolver.
-3. The URL resolver hits the catch-all that `reflex_mount()` registered, which points at `ReflexMountView`.
+3. The URL resolver hits the SPA catch-all (auto-mounted or from `reflex_mount()`), which points at `ReflexMountView`.
 4. `ReflexMountView` serves the compiled SPA's `index.html` from `STATIC_ROOT/_reflex/`.
 5. The browser loads the SPA. The SPA opens a WebSocket to `/_event`.
 
@@ -133,12 +138,12 @@ Most of this is invisible. You write step 7 — the handler. The bridge does the
 
 ## "Wait, where did `rxconfig.py` go?"
 
-In a normal Reflex project, there's a `rxconfig.py` file at the root that configures ports, app name, plugins, and so on. In `reflex-django`, you don't write that file. Instead, the runtime config is built in memory from two sources:
+In a normal Reflex project, there's a `rxconfig.py` file at the root that configures ports, app name, plugins, and so on. In `reflex-django`, you don't write that file. Instead, put config in **`settings.py`**:
 
-1. **`reflex_mount(app_name=...)`** in your `urls.py` — the SPA catch-all URL pattern (Django prefixes auto-detected from routes above).
-2. **`REFLEX_DJANGO_RX_CONFIG` and other `REFLEX_DJANGO_*` settings** in `settings.py` — ports, `redis_url`, plugins, and integration tunables.
+- **`REFLEX_DJANGO_RX_CONFIG`** — `app_name`, ports, `redis_url`, and other `rx.Config` fields
+- **`REFLEX_DJANGO_PLUGINS`** and **`REFLEX_DJANGO_PLUGIN`** — Reflex and Django-bridge plugins
 
-Importing `urls.py` is enough to register the config. `manage.py run_reflex`, your production ASGI server, and CI all read the same in-memory config.
+Optional per-mount overrides via `reflex_mount(rx_config=...)` merge on top. `manage.py run_reflex`, your production ASGI server, and CI all read the same in-memory config.
 
 If you have an existing `rxconfig.py` and want to keep it, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` and `reflex-django` will merge it in.
 
@@ -146,15 +151,15 @@ If you have an existing `rxconfig.py` and want to keep it, set `REFLEX_DJANGO_US
 
 ## "And `shop/shop.py`?"
 
-In a normal Reflex project, you'd have `shop/shop.py` containing `app = rx.App()`. In `reflex-django`, that file doesn't exist either. Pages live in `shop/views.py`, and Reflex loads the app from a built-in module called `reflex_django.django_led_app`.
+In a normal Reflex project, you'd have `shop/shop.py` containing `app = rx.App()`. In `reflex-django`, use the built-in singleton instead:
 
-That module quietly does three things at startup:
+```python
+from reflex_django import app  # same as reflex_django.django_led_app.app
+```
 
-1. Imports `{app}/views.py` for every app in `INSTALLED_APPS`.
-2. Builds `rx.App()`.
-3. Registers any pages it found from `@page` decorators.
+Pages live in `{app}/views.py` with `@page`, or you call `app.add_page()` directly. At compile time, reflex-django imports your page modules (explicit `urls.py` import, `REFLEX_DJANGO_PAGE_PACKAGES`, or deprecated auto-discover), merges decorated pages onto that app, and applies plugins.
 
-You don't import it. You don't see it. It just makes "pages in `views.py`" work.
+You rarely import `django_led_app` yourself — but it is the public app entry, not a hidden implementation detail. See [The three knobs](mental_model.md).
 
 ---
 

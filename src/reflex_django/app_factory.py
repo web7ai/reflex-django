@@ -6,6 +6,7 @@ import importlib
 import importlib.util
 import sys
 import types
+import warnings
 from typing import Any
 
 _SKIP_PAGE_APP_LABELS = frozenset({"reflex_django"})
@@ -35,6 +36,49 @@ def create_app() -> Any:
 
     configure_django()
     return rx.App()
+
+
+def _resolve_user_create_app() -> Any | None:
+    """Return ``rx.App`` from ``REFLEX_DJANGO_CREATE_APP`` when configured."""
+    try:
+        from django.conf import settings
+        from django.utils.module_loading import import_string
+    except Exception:
+        return None
+
+    dotted = getattr(settings, "REFLEX_DJANGO_CREATE_APP", None)
+    if not isinstance(dotted, str) or not dotted.strip():
+        return None
+    target = import_string(dotted.strip())
+    return target()
+
+
+def get_or_create_app() -> Any:
+    """Return the singleton :class:`reflex.app.App` for Django-first projects.
+
+    Honors a pre-set :data:`reflex_django.django_led_app._app`, then
+    :data:`~django.conf.settings.REFLEX_DJANGO_CREATE_APP`, else ``rx.App()``.
+    """
+    global _APP_INSTANCE
+    import reflex_django.django_led_app as django_led_module
+
+    if django_led_module._app is not None:
+        _APP_INSTANCE = django_led_module._app
+        return django_led_module._app
+
+    if _APP_INSTANCE is not None:
+        django_led_module._app = _APP_INSTANCE
+        return _APP_INSTANCE
+
+    user_app = _resolve_user_create_app()
+    app = user_app if user_app is not None else create_app()
+
+    from reflex_django.mount_config import resolve_app_name
+
+    register_reflex_app_module(resolve_app_name(), app)
+    django_led_module._app = app
+    _APP_INSTANCE = app
+    return app
 
 
 def reflex_app_module_name(app_name: str) -> str:
@@ -114,12 +158,24 @@ def discover_page_modules() -> list[str]:
     runs decorators and registers Reflex routes — no ``urls.py`` imports or ``rxconfig.py``
     page list required.
 
-    Override with ``REFLEX_DJANGO_PAGE_PACKAGES`` in settings when needed.
+    Deprecated: import page modules explicitly in ``urls.py`` or use
+    ``from reflex_django import app`` with ``app.add_page()``. Auto-discovery will be
+    removed in a future major release.
     """
     settings = _django_settings()
     explicit = getattr(settings, "REFLEX_DJANGO_PAGE_PACKAGES", None)
     if explicit:
         return list(explicit)
+
+    if getattr(settings, "REFLEX_DJANGO_AUTO_DISCOVER_PAGES", True):
+        warnings.warn(
+            "REFLEX_DJANGO_AUTO_DISCOVER_PAGES is deprecated; import page modules "
+            "explicitly in urls.py (e.g. `import myapp.views  # noqa: F401`) or "
+            "register pages with `from reflex_django import app` and app.add_page(). "
+            "Auto-discovery will be removed in a future major release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     if not getattr(settings, "REFLEX_DJANGO_AUTO_DISCOVER_PAGES", True):
         from reflex_django.mount_config import ensure_mount_config_loaded, resolve_app_name
@@ -349,25 +405,16 @@ def import_page_packages() -> list[str]:
 
 
 def load_app_factory() -> Any:
-    """Load :class:`reflex.app.App` via :func:`create_app` and register ``{app}.{app}:app``.
+    """Load :class:`reflex.app.App` via :func:`get_or_create_app`.
 
     Returns:
         The Reflex app instance.
 
     """
-    global _APP_INSTANCE
-    if _APP_INSTANCE is not None:
-        return _APP_INSTANCE
-
-    from reflex_django.mount_config import ensure_mount_config_loaded, resolve_app_name
+    from reflex_django.mount_config import ensure_mount_config_loaded
 
     ensure_mount_config_loaded()
-    app_name = resolve_app_name()
-
-    app = create_app()
-    register_reflex_app_module(app_name, app)
-    _APP_INSTANCE = app
-    return app
+    return get_or_create_app()
 
 
 def ensure_django_led_app_ready() -> Any:
@@ -491,3 +538,6 @@ def reset_app_factory_cache() -> None:
     import reflex_django.django_led_app as django_led_app
 
     django_led_app._app = None
+    from reflex_django.auto_mount import clear_auto_mount_state
+
+    clear_auto_mount_state()

@@ -81,8 +81,11 @@ REFLEX_DJANGO_RX_CONFIG = {
 ```
 
 ```python
-# urls.py — Django prefixes (/admin, /api, …) are auto-detected from routes above
-urlpatterns += [reflex_mount(app_name="myapp")]
+# urls.py — import pages; Django prefixes (/admin, /api, …) are auto-detected from routes
+import myapp.views  # noqa: F401
+
+urlpatterns = [path("admin/", admin.site.urls)]
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
 Optional overrides in development settings:

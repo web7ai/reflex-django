@@ -108,6 +108,7 @@ __all__ = [
     "builtin_i18n_context",
     "builtin_user_context",
     "collect_reflex_context",
+    "app",
     "configure_django",
     "create_app",
     "current_csrf_token",
@@ -144,6 +145,7 @@ __all__ = [
 # ``INSTALLED_APPS``). Resolve them on first attribute access instead so the
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
+    "app": ("reflex_django.django_led_app", "app"),
     "asgi_application": ("reflex_django.asgi_entry", "application"),
     "build_asgi_application": ("reflex_django.asgi_entry", "build_application"),
     "build_django_outer_application": (

@@ -1,8 +1,8 @@
 """Default URL conf and helpers for reflex-django.
 
-Use :func:`reflex_mount` as the **last** entry in ``urlpatterns`` for Django-led SPA
-routing. Register Django routes (admin, API, …) **before** ``reflex_mount``; path
-prefixes are auto-detected from those patterns unless you pass ``django_prefix``.
+With ``REFLEX_DJANGO_AUTO_MOUNT=True`` (default), the SPA catch-all is appended
+automatically at startup. Use :func:`reflex_mount` only for overrides
+(``mount_prefix``, ``django_prefix``, plugins).
 """
 
 from __future__ import annotations
@@ -15,11 +15,15 @@ from django.contrib import admin
 from django.urls import URLPattern, path, re_path
 from django.views.generic import RedirectView
 
-from reflex_django.mount_config import register_mount_rx_config
 from reflex_django.mount_registry import register_mount
-from reflex_django.prefix_discovery import resolve_django_prefix
-from reflex_django.prefixes import export_prefix_env, export_rx_port_env, resolve_prefixes
+from reflex_django.pages.decorators import page
 from reflex_django.views.mount import ReflexMountView
+
+__all__ = [
+    "admin_urlpatterns",
+    "page",
+    "reflex_mount",
+]
 
 
 def _strip(prefix: str) -> str:
@@ -36,7 +40,6 @@ def _catchall_exclusions(reserved: tuple[str, ...]) -> str:
             parts.append(rf"(?!{re.escape(segment)}$)")
             parts.append(rf"(?!{re.escape(segment)}/)")
     if "/" in reserved:
-        # Site root: Django passes an empty path to the catch-all regex.
         parts.append(r"(?!$)")
     return "".join(parts)
 
@@ -62,8 +65,8 @@ def _reflex_catchall_pattern(
 def admin_urlpatterns(admin_prefix: str = "/admin") -> list[URLPattern]:
     """Optional admin redirect (no trailing slash) + ``admin.site.urls``.
 
-    Wire **before** :func:`reflex_mount` and include ``admin_prefix`` in
-    ``django_prefix`` (for example ``django_prefix=("/admin", "/api")``).
+    Wire **before** the Reflex SPA catch-all and include ``admin_prefix`` in
+    ``django_prefix`` when using manual :func:`reflex_mount`.
 
     Args:
         admin_prefix: Normalized admin mount (default ``"/admin"``).
@@ -86,95 +89,49 @@ def admin_urlpatterns(admin_prefix: str = "/admin") -> list[URLPattern]:
 def reflex_mount(
     *,
     app_name: str | None = None,
-    mount_prefix: str = "/",
+    mount_prefix: str | None = None,
     django_prefix: str | tuple[str, ...] | None = None,
     urlpatterns: Sequence[Any] | None = None,
     plugins: Sequence[Any] | None = None,
     rx_config: Mapping[str, Any] | None = None,
     django_plugin: Mapping[str, Any] | None = None,
-) -> URLPattern:
-    """Return the SPA catch-all pattern and register Reflex ``rx.Config``.
+):
+    """Register mount config and return the SPA catch-all URL handle.
 
-    Append to existing ``urlpatterns`` (keep this entry **last**)::
+    Prefer settings (``REFLEX_DJANGO_RX_CONFIG``, ``REFLEX_DJANGO_AUTO_MOUNT``).
+    Use this for URL overrides only::
 
-        urlpatterns = [path("admin/", admin.site.urls), ...]
-        urlpatterns += [reflex_mount(app_name="myapp")]
+        urlpatterns += reflex_mount(mount_prefix="/app")
 
-    When ``django_prefix`` is omitted, prefixes are inferred from the caller's
-    ``urlpatterns`` (first path segment of each top-level ``path()``). Override
-    with an explicit tuple when you use ``re_path()`` or need finer control.
-    Reflex runtime options (``redis_url``, ports, …) belong in
-    ``REFLEX_DJANGO_RX_CONFIG`` in Django settings.
+    Or::
+
+        urlpatterns += reflex_mount().urlpatterns
 
     Args:
-        app_name: Reflex application name (package label). Defaults to the Django
-            project folder name (parent of ``manage.py``, with ``-`` → ``_``).
-        mount_prefix: SPA catch-all prefix (default ``"/"``).
-        django_prefix: Path prefix(es) owned by Django. ``None`` (default)
-            auto-detects from ``urlpatterns``; pass ``()`` for none.
-        urlpatterns: Optional explicit pattern list for auto-detection (when not
-            called as ``urlpatterns += [reflex_mount()]`` at module level).
-        plugins: Reflex :class:`~reflex_base.plugins.base.Plugin` instances.
-        rx_config: Optional per-mount ``rx.Config`` overrides (merged over
-            ``REFLEX_DJANGO_RX_CONFIG`` from settings).
+        app_name: Deprecated — use ``REFLEX_DJANGO_RX_CONFIG["app_name"]``.
+        mount_prefix: SPA catch-all prefix (default from ``REFLEX_DJANGO_MOUNT_PREFIX``).
+        django_prefix: Django-owned prefixes; ``None`` auto-detects from ``urlpatterns``.
+        urlpatterns: Optional pattern list for prefix auto-detection.
+        plugins: Reflex plugin instances.
+        rx_config: Per-mount ``rx.Config`` overrides (merged over settings).
         django_plugin: Keyword arguments for :class:`~reflex_django.ReflexDjangoPlugin`.
 
     Returns:
-        A single catch-all :class:`~django.urls.URLPattern`.
-
-    Example::
-
-        from django.contrib import admin
-        from django.urls import include, path
-        from reflex_django.urls import reflex_mount
-
-        urlpatterns = [
-            path("admin/", admin.site.urls),
-            path("api/", include("myapp.api_urls")),
-        ]
-        urlpatterns += [reflex_mount(app_name="myapp")]
+        :class:`~reflex_django.auto_mount.ReflexMountHandle` (iterable; ``.urlpatterns``).
     """
-    from reflex_django.rxconfig_bridge import _coerce_rx_config_dict
+    from reflex_django.auto_mount import ensure_reflex_mount
 
-    resolved_django_prefix = resolve_django_prefix(
-        django_prefix,
+    if mount_prefix is None:
+        mount_prefix = "/"
+    return ensure_reflex_mount(
+        app_name=app_name,
+        mount_prefix=mount_prefix,
+        django_prefix=django_prefix,
         urlpatterns=urlpatterns,
-    )
-
-    try:
-        from django.conf import settings as django_settings
-
-        settings_rx = getattr(django_settings, "REFLEX_DJANGO_RX_CONFIG", None) or {}
-    except Exception:
-        settings_rx = {}
-    merged_rx = _coerce_rx_config_dict({**dict(settings_rx), **dict(rx_config or {})})
-    if app_name:
-        merged_rx["app_name"] = app_name
-
-    register_mount_rx_config(
-        app_name=app_name or merged_rx.get("app_name"),
         plugins=plugins,
-        rx_config=merged_rx,
+        rx_config=rx_config,
         django_plugin=django_plugin,
-        mount_prefix=mount_prefix,
-        django_prefix=resolved_django_prefix,
-    )
-
-    from reflex_django.app_factory import import_mount_app_views
-
-    import_mount_app_views(app_name or merged_rx.get("app_name"))
-
-    config = resolve_prefixes(
-        mount_prefix=mount_prefix,
-        django_prefix=resolved_django_prefix,
-    )
-    export_prefix_env(config)
-    export_rx_port_env()
-
-    return _reflex_catchall_pattern(
-        config.mount_prefix,
-        config.reserved_paths_for_catchall(),
     )
 
 
-urlpatterns: list[URLPattern] = [reflex_mount()]
+urlpatterns: list[URLPattern] = []

@@ -99,18 +99,21 @@ New:
 ```python
 # rxconfig.py — delete this file (or keep an empty stub if you have build tooling that requires it)
 
+# config/settings.py — ports, app_name, redis_url live here now
+REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",
+    "backend_port": 8000,
+}
+
 # config/urls.py — new
+import shop.views  # noqa: F401
+
 from django.contrib import admin
 from django.urls import path
-from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [reflex_mount(app_name="shop")]
-```
-
-```python
-# config/settings.py — ports and redis_url live here now
-REFLEX_DJANGO_RX_CONFIG = {"backend_port": 8000}
+# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
+# Legacy manual mount (migration only): urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 If you have build/CI tooling that absolutely requires a `rxconfig.py` file on disk, you can set `REFLEX_DJANGO_MATERIALIZE_RXCONFIG = True` to have one written out automatically. Most projects don't need this.
