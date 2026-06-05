@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Awaitable, Callable, MutableMapping, Sequence
+from pathlib import Path
 from typing import Any
 from unittest import mock
 
@@ -79,6 +80,45 @@ def test_post_compile_assigns_api_transformer_when_none(
 
     # The bridge is installed by default.
     assert len(app.middlewares) == 1
+
+
+def test_post_compile_applies_frontend_stability_patches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_django_build(monkeypatch)
+    monkeypatch.setattr(
+        "reflex_django.plugin.ReflexDjangoPlugin._warn_if_using_auto_settings",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        "reflex_django.middleware.DjangoEventBridge.__init__",
+        lambda self: None,
+    )
+    monkeypatch.setattr(
+        "reflex_django.plugin.ReflexDjangoPlugin._ensure_vite_dev_proxy_on_disk",
+        lambda self: None,
+    )
+    monkeypatch.setattr(
+        "reflex_django.plugin.ReflexDjangoPlugin._warn_if_frontend_dispatchers_out_of_sync",
+        lambda self: None,
+    )
+
+    calls: list[Path | None] = []
+
+    def _fake_apply(web_dir: Path | None = None) -> list[str]:
+        calls.append(web_dir)
+        return ["utils/context.js"]
+
+    monkeypatch.setattr(
+        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        _fake_apply,
+    )
+
+    app = _StubApp()
+    ReflexDjangoPlugin().post_compile(app=app)
+
+    assert len(calls) == 1
+    assert calls[0] is None
 
 
 def test_post_compile_chains_with_existing_transformer(

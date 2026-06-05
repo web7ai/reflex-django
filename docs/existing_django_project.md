@@ -12,7 +12,7 @@ Good news: you don't have to touch your models or your existing views. You add `
 |:---|:---|
 | `manage.py`, models, migrations, admin | `reflex_django` in `INSTALLED_APPS` |
 | Your existing `/api/` and templates | `reflex_mount(...)` in `urls.py` |
-| Your custom middleware | `AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE` |
+| Your custom middleware | `AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE`; optional `DEFAULT_DEV_MIDDLEWARE` at the top in dev ([details](local_development.md)) |
 | Your DRF views, webhooks, command-line scripts | `@page` pages inside any app's `views.py` |
 | Your `settings.py` (mostly) | A few `REFLEX_DJANGO_*` keys (optional) |
 
@@ -47,6 +47,27 @@ MIDDLEWARE = [
 ```
 
 The streaming middleware needs to be **last**. It's there to keep Django's admin streaming responses ASGI-safe; it does nothing under WSGI. ([Details](async_streaming_middleware.md).)
+
+If you use the Vite dev URL (`http://localhost:3000/admin/`), also prepend the dev middleware and CSRF origins — see [Local development](local_development.md):
+
+```python
+# settings/dev.py (recommended)
+from reflex_django.django_dev_middleware import DEFAULT_DEV_MIDDLEWARE
+
+USE_X_FORWARDED_HOST = True
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+MIDDLEWARE = [
+    *DEFAULT_DEV_MIDDLEWARE,
+    # ... your existing middleware ...
+    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+]
+```
 
 ---
 

@@ -337,6 +337,26 @@ If those fit your needs, use them. They're great for adding selective interactiv
 
 ---
 
+## Development (Vite port and CSRF)
+
+### Why do I open `localhost:3000` instead of `8000`?
+
+`run_reflex` starts Vite on the frontend port (default **3000**) for hot reload and proxies Django routes to the backend on **8000**. Same cookies and session when configured correctly. Full setup: [Local development](local_development.md).
+
+### Django admin returns 403 CSRF on port 3000
+
+Add both `:3000` and `:8000` to `CSRF_TRUSTED_ORIGINS`, set `USE_X_FORWARDED_HOST = True`, and put `reflex_django.django_dev_middleware.DEFAULT_DEV_MIDDLEWARE` at the top of `MIDDLEWARE` in dev settings. See [Local development](local_development.md).
+
+### `useContext is not a function or its return value is not iterable`
+
+Reflex’s generated `EventLoopContext` default and array destructuring can throw before the provider mounts. **reflex-django** patches `.web` after compile (`frontend_stability`). Restart `run_reflex`, hard-refresh the browser, and check the compile log for “frontend stability patches”. Do not add Vite aliases that map `react` to `react/index.js` — that breaks `react/jsx-runtime`. Details: [Local development](local_development.md#troubleshooting).
+
+### Should I copy dev middleware into my project?
+
+No — import from `reflex_django.django_dev_middleware` (or use `DEFAULT_DEV_MIDDLEWARE`). Older project-local copies are deprecated in favor of the package module.
+
+---
+
 ## Compatibility
 
 ### Does this work with Django 5? Django 4?

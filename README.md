@@ -160,6 +160,7 @@ The full docs walk you through the *why*, the *how*, and every knob:
 - **[How Reflex works in 5 minutes](https://web7ai.github.io/reflex-django/how_reflex_works/)**
 - **[How the two fit together](https://web7ai.github.io/reflex-django/how_they_fit/)**
 - **[Your first app — a 15-minute todo list](https://web7ai.github.io/reflex-django/quickstart/)**
+- **[Local development (Vite, admin CSRF, frontend patches)](https://web7ai.github.io/reflex-django/local_development/)**
 - **[Add to an existing Django project](https://web7ai.github.io/reflex-django/existing_django_project/)**
 
 Site: <https://web7ai.github.io/reflex-django/>

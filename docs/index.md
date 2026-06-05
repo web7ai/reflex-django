@@ -115,6 +115,7 @@ Then drop into the build guides when you actually need them — CRUD pages, form
 | I want to… | Read |
 |:---|:---|
 | Configure ports, app name, prefixes | [Configuration](configuration.md) |
+| Dev on `:3000`, admin CSRF, `useContext` errors | [Local development](local_development.md) |
 | Put pages next to my Django models | [Pages live in views.py](pages_in_views.md) |
 | Read `request.user` inside a button handler | [AppState: your bridge to Django](state_management.md) |
 | Build a list/edit/delete page fast | [CRUD with ModelState](reactive_model_state.md) |

@@ -338,18 +338,12 @@ def _patch_apply_decorated_pages() -> None:
     original = reflex_app_module.App._apply_decorated_pages
 
     def _apply_decorated_pages(self) -> None:  # noqa: ANN001
-        from reflex_django.app_factory import (
-            apply_page_registry_to_app,
-            migrate_decorated_pages_app_name,
-        )
-        from reflex_django.mount_config import resolve_app_name
+        from reflex_django.app_factory import prepare_pages_for_compile
 
         if getattr(self, "_reflex_django_decorated_pages_applied", False):
             return
 
-        migrate_decorated_pages_app_name(resolve_app_name())
-        original(self)
-        apply_page_registry_to_app(self)
+        prepare_pages_for_compile()
         self._reflex_django_decorated_pages_applied = True  # type: ignore[attr-defined]
 
     reflex_app_module.App._apply_decorated_pages = _apply_decorated_pages
@@ -522,6 +516,7 @@ def _patch_reflex_compile() -> None:
             missing_frontend_dispatchers,
             warn_if_frontend_dispatchers_out_of_sync,
         )
+        from reflex_django.frontend_stability import apply_frontend_stability_after_compile
         from reflex_django.vite_proxy import ensure_vite_django_dev_proxy_from_config
 
         prepare_pages_for_compile()
@@ -534,6 +529,7 @@ def _patch_reflex_compile() -> None:
             prepare_pages_for_compile()
             expected = expected_dispatch_keys_from_app(app)
         original_compile(avoid_dirty_check=False)
+        apply_frontend_stability_after_compile()
         ensure_vite_django_dev_proxy_from_config()
         missing = missing_frontend_dispatchers(expected_keys=expected, app=app)
         if missing:
@@ -543,6 +539,7 @@ def _patch_reflex_compile() -> None:
             prepare_pages_for_compile()
             expected = expected_dispatch_keys_from_app(app)
             original_compile(avoid_dirty_check=False)
+            apply_frontend_stability_after_compile()
             ensure_vite_django_dev_proxy_from_config()
             missing = missing_frontend_dispatchers(expected_keys=expected, app=app)
         warn_if_frontend_dispatchers_out_of_sync(expected_keys=expected, app=app)

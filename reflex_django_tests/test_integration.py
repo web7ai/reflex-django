@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 
 from reflex_django.integration import (
+    _patch_reflex_compile,
     install_reflex_django_integration,
     reset_integration_for_tests,
 )
@@ -62,3 +65,50 @@ def test_configure_django_bootstraps_integration(
     assert any(
         type(p).__name__ == "ReflexDjangoPlugin" for p in (cfg.plugins or ())
     )
+
+
+def test_compile_wrapper_applies_stability_after_compile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Wrapped ``reflex._compile_app`` patches ``.web`` after each compile."""
+    import reflex.reflex as reflex_module
+
+    original_compile = mock.MagicMock()
+    stability_calls: list[bool] = []
+
+    monkeypatch.setattr(reflex_module, "_reflex_django_compile_patched", False)
+    monkeypatch.setattr(reflex_module, "_compile_app", original_compile)
+    monkeypatch.setattr(
+        "reflex_django.app_factory.prepare_pages_for_compile",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.app_factory.load_app_factory",
+        mock.MagicMock(return_value=mock.MagicMock()),
+    )
+    monkeypatch.setattr(
+        "reflex_django.compile_validate.expected_dispatch_keys_from_app",
+        lambda app: set(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.compile_validate.missing_frontend_dispatchers",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "reflex_django.compile_validate.warn_if_frontend_dispatchers_out_of_sync",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "reflex_django.vite_proxy.ensure_vite_django_dev_proxy_from_config",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        lambda: stability_calls.append(True) or [],
+    )
+
+    _patch_reflex_compile()
+    reflex_module._compile_app(avoid_dirty_check=False)
+
+    original_compile.assert_called_once()
+    assert stability_calls == [True]

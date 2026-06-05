@@ -139,3 +139,27 @@ def test_write_env_json_swallows_errors(
 
     # Must not raise.
     _frontend_runner._write_env_json()
+
+
+def test_compile_app_for_frontend_applies_stability_patches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After compile, EventLoopContext guards are applied to generated ``.web`` files."""
+    import reflex.utils.prerequisites as prerequisites
+
+    compile_or_validate = mock.MagicMock()
+    write_env = mock.MagicMock()
+    stability = mock.MagicMock(return_value=["utils/context.js"])
+
+    monkeypatch.setattr(prerequisites, "compile_or_validate_app", compile_or_validate)
+    monkeypatch.setattr(_frontend_runner, "_write_env_json", write_env)
+    monkeypatch.setattr(
+        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        stability,
+    )
+
+    _frontend_runner._compile_app_for_frontend()
+
+    compile_or_validate.assert_called_once()
+    write_env.assert_called_once()
+    stability.assert_called_once()

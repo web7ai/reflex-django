@@ -25,6 +25,8 @@ For *how* to use them in context, see [Configuration with `reflex_mount()`](conf
 | `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` | `bool` | `False` | Show or hide the "Built with Reflex" footer. |
 | `REFLEX_DJANGO_DEV_PROXY` | `bool` | `False` | Auto-managed by `run_reflex` (forced on in the default Vite mode, off for `--from-build`/`--env prod`). When you run a bare ASGI server (`uvicorn backend.asgi:application`) with `DEBUG=True`, the entry point probes the Vite port once at startup; if nothing is listening it disables the proxy for the process and serves the compiled SPA from disk (no per-request `ConnectError` spam). Set the env to `1` to force it on, or `0` to force it off. |
 
+There are no `REFLEX_DJANGO_*` keys for Vite CSRF or `EventLoopContext` patches — use Django settings (`CSRF_TRUSTED_ORIGINS`, `USE_X_FORWARDED_HOST`) and optional [`django_dev_middleware`](local_development.md#3-django-dev-http-middleware-optional-recommended-for-3000). Frontend stability patches run automatically in `post_compile`.
+
 ---
 
 ## Frontend toolchain

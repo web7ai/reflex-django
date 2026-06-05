@@ -1,5 +1,7 @@
 # Custom middleware in events
 
+> **Development HTTP middleware** (Vite port, admin CSRF, synthetic request bodies) is separate from the event bridge. See [Local development](local_development.md) for `reflex_django.django_dev_middleware`.
+
 You've probably written a custom Django middleware at some point — for multi-tenancy, rate limiting, request logging, audit trails, or "if `request.user.is_banned` then return 403". In a normal Django project, those middlewares only run on HTTP requests.
 
 In `reflex-django`, **your middleware also runs on every Reflex event**, with no extra wiring on your side. This page explains how that works, what's skipped on purpose, and how to control which middleware runs where.

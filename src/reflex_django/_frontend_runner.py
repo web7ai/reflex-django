@@ -115,6 +115,9 @@ def _compile_app_for_frontend() -> None:
         prerender_routes=False,
     )
     _write_env_json()
+    from reflex_django.frontend_stability import apply_frontend_stability_after_compile
+
+    apply_frontend_stability_after_compile()
 
 
 def _write_env_json() -> None:

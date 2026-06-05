@@ -117,6 +117,8 @@ Optional tunables in `settings.py`. The defaults are sensible — most projects 
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `()` | Extra path prefixes always routed to Reflex. |
 | `REFLEX_DJANGO_DEV_PROXY` | `False` | Auto-managed by `run_reflex --with-vite`. Don't set manually. |
 
+For Django admin on port **3000**, CSRF trusted origins, and optional dev HTTP middleware, see **[Local development](local_development.md)**.
+
 ### SPA shell rendering
 
 | Setting | Default | What it does |

@@ -376,19 +376,15 @@ def ensure_django_led_app_ready() -> Any:
     Returns:
         The configured Reflex app.
     """
-    _ensure_runtime_state_classes_registered()
-    import_page_packages()
-    app = load_app_factory()
     from reflex_django.integration import _ensure_runtime_event_patches
-    from reflex_django.mount_config import resolve_app_name
     from reflex_django.plugin import apply_reflex_plugins_to_app
 
     _ensure_runtime_event_patches()
+    # prepare_pages_for_compile deduplicates routes already registered by
+    # @page / @template at import time (avoids "Page X is being redefined").
+    prepare_pages_for_compile()
+    app = load_app_factory()
     apply_reflex_plugins_to_app(app)
-    if hasattr(app, "_apply_decorated_pages"):
-        migrate_decorated_pages_app_name(resolve_app_name())
-        app._apply_decorated_pages()
-    sync_page_load_events(app)
     _ensure_optional_api_endpoints(app)
     return app
 

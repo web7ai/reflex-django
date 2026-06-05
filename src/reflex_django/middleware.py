@@ -306,6 +306,8 @@ def _build_request_from_router_data(router_data: dict[str, Any]) -> HttpRequest:
                 get[str(key)] = str(value)
 
     request = HttpRequest()
+    request._read_started = False  # noqa: SLF001 — Django 6+ body access
+    request._body = b""  # noqa: SLF001 — synthetic events have no body
     request.method = method  # pyright: ignore[reportAttributeAccessIssue]
     request.path = path
     request.path_info = path

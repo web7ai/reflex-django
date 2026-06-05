@@ -145,6 +145,7 @@ class ReflexDjangoPlugin(Plugin):
 
         self._configure(app)
         self._ensure_vite_dev_proxy_on_disk()
+        self._apply_frontend_stability_patches()
         self._warn_if_frontend_dispatchers_out_of_sync()
 
     def _warn_if_frontend_dispatchers_out_of_sync(self) -> None:
@@ -165,6 +166,12 @@ class ReflexDjangoPlugin(Plugin):
                 f"path proxies: {exc}. Use http://localhost:<backend_port>/admin "
                 "or re-run `python manage.py run_reflex`."
             )
+
+    def _apply_frontend_stability_patches(self) -> None:
+        """Patch generated frontend for EventLoopContext and React dedupe issues."""
+        from reflex_django.frontend_stability import apply_frontend_stability_after_compile
+
+        apply_frontend_stability_after_compile()
 
     def _configure(self, app: App) -> None:
         if getattr(app, "_reflex_django_plugin_configured", False):

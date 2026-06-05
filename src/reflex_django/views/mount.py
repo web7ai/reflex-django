@@ -178,7 +178,10 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
         asset = index
 
     mime, _ = mimetypes.guess_type(str(asset))
-    content_type = mime or "application/octet-stream"
+    if asset.suffix == ".mjs":
+        content_type = "text/javascript"
+    else:
+        content_type = mime or "application/octet-stream"
 
     # Materialize HTML responses so :func:`maybe_render_spa_html` can run
     # them through Django's template engine. Streaming the file would skip

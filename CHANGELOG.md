@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`reflex_django.django_dev_middleware`** — optional Django HTTP middleware for Vite
+  dev (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`, and
+  ``DEFAULT_DEV_MIDDLEWARE`` for settings). Documented in
+  [Local development](docs/local_development.md).
+- **`reflex_django.frontend_stability`** — post-compile patches for
+  ``EventLoopContext``, generated components, and Vite ``resolve.dedupe`` (fixes
+  ``useContext is not a function or its return value is not iterable`` without
+  breaking ``react/jsx-runtime``).
+- Vite proxy plugin forwards ``x-forwarded-host`` / ``x-forwarded-proto`` to the
+  Django backend during local dev.
+- Tests: ``test_django_dev_middleware``, ``test_frontend_stability``.
+
 ### Changed
 
 - **Breaking:** public API reorganized. Built-in State classes now live under
@@ -27,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from ``reflex_django.states`` and ``reflex_django.pages.decorators`` instead.
 
 ### Fixed
+
+- Frontend dev: ``useContext(EventLoopContext)`` destructuring on ``null`` default
+  context; Vite ``react`` → ``index.js`` aliases that broke ``react/jsx-runtime``
+  pre-bundling.
+- Django admin CSRF / POST body: dev middleware only stubs ``_body`` when
+  ``CONTENT_LENGTH`` is 0 (documented; use ``django_dev_middleware`` instead of
+  project-local copies).
 
 - ``dispatch is not a function``: patch ``reflex.page`` to bucket decorators under
   ``reflex_mount()`` ``app_name``; run ``prepare_pages_for_compile()`` before compile

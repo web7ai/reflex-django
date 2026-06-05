@@ -92,6 +92,10 @@ export function reflexDjangoProxyPlugin() {{
           return next();
         }}
 
+        const forwardedHost = req.headers.host;
+        const forwardedProto =
+          (req.headers["x-forwarded-proto"] ||
+            (req.socket?.encrypted ? "https" : "http")) + "";
         const options = {{
           hostname: targetUrl.hostname,
           port:
@@ -102,6 +106,8 @@ export function reflexDjangoProxyPlugin() {{
           headers: {{
             ...req.headers,
             host: targetUrl.host,
+            "x-forwarded-host": forwardedHost,
+            "x-forwarded-proto": forwardedProto,
           }},
         }};
 
@@ -180,9 +186,12 @@ def patch_vite_config(
     prefixes: tuple[str, ...],
 ) -> str:
     """Apply plugin import, pre-middleware plugin, and ``server.proxy`` rules."""
+    from reflex_django.frontend_stability import patch_vite_react_dedupe
+
     content = inject_vite_proxy_plugin(content)
     all_prefixes = vite_dev_proxy_prefixes(prefixes)
-    return inject_vite_dev_proxy(content, target=target, prefixes=all_prefixes)
+    content = inject_vite_dev_proxy(content, target=target, prefixes=all_prefixes)
+    return patch_vite_react_dedupe(content)
 
 
 def patch_env_json_for_frontend_proxy(

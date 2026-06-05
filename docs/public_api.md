@@ -166,6 +166,20 @@ All in `reflex_django.asgi_entry` (and a couple of helpers in `reflex_django`):
 
 ---
 
+## Django HTTP dev middleware
+
+Optional **development-only** middleware for the Vite port (`:3000`) and Django admin CSRF. Not used on WebSocket events — see [Custom middleware in events](django_middleware_to_reflex.md).
+
+| Symbol | Where it lives | What it does |
+|:---|:---|:---|
+| `DEFAULT_DEV_MIDDLEWARE` | `reflex_django.django_dev_middleware` | Tuple of dotted paths to prepend to `MIDDLEWARE` in dev settings. |
+| `EnsureRequestBodyAttrsMiddleware` | `reflex_django.django_dev_middleware` | Sets `_body` / `_read_started` only for empty requests (synthetic Reflex/Django requests). |
+| `DevViteProxyHostMiddleware` | `reflex_django.django_dev_middleware` | Sets `X-Forwarded-Host` / `X-Forwarded-Proto` from `Origin` when the Vite proxy omits them. |
+
+Post-compile frontend helpers live in `reflex_django.frontend_stability` (called by the plugin; not imported in app code). See [Local development](local_development.md).
+
+---
+
 ## Models
 
 | Symbol | Where it lives | What it does |

@@ -383,6 +383,8 @@ You now have a working app. From here:
 | `AppRegistryNotReady` at startup | You're touching a Django model at class definition time. Move model access into your `@rx.event` handlers. |
 | `ModuleNotFoundError: shop.shop` | A leftover `rxconfig.py` is referencing the old layout. Delete `rxconfig.py` — `reflex_mount()` is the only config you need. |
 | Admin complains about streaming | Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the **end** of `MIDDLEWARE`. |
+| Admin **403 CSRF** on `:3000` | See [Local development](local_development.md) — `CSRF_TRUSTED_ORIGINS`, `USE_X_FORWARDED_HOST`, `DEFAULT_DEV_MIDDLEWARE`. |
+| `useContext is not a function` in the browser | Restart `run_reflex` after compile; see [Local development](local_development.md#troubleshooting). |
 | Slow reload after every Python edit | Use `--skip-rebuild` for pure Python changes, or `--with-vite` for hot-reload on Reflex pages. |
 
 ---
