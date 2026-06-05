@@ -21,6 +21,31 @@ def brand_icon(*, size: int = 28) -> rx.Component:
     )
 
 
+def branded_icon_from_settings() -> rx.Component:
+    """Render brand icon/text from ``REFLEX_DJANGO_AUTH`` branding settings."""
+    from reflex_django.auth.settings import get_auth_settings
+
+    auth = get_auth_settings()
+    if auth.brand_icon_src:
+        return rx.image(
+            src=auth.brand_icon_src,
+            height="48px",
+            width="auto",
+            object_fit="contain",
+            margin_bottom="0.25em",
+        )
+    if auth.brand_text:
+        return rx.text(
+            auth.brand_text,
+            font_weight="700",
+            font_size="1.25rem",
+            letter_spacing="-0.02em",
+            text_align="center",
+            margin_bottom="0.25em",
+        )
+    return brand_icon()
+
+
 def input_100w(name: str, **props: object) -> rx.Component:
     """Full-width text input with a ``name`` for form submission."""
     return rx.input(name=name, width="100%", size="3", **props)

@@ -1,8 +1,8 @@
 """Default URL conf and helpers for reflex-django.
 
 Use :func:`reflex_mount` as the **last** entry in ``urlpatterns`` for Django-led SPA
-routing. Register Django routes (admin, API, …) **before** ``reflex_mount`` and list
-their path prefixes in ``django_prefix``.
+routing. Register Django routes (admin, API, …) **before** ``reflex_mount``; path
+prefixes are auto-detected from those patterns unless you pass ``django_prefix``.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from django.views.generic import RedirectView
 
 from reflex_django.mount_config import register_mount_rx_config
 from reflex_django.mount_registry import register_mount
+from reflex_django.prefix_discovery import resolve_django_prefix
 from reflex_django.prefixes import export_prefix_env, export_rx_port_env, resolve_prefixes
 from reflex_django.views.mount import ReflexMountView
 
@@ -86,7 +87,8 @@ def reflex_mount(
     *,
     app_name: str | None = None,
     mount_prefix: str = "/",
-    django_prefix: str | tuple[str, ...] = (),
+    django_prefix: str | tuple[str, ...] | None = None,
+    urlpatterns: Sequence[Any] | None = None,
     plugins: Sequence[Any] | None = None,
     rx_config: Mapping[str, Any] | None = None,
     django_plugin: Mapping[str, Any] | None = None,
@@ -96,20 +98,25 @@ def reflex_mount(
     Append to existing ``urlpatterns`` (keep this entry **last**)::
 
         urlpatterns = [path("admin/", admin.site.urls), ...]
-        urlpatterns += [reflex_mount(django_prefix=("/admin", "/api"))]
+        urlpatterns += [reflex_mount(app_name="myapp")]
 
-    List the same path prefixes in ``django_prefix`` so ASGI routing and the
-    catch-all exclude your Django routes.
+    When ``django_prefix`` is omitted, prefixes are inferred from the caller's
+    ``urlpatterns`` (first path segment of each top-level ``path()``). Override
+    with an explicit tuple when you use ``re_path()`` or need finer control.
+    Reflex runtime options (``redis_url``, ports, …) belong in
+    ``REFLEX_DJANGO_RX_CONFIG`` in Django settings.
 
     Args:
         app_name: Reflex application name (package label). Defaults to the Django
             project folder name (parent of ``manage.py``, with ``-`` → ``_``).
         mount_prefix: SPA catch-all prefix (default ``"/"``).
-        django_prefix: Path prefix(es) owned by Django (for example
-            ``("/admin", "/api", "/webhooks")``).
+        django_prefix: Path prefix(es) owned by Django. ``None`` (default)
+            auto-detects from ``urlpatterns``; pass ``()`` for none.
+        urlpatterns: Optional explicit pattern list for auto-detection (when not
+            called as ``urlpatterns += [reflex_mount()]`` at module level).
         plugins: Reflex :class:`~reflex_base.plugins.base.Plugin` instances.
-        rx_config: ``rx.Config`` keyword arguments (ports, ``db_url``, …). You may
-            include ``app_name`` here instead of the ``app_name`` argument.
+        rx_config: Optional per-mount ``rx.Config`` overrides (merged over
+            ``REFLEX_DJANGO_RX_CONFIG`` from settings).
         django_plugin: Keyword arguments for :class:`~reflex_django.ReflexDjangoPlugin`.
 
     Returns:
@@ -125,18 +132,22 @@ def reflex_mount(
             path("admin/", admin.site.urls),
             path("api/", include("myapp.api_urls")),
         ]
-        urlpatterns += [
-            reflex_mount(
-                app_name="myapp",
-                mount_prefix="/",
-                django_prefix=("/admin", "/api"),
-                rx_config={"frontend_port": 3000, "backend_port": 8000},
-            ),
-        ]
+        urlpatterns += [reflex_mount(app_name="myapp")]
     """
     from reflex_django.rxconfig_bridge import _coerce_rx_config_dict
 
-    merged_rx = _coerce_rx_config_dict(dict(rx_config or {}))
+    resolved_django_prefix = resolve_django_prefix(
+        django_prefix,
+        urlpatterns=urlpatterns,
+    )
+
+    try:
+        from django.conf import settings as django_settings
+
+        settings_rx = getattr(django_settings, "REFLEX_DJANGO_RX_CONFIG", None) or {}
+    except Exception:
+        settings_rx = {}
+    merged_rx = _coerce_rx_config_dict({**dict(settings_rx), **dict(rx_config or {})})
     if app_name:
         merged_rx["app_name"] = app_name
 
@@ -146,7 +157,7 @@ def reflex_mount(
         rx_config=merged_rx,
         django_plugin=django_plugin,
         mount_prefix=mount_prefix,
-        django_prefix=django_prefix,
+        django_prefix=resolved_django_prefix,
     )
 
     from reflex_django.app_factory import import_mount_app_views
@@ -155,7 +166,7 @@ def reflex_mount(
 
     config = resolve_prefixes(
         mount_prefix=mount_prefix,
-        django_prefix=django_prefix,
+        django_prefix=resolved_django_prefix,
     )
     export_prefix_env(config)
     export_rx_port_env()

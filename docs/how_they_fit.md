@@ -60,9 +60,7 @@ Here they are in their natural habitat:
 from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [
-    reflex_mount(app_name="shop", django_prefix=("/admin",)),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 ```python
@@ -137,8 +135,8 @@ Most of this is invisible. You write step 7 — the handler. The bridge does the
 
 In a normal Reflex project, there's a `rxconfig.py` file at the root that configures ports, app name, plugins, and so on. In `reflex-django`, you don't write that file. Instead, the runtime config is built in memory from two sources:
 
-1. **`reflex_mount(app_name=..., rx_config={...})`** in your `urls.py` — Reflex options (ports, etc.) and the SPA catch-all URL pattern.
-2. **`REFLEX_DJANGO_*` settings** in your `settings.py` — integration tunables.
+1. **`reflex_mount(app_name=...)`** in your `urls.py` — the SPA catch-all URL pattern (Django prefixes auto-detected from routes above).
+2. **`REFLEX_DJANGO_RX_CONFIG` and other `REFLEX_DJANGO_*` settings** in `settings.py` — ports, `redis_url`, plugins, and integration tunables.
 
 Importing `urls.py` is enough to register the config. `manage.py run_reflex`, your production ASGI server, and CI all read the same in-memory config.
 

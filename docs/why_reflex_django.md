@@ -106,9 +106,7 @@ Configuration lives in **`urls.py`**, not in a separate `rxconfig.py`. Pages liv
 from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [
-    reflex_mount(app_name="shop", django_prefix=("/admin",)),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 You configure Reflex like a Django app, because in your project, it kind of is one.

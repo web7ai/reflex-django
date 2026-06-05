@@ -44,7 +44,7 @@ The patterns below are things you'll figure out yourself after a week or two. Re
 
 **Django routes go above `reflex_mount()`.** Always.
 
-**Every prefix in `django_prefix` matches a real `path(...)` above.** Drift here is the #1 cause of 404s.
+**Let prefix auto-detection do its job.** If you list routes in `urlpatterns` and append `reflex_mount()` last, reflex-django infers `django_prefix` for you. Override manually only when you use `re_path()` or have an unusual layout — drift between routes and an explicit prefix list is still the #1 cause of routing 404s.
 
 **Don't add Django `path()` entries for SPA pages.** SPA routes live in `@page(route=...)`. Adding a Django path shadows them.
 

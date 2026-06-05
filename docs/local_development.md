@@ -70,16 +70,19 @@ If you hit either of those, you'll likely see **"Reflex SPA bundle not found"** 
 
 ## Configuring ports
 
-Set ports in `reflex_mount()` — they propagate everywhere automatically:
+Set ports in `REFLEX_DJANGO_RX_CONFIG` — they propagate everywhere automatically:
 
 ```python
-urlpatterns += [
-    reflex_mount(
-        app_name="myapp",
-        django_prefix=("/admin", "/api"),
-        rx_config={"frontend_port": 3000, "backend_port": 8000},
-    ),
-]
+# settings.py
+REFLEX_DJANGO_RX_CONFIG = {
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
+```
+
+```python
+# urls.py — Django prefixes (/admin, /api, …) are auto-detected from routes above
+urlpatterns += [reflex_mount(app_name="myapp")]
 ```
 
 Optional overrides in development settings:

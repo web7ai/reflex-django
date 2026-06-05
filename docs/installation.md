@@ -84,19 +84,19 @@ from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="myapp",
-        django_prefix=("/admin",),
-        rx_config={"backend_port": 8000},
-    ),
-]
+urlpatterns += [reflex_mount(app_name="myapp")]
 ```
 
 The two rules that matter:
 
 - **Django routes first**, `reflex_mount()` last.
-- **`django_prefix`** lists the paths Django owns. Every prefix here must have a matching `path(...)` line above it.
+- **Django prefixes are inferred** from those routes automatically. You only pass `django_prefix` when you need to override (e.g. `re_path()` without a static first segment).
+
+Add Reflex ports and `redis_url` in settings, not `urls.py`:
+
+```python
+REFLEX_DJANGO_RX_CONFIG = {"frontend_port": 3000, "backend_port": 8000}
+```
 
 For the full set of options, see [Configuration](configuration.md).
 

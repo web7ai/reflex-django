@@ -42,12 +42,7 @@ urlpatterns = [
     path("api/orders/", my_orders),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin", "/api"),     # /api/ is Django, not Reflex
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]   # /admin and /api inferred from lines above
 ```
 
 That's it. `GET /api/orders/` runs your Django view. The user's session is shared with the SPA on the same origin, so login state is consistent.
@@ -92,7 +87,7 @@ urlpatterns = [
     path("api/", include("shop.api_urls")),
 ]
 urlpatterns += [
-    reflex_mount(app_name="shop", django_prefix=("/admin", "/api")),
+    reflex_mount(app_name="shop"),
 ]
 ```
 
@@ -150,15 +145,10 @@ urlpatterns = [
     path("webhooks/stripe/", stripe_webhook),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin", "/api", "/webhooks"),
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
-Remember the rule: add the prefix to `django_prefix`, otherwise the SPA catch-all will try to serve the SPA shell instead of routing to your webhook.
+`path("webhooks/stripe/", ...)` above the mount is enough — auto-detection reserves `/webhooks`. Put `path("webhooks/...", ...)` **above** `reflex_mount()` so Django handles the webhook, not the SPA catch-all.
 
 ---
 
@@ -276,7 +266,7 @@ urlpatterns = [
     path("api/orders/", my_orders_json),
 ]
 urlpatterns += [
-    reflex_mount(app_name="shop", django_prefix=("/admin", "/api")),
+    reflex_mount(app_name="shop"),
 ]
 ```
 
@@ -308,7 +298,7 @@ async def my_view(request):
 ## Summary
 
 - HTTP and Reflex share the same Django process, same models, same user.
-- Add `path(...)` lines to `urls.py` for HTTP endpoints; remember to list the prefix in `django_prefix`.
+- Add `path(...)` lines to `urls.py` for HTTP endpoints **above** `reflex_mount()` — prefixes are auto-detected from the first segment of each route.
 - DRF works untouched.
 - Use `ReflexDjangoModelSerializer` for state serialization, DRF `ModelSerializer` for HTTP serialization. They're different libraries with different purposes.
 - Same origin → no CORS for the SPA's own calls.

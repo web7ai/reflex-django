@@ -45,7 +45,7 @@ Do these in order:
    )
    ```
 
-6. Align **`ROOT_URLCONF`** (and `urlpatterns`) with plugin prefixes: `backend_prefix`, `admin_prefix` (default `"/admin"`), and `django_prefix`. Mismatched prefixes are a frequent bug.
+6. Put Django routes in `urlpatterns` **above** `reflex_mount()` — `django_prefix` is auto-detected from the first segment of each top-level `path()`. Override with `django_prefix=(...)` only for `re_path()` or unusual layouts. Put ports/`redis_url` in `REFLEX_DJANGO_RX_CONFIG`, not `urls.py`.
 7. Run: `uv run reflex run`.
 
 ---
@@ -143,7 +143,7 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 | `settings_module` | Dotted path (e.g. `"backend.settings"`). Sets `DJANGO_SETTINGS_MODULE` via `setdefault` and runs `configure_django`. |
 | `backend_prefix` | Optional prefix for **your** Django HTTP routes (e.g. `"/api"`). Exported to env as `REFLEX_DJANGO_API_PREFIX` when non-empty. |
 | `admin_prefix` | Django admin mount (default `"/admin"`). Sets `REFLEX_DJANGO_ADMIN_PREFIX`. |
-| `django_prefix` | Additional path prefixes forwarded to Django. |
+| `django_prefix` | Django-owned URL prefixes (auto-detected from `urlpatterns` by default; override via `reflex_mount(django_prefix=...)`). |
 | `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
 | `install_auth_pages` | Default `False`. When `True`, attempts `reflex_django.auth.autoload()` (prefer explicit `add_auth_pages(app)` in the app module). |
 
@@ -169,6 +169,8 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 | `REFLEX_DJANGO_AUTH_AUTO_SYNC` | When `True` (default), `DjangoEventBridge` refreshes `AppState` auth snapshot vars on every event. |
 | `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`middleware.py`). |
 | `REFLEX_DJANGO_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
+| `REFLEX_DJANGO_RX_CONFIG` | Dict of `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, etc. Preferred over `rx_config=` in `urls.py`. |
+| `REFLEX_DJANGO_PLUGINS` | List of Reflex plugin dotted paths or instances. |
 
 Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX_DJANGO_STATIC_ROOT`, `REFLEX_DJANGO_SECRET_KEY`, `REFLEX_DJANGO_DEBUG`, `REFLEX_DJANGO_ALLOWED_HOSTS`, `REFLEX_DJANGO_URLCONF`. Database URL can fall back from Reflex config `db_url` to a local SQLite file.
 

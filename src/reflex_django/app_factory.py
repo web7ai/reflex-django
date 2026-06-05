@@ -180,6 +180,9 @@ def prepare_pages_for_compile() -> None:
 
     migrate_decorated_pages_app_name(resolve_app_name())
     _ensure_runtime_state_classes_registered()
+    from reflex_django.auth.registry import ensure_auth_pages_registered
+
+    ensure_auth_pages_registered()
     import_page_packages()
     app = load_app_factory()
     app_name = migrate_decorated_pages_app_name(resolve_app_name())
@@ -428,6 +431,17 @@ def _ensure_runtime_state_classes_registered() -> None:
                 "be missing a dispatcher entry and trigger "
                 "`TypeError: h[...] is not a function` on the first delta."
             )
+
+    try:
+        from reflex_django.auth.state_builders import get_or_create_django_auth_state
+
+        get_or_create_django_auth_state()
+    except Exception:  # noqa: BLE001 — never fail boot on optional substates.
+        import logging
+
+        logging.getLogger("reflex_django.app_factory").exception(
+            "Could not pre-register DjangoAuthState; auth pages may fail to hydrate."
+        )
 
 
 def _ensure_optional_api_endpoints(app: Any) -> None:

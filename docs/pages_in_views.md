@@ -116,7 +116,7 @@ Reflex client-side routing then handles navigation between SPA pages (`/`, `/abo
 ### The cardinal rules
 
 1. **Django routes go above `reflex_mount()`** in `urls.py`.
-2. **Every prefix in `django_prefix=(...)`** must match a real `path(...)` line above.
+2. **Django prefixes are inferred** from those routes — you don't need to list them manually unless you override.
 3. **Don't add a `path()` for an SPA page.** `path("about/", ...)` is wrong — use `@page(route="/about")` instead.
 
 ```python
@@ -126,12 +126,7 @@ urlpatterns = [
     path("api/", include("shop.api_urls")),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin", "/api"),     # matches the lines above
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 ---
@@ -179,16 +174,21 @@ The default discovery imports `{app}.views`, which works for both file and packa
 
 ## Pre-built auth pages
 
-`reflex-django` ships login, register, password-reset, and password-reset-confirm pages. Drop one call into your `views.py` to register them all:
+When `REFLEX_DJANGO_AUTH["ENABLED"]` is true (default), login, register, and password-reset pages are **registered automatically** during page discovery — no `views.py` boilerplate required.
+
+Customize URLs, copy, branding, and page classes via `REFLEX_DJANGO_AUTH` in settings:
 
 ```python
-# shop/views.py
-from reflex_django.auth import add_auth_pages
-
-add_auth_pages()
+REFLEX_DJANGO_AUTH = {
+    "LOGIN_FIELDS": ["email"],
+    "BRAND_TEXT": "My App",
+    "PAGE_CLASSES": {
+        "login": "myapp.auth.BrandedLoginPage",
+    },
+}
 ```
 
-That registers `/login`, `/register`, `/password_reset`, `/password_reset_confirm`. Customize URLs and titles via `REFLEX_DJANGO_AUTH` in settings. ([Details](authentication.md).)
+For explicit control, call `add_auth_pages(app)` in an advanced setup. ([Details](authentication.md).)
 
 ---
 

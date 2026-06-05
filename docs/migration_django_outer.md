@@ -105,13 +105,12 @@ from django.urls import path
 from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin",),
-        rx_config={"backend_port": 8000},
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
+```
+
+```python
+# config/settings.py — ports and redis_url live here now
+REFLEX_DJANGO_RX_CONFIG = {"backend_port": 8000}
 ```
 
 If you have build/CI tooling that absolutely requires a `rxconfig.py` file on disk, you can set `REFLEX_DJANGO_MATERIALIZE_RXCONFIG = True` to have one written out automatically. Most projects don't need this.

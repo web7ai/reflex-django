@@ -11,7 +11,6 @@ import reflex as rx
 
 from reflex_django.auth.mixins.navigation import populate_navigation_state
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
-from reflex_django.auth_state import DjangoUserState
 from reflex_django.conf import configure_django
 from reflex_django.mixins.session_auth import SessionAuthConfig, populate_session_auth_state
 from reflex_django.state.auth_bridge import AuthBridgeMixin
@@ -26,7 +25,33 @@ _AUTH_SNAPSHOT_DEFAULTS: dict[str, Any] = {
     "is_staff": False,
     "is_superuser": False,
     "group_names": [],
+    "messages": [],
+    "csrf_token": "",
+    "language": "",
+    "language_bidi": False,
 }
+
+
+def _django_user_snapshot_annotations() -> dict[str, Any]:
+    """Concrete field types for dynamic ``DjangoAuthState``.
+
+    ``DjangoUserState`` uses PEP 563 annotations; copying ``__annotations__``
+    leaves ``ForwardRef`` values that Reflex ``Field()`` cannot resolve.
+    """
+    return {
+        "user_id": int | None,
+        "username": str,
+        "email": str,
+        "first_name": str,
+        "last_name": str,
+        "is_staff": bool,
+        "is_superuser": bool,
+        "group_names": list[str],
+        "messages": list[dict[str, Any]],
+        "csrf_token": str,
+        "language": str,
+        "language_bidi": bool,
+    }
 
 _STATE_MODULE = "reflex_django.auth.state"
 
@@ -89,11 +114,7 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
 
     def exec_body(ns: dict[str, Any]) -> None:
         ns["__module__"] = _STATE_MODULE
-        annotations: dict[str, type] = {
-            k: v
-            for k, v in getattr(DjangoUserState, "__annotations__", {}).items()
-            if k != "is_authenticated"
-        }
+        annotations = _django_user_snapshot_annotations()
         ns.update(_AUTH_SNAPSHOT_DEFAULTS)
 
         @rx.event

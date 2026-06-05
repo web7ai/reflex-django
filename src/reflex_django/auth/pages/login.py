@@ -11,7 +11,11 @@ from reflex_django.auth.login_fields import (
     login_identifier_placeholder,
 )
 from reflex_django.auth.pages.base import BaseAuthPage, _LazyOnLoad
-from reflex_django.auth.pages.components import brand_icon, input_100w, labeled_field
+from reflex_django.auth.pages.components import (
+    branded_icon_from_settings,
+    input_100w,
+    labeled_field,
+)
 from reflex_django.auth.settings import AuthSettings
 
 
@@ -43,7 +47,7 @@ class LoginPage(BaseAuthPage):
     @classmethod
     def heading(cls) -> rx.Component:
         return rx.center(
-            brand_icon(),
+            branded_icon_from_settings(),
             rx.heading(
                 cls.heading_text(),
                 size="6",

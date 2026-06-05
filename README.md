@@ -66,9 +66,7 @@ from django.urls import path
 from reflex_django.urls import reflex_mount
 
 urlpatterns = [path("admin/", admin.site.urls)]
-urlpatterns += [
-    reflex_mount(app_name="shop", django_prefix=("/admin",)),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 `config/asgi.py`:
@@ -133,8 +131,8 @@ Full explanation: [Why reflex-django exists](https://web7ai.github.io/reflex-dja
 
 | File | What you configure |
 |:---|:---|
-| `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE` (incl. `AsyncStreamingMiddleware`), `REFLEX_DJANGO_*` |
-| `urls.py` | `reflex_mount(app_name=..., django_prefix=..., rx_config={...})` |
+| `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE` (incl. `AsyncStreamingMiddleware`), `REFLEX_DJANGO_RX_CONFIG` (ports, `redis_url`, …), other `REFLEX_DJANGO_*` |
+| `urls.py` | `reflex_mount(app_name=...)` as the last `urlpatterns` entry — Django prefixes are auto-detected from routes above |
 | `{app}/views.py` | `@page`-decorated pages and `AppState` subclasses |
 
 No `rxconfig.py`. No `{app}/{app}.py`. No separate frontend.

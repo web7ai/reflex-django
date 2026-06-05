@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import reflex as rx
 
-from reflex_django.pages.decorators import page
+from reflex_django.pages.decorators import get_breadcrumbs_for_route, page
 
 _DEFAULT_META = [
     {
@@ -96,4 +96,107 @@ def centered_template(
     return decorator
 
 
-__all__ = ["centered_template"]
+def render_breadcrumb_trail(
+    *segments: tuple[str, str | None],
+    home_label: str = "Home",
+    home_href: str = "/",
+) -> rx.Component:
+    """Build a breadcrumb trail from ``(label, href)`` pairs."""
+    parts: list[rx.Component] = [
+        rx.link(home_label, href=home_href, class_name="breadcrumb-link"),
+    ]
+    for label, href in segments:
+        parts.append(rx.text("/", color="var(--gray-8)", size="1"))
+        if href:
+            parts.append(rx.link(label, href=href, class_name="breadcrumb-link"))
+        else:
+            parts.append(rx.text(label, class_name="breadcrumb-active"))
+    return rx.hstack(*parts, spacing="2", align="center", margin_bottom="0.8em")
+
+
+def render_breadcrumbs_for_current_route(
+    *,
+    home_label: str = "Home",
+    home_href: str = "/",
+) -> rx.Component:
+    """Render breadcrumbs for the active route from :data:`PAGE_REGISTRY` metadata."""
+    from reflex_django.pages.decorators import PAGE_REGISTRY
+
+    path = rx.State.router.page.path
+    match_args: list = [path]
+    seen: set[str | None] = set()
+    for registration in PAGE_REGISTRY:
+        route = registration.route
+        crumbs = registration.breadcrumbs
+        if not route or not crumbs or route in seen:
+            continue
+        seen.add(route)
+        match_args.append(
+            (
+                route,
+                render_breadcrumb_trail(
+                    *crumbs,
+                    home_label=home_label,
+                    home_href=home_href,
+                ),
+            )
+        )
+    match_args.append(rx.fragment())
+    return rx.match(*match_args)
+
+
+def layout_template(
+    route: str,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    on_load: Any = None,
+    meta: list[dict[str, str]] | None = None,
+    breadcrumbs: Sequence[tuple[str, str | None]] | None = None,
+    login_required: bool = False,
+    login_url: str | None = None,
+    shell: Callable[[rx.Component], rx.Component] | None = None,
+    **page_kwargs: Any,
+) -> Callable[[Callable[[], rx.Component]], Callable[[], rx.Component]]:
+    """Register a page with optional shell wrapper and breadcrumb metadata.
+
+    Use *shell* to inject app chrome (sidebar, navbar). Breadcrumbs are stored on
+    :data:`~reflex_django.pages.decorators.PAGE_REGISTRY` and can be rendered via
+    :func:`render_breadcrumbs_for_current_route`.
+    """
+    all_meta = [*_DEFAULT_META, *(meta or [])]
+    load_handlers = (
+        None
+        if on_load is None
+        else (on_load if isinstance(on_load, list) else [on_load])
+    )
+
+    def decorator(page_content: Callable[[], rx.Component]) -> Callable[[], rx.Component]:
+        @page(
+            route=route,
+            title=title,
+            description=description,
+            on_load=load_handlers,
+            meta=all_meta,
+            breadcrumbs=breadcrumbs,
+            login_required=login_required,
+            login_url=login_url,
+            **page_kwargs,
+        )
+        def wrapped_page() -> rx.Component:
+            body = page_content()
+            if shell is not None:
+                return shell(body)
+            return body
+
+        return wrapped_page
+
+    return decorator
+
+
+__all__ = [
+    "centered_template",
+    "layout_template",
+    "render_breadcrumb_trail",
+    "render_breadcrumbs_for_current_route",
+]

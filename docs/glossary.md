@@ -54,7 +54,7 @@ The outer ASGI callable that owns port 8000. It decides, per incoming scope, whe
 A built-in module (`reflex_django.django_led_app`) that auto-imports `{app}/views.py` for every entry in `INSTALLED_APPS` and builds the `rx.App()` instance. Replaces the `{app}/{app}.py` file you'd write in plain Reflex.
 
 ### `django_prefix`
-A tuple of URL prefixes that Django owns. Passed to `reflex_mount()`. Every entry must match a real `path(...)` line above the mount call.
+The list of URL prefixes Django owns (e.g. `/admin`, `/api`). Used by the SPA catch-all and Vite dev proxy so backend routes are not treated as SPA pages. **By default, reflex-django infers this from your `urlpatterns`** when you call `reflex_mount()` last — you only pass `django_prefix=(...)` when you need to override auto-detection (e.g. bare `re_path()` routes).
 
 ### `Dispatch pipeline`
 The run-loop inside `ModelState`/`ModelCRUDView` that wraps a CRUD operation with permission checks, validation hooks, the ORM call, and reactive var updates. Provided by `DispatchMixin`.

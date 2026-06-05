@@ -173,6 +173,14 @@ REFLEX_DJANGO_AUTH = {
     },
 }
 
+# Reflex rx.Config overrides (ports, redis_url, frontend_packages, …).
+# Preferred home for runtime options. Merged with reflex_mount(..., rx_config={...}) when provided.
+REFLEX_DJANGO_RX_CONFIG: dict = {}
+
+# Reflex plugin dotted paths or instances for reflex_mount (optional).
+# Example: ["reflex.plugins.RadixThemesPlugin", "reflex.plugins.TailwindV4Plugin"]
+REFLEX_DJANGO_PLUGINS: list = []
+
 # Origin for password-reset links when no HTTP request is bound (optional).
 # REFLEX_DJANGO_SITE_ORIGIN = "http://localhost:3000"
 

@@ -138,6 +138,30 @@ def test_register_login_page_skips_when_disabled() -> None:
     assert len(app._unevaluated_pages) == 0
 
 
+def test_ensure_auth_pages_registered_via_page_decorator() -> None:
+    from reflex_django.auth.registry import (
+        clear_auth_registry_routes,
+        ensure_auth_pages_registered,
+    )
+    from reflex_django.auth.settings import AuthSettings
+    from reflex_django.pages.decorators import PAGE_REGISTRY, clear_page_registry
+
+    clear_page_registry()
+    clear_auth_registry_routes()
+    before = len(PAGE_REGISTRY)
+    ensure_auth_pages_registered(
+        settings=AuthSettings(
+            enabled=True,
+            signup_enabled=True,
+            password_reset_enabled=True,
+        )
+    )
+    assert len(PAGE_REGISTRY) == before + 4
+    routes = {reg.route for reg in PAGE_REGISTRY}
+    assert "/login" in routes
+    assert "/register" in routes
+
+
 def test_routes_lazy_from_settings(monkeypatch) -> None:
     import reflex_django.auth.routes as auth_routes
 

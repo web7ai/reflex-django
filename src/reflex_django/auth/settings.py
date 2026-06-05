@@ -77,6 +77,12 @@ class AuthSettings:
     #: Allowed login identifiers for the canned login form (``username``, ``email``, or both).
     login_fields: tuple[str, ...] = DEFAULT_LOGIN_FIELDS
     messages: dict[str, str] = field(default_factory=lambda: dict(_DEFAULT_MESSAGES))
+    #: Optional brand label shown above auth form headings (replaces default icon).
+    brand_text: str = ""
+    #: Optional image URL for auth page branding (shown when set; overrides icon).
+    brand_icon_src: str = ""
+    #: Optional dotted import paths for custom auth page subclasses.
+    page_classes: dict[str, str] = field(default_factory=dict)
 
 
 def _coerce_auth_dict(raw: Any) -> dict[str, Any]:
@@ -142,7 +148,20 @@ def get_auth_settings() -> AuthSettings:
         password_min_length=int(raw.get("PASSWORD_MIN_LENGTH", 8)),
         login_fields=login_fields,
         messages=messages,
+        brand_text=str(raw.get("BRAND_TEXT", "") or ""),
+        brand_icon_src=str(raw.get("BRAND_ICON_SRC", "") or ""),
+        page_classes=_coerce_page_classes(raw.get("PAGE_CLASSES")),
     )
+
+
+def _coerce_page_classes(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, Mapping):
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in raw.items()
+        if isinstance(key, str) and isinstance(value, str) and value.strip()
+    }
 
 
 __all__ = ["AuthSettings", "get_auth_settings"]

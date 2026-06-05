@@ -83,6 +83,13 @@ def get_merged_mount_rx_config() -> MountRxConfigRegistration:
             django_prefix = registration.django_prefix
         if registration.app_name is not None:
             app_name = registration.app_name
+    for plugin in _resolve_plugins_from_settings():
+        if plugin not in merged_plugins:
+            merged_plugins.append(plugin)
+    settings_rx = _settings_rx_config()
+    for key, value in settings_rx.items():
+        if key not in merged_rx:
+            merged_rx[key] = value
     return MountRxConfigRegistration(
         app_name=app_name,
         plugins=tuple(merged_plugins),
@@ -105,14 +112,48 @@ def resolve_app_name() -> str:
     return default_app_name_from_project()
 
 
+def _settings_rx_config() -> dict[str, Any]:
+    from reflex_django.rxconfig_bridge import _coerce_rx_config_dict
+
+    try:
+        from django.conf import settings
+    except Exception:
+        return {}
+    raw = getattr(settings, "REFLEX_DJANGO_RX_CONFIG", None)
+    if not raw:
+        return {}
+    return _coerce_rx_config_dict(dict(raw))
+
+
+def _resolve_plugins_from_settings() -> tuple[Any, ...]:
+    try:
+        from django.conf import settings
+        from django.utils.module_loading import import_string
+    except Exception:
+        return ()
+
+    entries = getattr(settings, "REFLEX_DJANGO_PLUGINS", None) or ()
+    resolved: list[Any] = []
+    for entry in entries:
+        if isinstance(entry, str) and entry.strip():
+            resolved.append(import_string(entry.strip())())
+        else:
+            resolved.append(entry)
+    return tuple(resolved)
+
+
 def get_mount_rx_config_overrides() -> dict[str, Any]:
-    """Merged ``rx.Config`` keyword arguments from ``reflex_mount()``."""
+    """Merged ``rx.Config`` keyword arguments from settings and ``reflex_mount()``."""
     from reflex_django.app_factory import django_led_app_module_import
     from reflex_django.rxconfig_bridge import _coerce_rx_config_dict
 
     ensure_mount_config_loaded()
     mount = get_merged_mount_rx_config()
     kwargs = _coerce_rx_config_dict(mount.rx_config or None)
+    settings_rx = _settings_rx_config()
+    for key, value in settings_rx.items():
+        if key not in kwargs:
+            kwargs[key] = value
     kwargs.setdefault("app_name", resolve_app_name())
     kwargs.setdefault("app_module_import", django_led_app_module_import())
     return kwargs

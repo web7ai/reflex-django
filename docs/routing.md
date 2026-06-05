@@ -96,13 +96,7 @@ urlpatterns = [
     path("api/", include("shop.api_urls")),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin", "/api"),
-        rx_config={"backend_port": 8000},
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
 Two things happen here:
@@ -110,7 +104,7 @@ Two things happen here:
 - Django routes go **first**.
 - `reflex_mount()` appends a final wildcard pattern that points at `ReflexMountView`.
 
-`django_prefix` is a tuple of path prefixes that Django owns. Every prefix listed there must have a real `path(...)` entry above the mount line.
+`django_prefix` is inferred automatically from those routes (first segment of each top-level `path()`). Pass an explicit tuple only when you use `re_path()` or need to override. Reflex ports and `redis_url` belong in `REFLEX_DJANGO_RX_CONFIG` in settings.
 
 ### The SPA catch-all
 
@@ -164,7 +158,7 @@ Everything happens on one port. Same origin. Same cookies. Same session.
 ## The cardinal rules
 
 1. **Django routes go above `reflex_mount()`** in `urls.py`.
-2. **`django_prefix` must match real `path(...)` entries** above it.
+2. **Django prefixes are auto-detected** from those routes (first segment of each top-level `path()`). Override with `django_prefix=(...)` only when needed.
 3. **Don't `path()` for SPA pages.** Use `@page(route=...)` in `views.py` instead.
 4. **Don't add Django routes under reserved Reflex prefixes.**
 
@@ -209,9 +203,9 @@ These are SPA routes — they live in the Reflex client router, not in `urls.py`
 
 **Symptom:** `GET /api/orders/` returns 404 (or worse, returns the SPA shell).
 
-**Cause:** `django_prefix=("/api",)` doesn't match the actual Django path. Maybe your `urls.py` mounts `path("v1/", include(...))` instead of `path("api/", ...)`.
+**Cause:** Your Django route uses a different first segment than you expect — e.g. `path("v1/", include(...))` instead of `path("api/", ...)`. Auto-detection reserves `/v1`, not `/api`.
 
-**Fix:** Align the strings exactly. The dispatcher and Django's URL resolver both consult `django_prefix`.
+**Fix:** Rename the Django `path()` or pass `django_prefix=("/api", "/v1", ...)` explicitly so the catch-all and dev proxy stay aligned with your real routes.
 
 ### Catch-all shadowing (blank SPA pages)
 
@@ -256,7 +250,7 @@ from reflex_django.urls import admin_urlpatterns, reflex_mount
 
 urlpatterns = admin_urlpatterns("/admin")    # path("/admin", admin.site.urls) + a redirect
 urlpatterns += [path("api/", include("shop.api_urls"))]
-urlpatterns += [reflex_mount(django_prefix=("/admin", "/api"))]
+urlpatterns += [reflex_mount(app_name="shop")]   # /admin and /api inferred from lines above
 ```
 
 `admin_urlpatterns(prefix)` saves you a couple of lines if you're using a non-default admin prefix.

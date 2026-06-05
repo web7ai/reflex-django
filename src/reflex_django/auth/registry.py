@@ -9,6 +9,8 @@ from reflex_django.auth.pages.base import BaseAuthPage
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
 from reflex_django.conf import configure_django
 
+_AUTH_REGISTRY_ROUTES: set[str] = set()
+
 if TYPE_CHECKING:
     from reflex.app import App
 
@@ -192,6 +194,88 @@ def add_auth_pages(app: App, *, settings: AuthSettings | None = None) -> None:
         register_password_reset_confirm_page(app, settings=auth)
 
 
+def _import_page_class(dotted: str) -> type[BaseAuthPage]:
+    from django.utils.module_loading import import_string
+
+    imported = import_string(dotted)
+    if not isinstance(imported, type) or not issubclass(imported, BaseAuthPage):
+        msg = f"PAGE_CLASSES entry must be a BaseAuthPage subclass: {dotted!r}"
+        raise TypeError(msg)
+    return imported
+
+
+def _resolve_page_class(
+    key: str,
+    default: type[BaseAuthPage],
+    auth: AuthSettings,
+) -> type[BaseAuthPage]:
+    dotted = auth.page_classes.get(key, "").strip()
+    if not dotted:
+        return default
+    return _import_page_class(dotted)
+
+
+def _register_auth_page_via_decorator(
+    page_cls: type[BaseAuthPage],
+    *,
+    route: str,
+) -> None:
+    from reflex_django.pages.decorators import page
+
+    if route in _AUTH_REGISTRY_ROUTES:
+        return
+    kwargs: dict[str, Any] = {"route": route, "title": page_cls.default_title}
+    on_load = page_cls.default_on_load
+    if on_load is not None:
+        kwargs["on_load"] = on_load
+    page(**kwargs)(page_cls)
+    _AUTH_REGISTRY_ROUTES.add(route)
+
+
+def ensure_auth_pages_registered(*, settings: AuthSettings | None = None) -> None:
+    """Register auth pages via :func:`~reflex_django.pages.decorators.page` when enabled.
+
+    Called automatically during page discovery when ``REFLEX_DJANGO_AUTH["ENABLED"]``
+    is true. Uses ``PAGE_CLASSES`` overrides and default canned pages otherwise.
+    """
+    from reflex_django.auth.pages.login import LoginPage
+    from reflex_django.auth.pages.password_reset import (
+        PasswordResetConfirmPage,
+        PasswordResetPage,
+    )
+    from reflex_django.auth.pages.register import RegisterPage
+
+    configure_django()
+    auth = settings or get_auth_settings()
+    if not auth.enabled:
+        return
+
+    login_cls = _resolve_page_class("login", LoginPage, auth)
+    _register_auth_page_via_decorator(login_cls, route=auth.login_url)
+
+    if auth.signup_enabled:
+        register_cls = _resolve_page_class("register", RegisterPage, auth)
+        _register_auth_page_via_decorator(register_cls, route=auth.signup_url)
+
+    if auth.password_reset_enabled:
+        reset_cls = _resolve_page_class("password_reset", PasswordResetPage, auth)
+        _register_auth_page_via_decorator(reset_cls, route=auth.password_reset_url)
+        confirm_cls = _resolve_page_class(
+            "password_reset_confirm",
+            PasswordResetConfirmPage,
+            auth,
+        )
+        _register_auth_page_via_decorator(
+            confirm_cls,
+            route=auth.password_reset_confirm_url,
+        )
+
+
+def clear_auth_registry_routes() -> None:
+    """Clear auth route registration guard (tests only)."""
+    _AUTH_REGISTRY_ROUTES.clear()
+
+
 def autoload() -> None:
     """Register auth pages on the app from ``rxconfig`` if importable.
 
@@ -212,6 +296,8 @@ def autoload() -> None:
 __all__ = [
     "add_auth_pages",
     "autoload",
+    "clear_auth_registry_routes",
+    "ensure_auth_pages_registered",
     "register_login_page",
     "register_password_reset_confirm_page",
     "register_password_reset_page",

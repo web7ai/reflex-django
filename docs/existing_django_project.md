@@ -71,9 +71,9 @@ MIDDLEWARE = [
 
 ---
 
-## 3. List your existing prefixes in `reflex_mount()`
+## 3. Append `reflex_mount()` last
 
-This is the only step that needs care. `reflex-django` adds a catch-all URL pattern at the bottom of `urls.py` that serves the Reflex SPA for anything Django doesn't already own. So you need to tell it which prefixes Django *does* own.
+`reflex-django` adds a catch-all URL pattern at the bottom of `urls.py` that serves the Reflex SPA for anything Django doesn't already own. Put your existing Django routes **above** the mount; reflex-django reads them and figures out which prefixes Django owns.
 
 ```python
 # config/urls.py
@@ -87,18 +87,12 @@ urlpatterns = [
     path("webhooks/", include("shop.webhooks_urls")),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin", "/api", "/webhooks"),
-        rx_config={"backend_port": 8000},
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
-The rule is: **every `path()` line above `reflex_mount()` should have a matching prefix in `django_prefix`.** If you forget one, the SPA catch-all will try to serve the SPA shell when the user visits that URL.
+Auto-detection takes the **first segment** of each top-level `path()` — `path("api/", include(...))` covers `/api/products/`, `/api/orders/`, and so on. You only pass `django_prefix=(...)` manually if you use `re_path()` without a readable first segment or need to override what was detected.
 
-If your URLs are organized into `include()`d files, just list the top-level prefix once (e.g. `"/api"` is enough to cover `/api/products/`, `/api/orders/`, etc.).
+Put ports, `redis_url`, and other Reflex runtime options in `REFLEX_DJANGO_RX_CONFIG` in `settings.py`, not in `reflex_mount()`.
 
 ---
 
@@ -254,7 +248,7 @@ async def load(self):
 ```
 
 **404 on `/api/orders/`**
-You added a Django route but forgot to add the prefix to `django_prefix`. Add `"/api"` (top-level prefix is enough; you don't need to list every sub-path).
+The SPA catch-all may be winning over your Django route. Check that `path("api/", ...)` appears **above** `reflex_mount()` in `urlpatterns`. Auto-detection should pick up `/api` from that line. If your API lives under a different first segment (e.g. `path("v1/", ...)`), pass `django_prefix=("/v1",)` explicitly.
 
 **Port conflict with `runserver`**
 Only one process should bind the Reflex backend port. Don't run `python manage.py runserver 8000` alongside `python manage.py run_reflex`.

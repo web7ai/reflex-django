@@ -91,11 +91,20 @@ async def custom_check(self):
 
 ## Gating whole pages
 
-Wrap a page function with `@login_required` and Reflex will redirect anonymous visitors:
+Use `login_required=True` on the page decorator (recommended):
 
 ```python
 import reflex as rx
 from reflex_django.pages.decorators import page
+
+@page(route="/account", title="Account", login_required=True)
+def account() -> rx.Component:
+    return rx.text("Members only.")
+```
+
+Or wrap with `@login_required` below `@page`:
+
+```python
 from reflex_django.auth import login_required
 
 @page(route="/account", title="Account")
@@ -195,14 +204,7 @@ Each message has `level`, `level_tag`, `message`, `tags`, and `extra_tags`.
 
 ## The built-in auth pages
 
-If you want login, register, password-reset, and password-reset-confirm pages without writing them, drop one call into your `views.py`:
-
-```python
-# shop/views.py
-from reflex_django.auth import add_auth_pages
-
-add_auth_pages()
-```
+When `REFLEX_DJANGO_AUTH["ENABLED"]` is true (default), auth pages register automatically at startup. You can also call `add_auth_pages(app)` explicitly in advanced setups.
 
 That registers four routes (with sensible defaults):
 
@@ -219,20 +221,29 @@ Put a `REFLEX_DJANGO_AUTH` dict in `settings.py` to change titles, URLs, or beha
 
 ```python
 REFLEX_DJANGO_AUTH = {
-    "login_url": "/sign-in",
-    "register_url": "/sign-up",
-    "post_login_url": "/dashboard",
-    "post_logout_url": "/",
-    "username_field": "email",
-    "min_password_length": 10,
-    "register_enabled": True,
-    "password_reset_enabled": True,
-    "page_titles": {
-        "login": "Sign in to MyShop",
-        "register": "Create your account",
+    "LOGIN_URL": "/sign-in",
+    "SIGNUP_URL": "/sign-up",
+    "LOGIN_REDIRECT_URL": "/dashboard",
+    "LOGOUT_REDIRECT_URL": "/",
+    "LOGIN_FIELDS": ["email"],
+    "PASSWORD_MIN_LENGTH": 10,
+    "SIGNUP_ENABLED": True,
+    "PASSWORD_RESET_ENABLED": True,
+    "BRAND_TEXT": "MyShop",
+    "BRAND_ICON_SRC": "/logo.png",
+    "PAGE_CLASSES": {
+        "login": "myapp.auth.BrandedLoginPage",
+    },
+    "MESSAGES": {
+        "login_heading": "Sign in to MyShop",
+        "register_heading": "Create your account",
     },
 }
 ```
+
+### Branding without subclasses
+
+Set `BRAND_TEXT` and/or `BRAND_ICON_SRC` to replace the default icon above auth form headings. Use `PAGE_CLASSES` only when you need custom shell/card layout (gradients, theme wrapper, etc.).
 
 To register pages individually instead of all at once:
 

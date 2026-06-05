@@ -2,8 +2,8 @@
 
 All `reflex-django` configuration lives in two places, and one of them is optional:
 
-1. **`reflex_mount(...)`** in `urls.py` — Reflex options (ports, app name, prefixes) and the SPA catch-all URL pattern.
-2. **`REFLEX_DJANGO_*` settings** in `settings.py` — integration tunables (which middleware to skip on events, which reactive mirrors to expose, where pages live).
+1. **`reflex_mount(...)`** in `urls.py` — the SPA catch-all URL pattern and optional overrides (`app_name`, explicit `django_prefix`).
+2. **`REFLEX_DJANGO_*` settings** in `settings.py` — Reflex runtime (`REFLEX_DJANGO_RX_CONFIG`: ports, `redis_url`, packages) and integration tunables.
 
 There's no `rxconfig.py`. `reflex-django` synthesizes one in memory from the two sources above.
 
@@ -24,19 +24,12 @@ urlpatterns = [
     path("api/", include("shop.api_urls")),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        mount_prefix="/",
-        django_prefix=("/admin", "/api"),
-        plugins=[],
-        rx_config={
-            "backend_port": 8000,
-        },
-        django_plugin={},
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
+
+Put ports, `redis_url`, and other Reflex runtime options in **`REFLEX_DJANGO_RX_CONFIG`** in settings (see below).
+
+You usually **do not** pass `django_prefix`. When you append `reflex_mount()` after your Django routes, reflex-django reads those `urlpatterns` and figures out which path prefixes Django owns (the first segment of each top-level `path()`, such as `/admin` from `path("admin/", ...)`).
 
 ### What each argument does
 
@@ -44,18 +37,21 @@ urlpatterns += [
 |:---|:---|:---|
 | `app_name` | folder containing `manage.py` (underscored) | The Reflex `app_name`. Also the default Django app to scan for pages. |
 | `mount_prefix` | `"/"` | URL prefix where the SPA catch-all lives. You almost never change this. |
-| `django_prefix` | `()` | Path prefixes Django owns. Must match real `path(...)` entries above. |
+| `django_prefix` | auto-detect | Path prefixes Django owns. Omit to infer from `urlpatterns`; pass `()` for none; pass a tuple to override. |
+| `urlpatterns` | caller's list | Optional explicit pattern list for auto-detection when not using module-level `urlpatterns += [...]`. |
 | `plugins` | `()` | Extra Reflex plugins. `ReflexDjangoPlugin` is added automatically — don't pass it yourself. |
-| `rx_config` | `{}` | Allowed `rx.Config` keys (ports, `db_url`, CORS, log level, …). |
+| `rx_config` | `{}` | Optional per-mount `rx.Config` overrides (merged over `REFLEX_DJANGO_RX_CONFIG`). |
 | `django_plugin` | `{}` | Extra kwargs for the built-in `ReflexDjangoPlugin`. Merged with `REFLEX_DJANGO_PLUGIN`. |
 
-### What goes in `rx_config`
+### What goes in `REFLEX_DJANGO_RX_CONFIG`
 
-You can pass any standard Reflex `rx.Config` option *except* `plugins` (use the `plugins=` argument instead). The most common ones:
+Prefer settings for Reflex runtime options. You can pass any standard Reflex `rx.Config` option *except* `plugins` (use `REFLEX_DJANGO_PLUGINS` or the `plugins=` argument instead). The most common ones:
 
 ```python
-rx_config={
+REFLEX_DJANGO_RX_CONFIG = {
+    "frontend_port": 3000,
     "backend_port": 8000,
+    "redis_url": os.environ.get("REDIS_URL"),
     "db_url": "sqlite:///db.sqlite3",
     "cors_allowed_origins": ["https://example.com"],
     "show_built_with_reflex": False,
@@ -66,17 +62,17 @@ rx_config={
 
 By default `show_built_with_reflex` is forced to `False`. You can flip it back with `rx_config={"show_built_with_reflex": True}` or globally with `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX = True` in settings.
 
-### The `django_prefix` rule
+### How `django_prefix` auto-detection works
 
-Every prefix you list in `django_prefix` should match a real `path(...)` above the `reflex_mount()` line. If you forget one, the SPA catch-all will try to render the SPA for that URL.
+reflex-django needs to know which URLs belong to Django (admin, API, webhooks, …) versus the Reflex SPA. That list drives two things: the SPA catch-all regex (so `/admin` without a trailing slash doesn't get swallowed) and the Vite dev proxy (so API calls don't loop back to the frontend).
+
+**The default:** put your Django routes in `urlpatterns`, then append `reflex_mount()` last. No manual prefix list required.
+
+**What gets picked up:** the first path segment of each top-level `path()` — `path("api/", include(...))` becomes `/api`. In `DEBUG`, local `MEDIA_URL` (e.g. `/media`) is included automatically. `STATIC_URL` is handled separately by the library.
+
+**When to override:** pass `django_prefix` explicitly if you use bare `re_path()` patterns without a readable first segment, or if auto-detection picks up a legacy redirect route you don't want reserved:
 
 ```python
-urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/", include("shop.api_urls")),
-    path("webhooks/stripe/", stripe_webhook),
-]
-
 urlpatterns += [
     reflex_mount(
         app_name="shop",
@@ -162,6 +158,13 @@ These control whether Django's per-request data appears as reactive variables on
 | `REFLEX_DJANGO_AUTO_LOAD_CONTEXT` | `True` | Run context processors automatically. |
 | `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS` | `True` | Use Django's template context processors when the explicit list is empty. |
 
+### Reflex runtime (`rx.Config`)
+
+| Setting | Default | What it does |
+|:---|:---|:---|
+| `REFLEX_DJANGO_RX_CONFIG` | `{}` | Reflex runtime options: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, log level, etc. This is the right place for `redis_url` and ports — not `urls.py`. |
+| `REFLEX_DJANGO_PLUGINS` | `[]` | Reflex plugins as dotted paths or instances (e.g. Radix, Tailwind). |
+
 ### Plugin and rxconfig
 
 | Setting | Default | What it does |
@@ -187,7 +190,7 @@ These control whether Django's per-request data appears as reactive variables on
 
 | Plugin argument | Default | What it does |
 |:---|:---|:---|
-| `django_prefix` | `()` | Inherited from `reflex_mount(django_prefix=...)`. |
+| `django_prefix` | auto-detected | Inherited from `reflex_mount()` (auto or explicit). |
 | `install_event_bridge` | `True` | Wire `DjangoEventBridge` into Reflex's event pipeline. Almost always leave on. |
 | `install_auth_pages` | `False` | Auto-register the built-in login/register/reset pages. Prefer calling `add_auth_pages()` explicitly. |
 
@@ -231,7 +234,7 @@ Every middleware in this list runs on every Reflex event by default (except `Csr
 ## Common configuration mistakes
 
 **Prefix mismatch (404 on `/api/...`)**
-You added `django_prefix=("/api",)` but your URLs say `path("v1/", ...)`. The dispatcher and Django's URL resolver both consult `django_prefix`. Keep them aligned.
+Your Django route is `path("v1/", ...)` but you expected `/api` to be reserved. Auto-detection only sees the first segment of each `path()` — here that is `/v1`, not `/api`. Either rename the Django path or pass `django_prefix=("/api", "/v1", ...)` explicitly.
 
 **`AppRegistryNotReady` at import time**
 You imported a model at the top of `views.py`. Move the import inside the handler function. Models are only safe to import after Django finishes its app registry.
@@ -254,6 +257,11 @@ INSTALLED_APPS = [..., "reflex_django", "myapp"]
 ROOT_URLCONF = "config.urls"
 ASGI_APPLICATION = "config.asgi.application"
 
+REFLEX_DJANGO_RX_CONFIG = {
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
+
 MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -266,7 +274,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 ```python
 # urls.py
-urlpatterns += [reflex_mount(app_name="myapp", rx_config={"backend_port": 8000})]
+urlpatterns += [reflex_mount(app_name="myapp")]
 ```
 
 ```python

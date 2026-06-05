@@ -378,14 +378,11 @@ readinessProbe:
 By default, Reflex stores per-tab state in process memory. That's fine for one process. If you scale to multiple workers and need state to be sticky, point Reflex at Redis:
 
 ```python
-# urls.py
-reflex_mount(
-    app_name="shop",
-    rx_config={
-        "backend_port": 8000,
-        "redis_url": os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
-    },
-)
+# settings.py
+REFLEX_DJANGO_RX_CONFIG = {
+    "backend_port": 8000,
+    "redis_url": os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+}
 ```
 
 With Redis, state is pickled and shared across workers. Sticky sessions on the load balancer are still simpler though — for most apps, sticky session affinity + in-memory state is the right choice.

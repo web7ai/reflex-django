@@ -24,10 +24,21 @@ For *how* to use them in context, see [Configuration with `reflex_mount()`](conf
 | `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE` | `bool` | `True` | Pipe `STATIC_ROOT/_reflex/index.html` through Django's template engine so `{{ request.user }}`, `{% csrf_token %}` work in the SPA shell. |
 | `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` | `bool` | `False` | Show or hide the "Built with Reflex" footer. |
 | `REFLEX_DJANGO_DEV_PROXY` | `bool` | `True` when `DEBUG=True` | Auto-managed by `run_reflex` (forced on in the default Vite mode, off for `--from-build`/`--env prod`). When on, Django reverse-proxies SPA routes to Vite instead of serving a disk bundle. When you run a bare ASGI server with `DEBUG=True` and Vite is down, the entry point disables the proxy once at startup. Set env `REFLEX_DJANGO_DEV_PROXY=1` to force it on, or `0` to force it off. |
-| `REFLEX_DJANGO_FRONTEND_PORT` | `int` | `3000` | Vite dev server port. Also set via `rx_config` in `reflex_mount()` and env `REFLEX_DJANGO_FRONTEND_PORT`. |
-| `REFLEX_DJANGO_BACKEND_PORT` | `int` | `8000` | ASGI server port — the URL you open in dev (`http://localhost:8000/`). Also set via `rx_config` and env `REFLEX_DJANGO_BACKEND_PORT`. |
+| `REFLEX_DJANGO_FRONTEND_PORT` | `int` | `3000` | Vite dev server port. Prefer `REFLEX_DJANGO_RX_CONFIG["frontend_port"]`; also env `REFLEX_DJANGO_FRONTEND_PORT`. |
+| `REFLEX_DJANGO_BACKEND_PORT` | `int` | `8000` | ASGI server port — the URL you open in dev (`http://localhost:8000/`). Prefer `REFLEX_DJANGO_RX_CONFIG["backend_port"]`; also env `REFLEX_DJANGO_BACKEND_PORT`. |
 
 There are no other `REFLEX_DJANGO_*` keys for Vite CSRF or `EventLoopContext` patches — use Django settings (`CSRF_TRUSTED_ORIGINS`, `USE_X_FORWARDED_HOST`) and optional [`django_dev_middleware`](local_development.md#django-dev-middleware-recommended). Frontend stability patches run automatically in `post_compile`.
+
+---
+
+## Reflex runtime (`rx.Config`)
+
+| Setting | Type | Default | Purpose |
+|:---|:---|:---|:---|
+| `REFLEX_DJANGO_RX_CONFIG` | `dict` | `{}` | Reflex `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, `db_url`, CORS, log level, telemetry, etc. **Preferred home for ports and Redis** — not `urls.py`. Merged with any per-mount `rx_config=` passed to `reflex_mount()`. |
+| `REFLEX_DJANGO_PLUGINS` | `list` | `[]` | Reflex plugins as dotted import paths or instances (e.g. `"reflex.plugins.RadixThemesPlugin"`). |
+
+`django_prefix` is **not** a setting — it is auto-detected from your `urlpatterns` when you append `reflex_mount()` last. Pass `django_prefix=(...)` to `reflex_mount()` only to override.
 
 ---
 

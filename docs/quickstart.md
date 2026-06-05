@@ -112,20 +112,22 @@ urlpatterns = [
     path("admin/", admin.site.urls),
 ]
 
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin",),
-        rx_config={"backend_port": 8000},
-    ),
-]
+urlpatterns += [reflex_mount(app_name="shop")]
 ```
 
-Three pieces:
+Two pieces:
 
 - `app_name="shop"` — Reflex will look for pages in `shop/views.py`.
-- `django_prefix=("/admin",)` — Django owns anything under `/admin/`. Everything else falls through to the Reflex SPA.
-- `rx_config={"backend_port": 8000}` — what port to bind on.
+- Routes above the mount (like `path("admin/", ...)`) are auto-detected as Django-owned; everything else falls through to the Reflex SPA.
+
+Put ports and other Reflex runtime options in `settings.py`:
+
+```python
+REFLEX_DJANGO_RX_CONFIG = {
+    "frontend_port": 3000,
+    "backend_port": 8000,
+}
+```
 
 ---
 

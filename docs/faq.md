@@ -196,7 +196,10 @@ The bridge runs your full `settings.MIDDLEWARE` for each Reflex event. For most 
 Yes. Default rule of thumb: `2 * cores + 1`. State is stored per-process by default, so enable sticky session affinity on your load balancer, or point Reflex at Redis for shared state:
 
 ```python
-rx_config={"redis_url": os.environ["REDIS_URL"]}
+# settings.py
+REFLEX_DJANGO_RX_CONFIG = {
+    "redis_url": os.environ["REDIS_URL"],
+}
 ```
 
 ### Why is my page slow on first load?
