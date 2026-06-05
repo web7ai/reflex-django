@@ -14,6 +14,16 @@ from reflex_django.state.request import DjangoStateRequest
 REQUEST_WRAPPER_ATTR = "_django_led_request_wrapper"
 RESPONSE_ATTR = "_django_led_response"
 
+_PROXY_TYPE_NAMES = frozenset({"StateProxy", "ReadOnlyStateProxy"})
+
+
+def _binding_target(state: Any) -> Any:
+    """Return the real state instance when *state* is a Reflex background proxy."""
+    wrapped = getattr(state, "__wrapped__", None)
+    if wrapped is not None and type(state).__name__ in _PROXY_TYPE_NAMES:
+        return wrapped
+    return state
+
 
 def bind_request_on_state(
     state: Any,
@@ -33,15 +43,16 @@ def bind_request_on_state(
         http_request: Optional explicit request; defaults to :func:`current_request`.
         http_response: Optional explicit response; defaults to :func:`current_response`.
     """
+    target = _binding_target(state)
     http = http_request if http_request is not None else current_request()
     response = http_response if http_response is not None else current_response()
     if http is None:
         try:
-            object.__delattr__(state, REQUEST_WRAPPER_ATTR)
+            object.__delattr__(target, REQUEST_WRAPPER_ATTR)
         except AttributeError:
             pass
         try:
-            object.__delattr__(state, RESPONSE_ATTR)
+            object.__delattr__(target, RESPONSE_ATTR)
         except AttributeError:
             pass
         return
@@ -50,21 +61,22 @@ def bind_request_on_state(
         get_request_reflex_context(http),
         response=response,
     )
-    object.__setattr__(state, REQUEST_WRAPPER_ATTR, wrapper)
+    object.__setattr__(target, REQUEST_WRAPPER_ATTR, wrapper)
     if response is not None:
-        object.__setattr__(state, RESPONSE_ATTR, response)
+        object.__setattr__(target, RESPONSE_ATTR, response)
     else:
         try:
-            object.__delattr__(state, RESPONSE_ATTR)
+            object.__delattr__(target, RESPONSE_ATTR)
         except AttributeError:
             pass
 
 
 def clear_request_on_state(state: Any) -> None:
     """Remove previously bound request and response wrappers from *state*."""
+    target = _binding_target(state)
     for attr in (REQUEST_WRAPPER_ATTR, RESPONSE_ATTR):
         try:
-            object.__delattr__(state, attr)
+            object.__delattr__(target, attr)
         except AttributeError:
             pass
 
