@@ -64,6 +64,25 @@ def test_site_root_not_caught_when_separate_dev_ports(
     assert re.match(pattern, "login") is not None
 
 
+def test_site_root_caught_when_single_port_prod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prod/single-port: ``/`` is served by the SPA catch-all."""
+    import re
+
+    from reflex_django.prefixes import resolve_prefixes
+    from reflex_django.urls import _catchall_regex
+
+    monkeypatch.setenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", "0")
+    config = resolve_prefixes(django_prefix=("/admin", "/api"))
+    pattern = _catchall_regex(
+        config.mount_prefix,
+        config.reserved_paths_for_catchall(),
+    )
+    assert re.match(pattern, "/") is not None
+    assert re.match(pattern, "login") is not None
+
+
 def test_admin_with_slash_reaches_login(django_client: Client) -> None:
     response = django_client.get("/admin/")
     assert response.status_code in (301, 302)

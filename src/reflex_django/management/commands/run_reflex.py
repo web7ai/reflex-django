@@ -342,6 +342,12 @@ class Command(BaseCommand):
                 )
             )
 
+        # Catch-all was built during Django startup (before CLI env above).
+        # Rebuild it so prod/single-port/from-build own ``/`` on the backend port.
+        from reflex_django.auto_mount import refresh_reflex_mount_catchall
+
+        refresh_reflex_mount_catchall()
+
         reload_enabled = not options.get("no_reload") and not is_prod
         # In from-build dev mode we MUST own the reload loop ourselves. If we
         # delegated to uvicorn's ``--reload``, the child would re-import

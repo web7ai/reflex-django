@@ -243,6 +243,50 @@ def _append_mount_to_root_urlconf(
     )
 
 
+def refresh_reflex_mount_catchall() -> ReflexMountHandle | None:
+    """Rebuild the SPA catch-all after runtime env overrides (e.g. ``run_reflex``).
+
+    ``AppConfig.ready()`` mounts the catch-all while Django boots, which is
+    before ``manage.py run_reflex`` sets ``REFLEX_DJANGO_SEPARATE_DEV_PORTS``.
+    Projects that set ``REFLEX_DJANGO_SEPARATE_DEV_PORTS = True`` in dev
+    settings would otherwise keep ``/`` reserved even in ``--env prod`` mode.
+    """
+    global _MOUNT_HANDLE
+
+    from django.urls import clear_url_caches
+
+    from reflex_django.prefix_discovery import _is_reflex_mount_pattern
+
+    try:
+        from django.conf import settings
+    except Exception:
+        return None
+
+    urlconf_name = getattr(settings, "ROOT_URLCONF", None)
+    if not isinstance(urlconf_name, str) or not urlconf_name:
+        return None
+
+    from importlib import import_module
+
+    mod = import_module(urlconf_name)
+    mod_urlpatterns = getattr(mod, "urlpatterns", None)
+    if not isinstance(mod_urlpatterns, list):
+        return None
+
+    handle = ensure_reflex_mount(append_to_urlconf=False)
+    if has_reflex_mount(mod_urlpatterns):
+        for index, pattern in enumerate(mod_urlpatterns):
+            if _is_reflex_mount_pattern(pattern):
+                mod_urlpatterns[index] = handle.url_pattern
+                break
+    else:
+        mod_urlpatterns.extend(handle.urlpatterns)
+
+    _MOUNT_HANDLE = handle
+    clear_url_caches()
+    return handle
+
+
 def maybe_auto_mount() -> ReflexMountHandle | None:
     """Append SPA catch-all from settings when enabled (boot-only, idempotent)."""
     global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE
@@ -302,5 +346,6 @@ __all__ = [
     "ensure_reflex_mount",
     "has_reflex_mount",
     "maybe_auto_mount",
+    "refresh_reflex_mount_catchall",
     "register_mount_from_settings",
 ]
