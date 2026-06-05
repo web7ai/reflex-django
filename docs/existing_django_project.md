@@ -168,13 +168,13 @@ python manage.py migrate   # if you have new migrations
 python manage.py run_reflex
 ```
 
-Open **`http://localhost:8000/`** (single dev URL):
+`run_reflex` starts Vite on `:3000` and the backend on `:8000`:
 
+- `http://localhost:3000/` — your new Reflex pages (SPA + hot reload).
 - `http://localhost:8000/admin/` — your admin, unchanged.
 - `http://localhost:8000/api/...` — your existing API, unchanged.
-- `http://localhost:8000/catalog` — your new Reflex page.
 
-Vite runs on `:3000` in the background for hot reload — you don't need to browse there.
+Vite proxies admin, API, and `/_event` to `:8000`. Optional: `--single-port` to browse only `:8000`. See [Local development](local_development.md).
 
 Your existing tests, management commands, and migrations all keep working.
 

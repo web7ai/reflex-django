@@ -4,7 +4,7 @@
 
 <div class="rd-hero" markdown>
   <h1 class="rd-hero__brand">reflex-django</h1>
-  <p class="rd-hero__tagline">Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.</p>
+  <p class="rd-hero__tagline">Keep Django. Get a reactive UI in Python. One process, shared cookies, native Reflex dev.</p>
   <p class="rd-hero__badges">
     <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/v/reflex-django?color=%23e91e63&label=pypi" alt="PyPI"></a>
     <a href="https://pypi.org/project/reflex-django"><img src="https://img.shields.io/pypi/pyversions/reflex-django.svg?color=%23ad1457" alt="Python"></a>
@@ -20,7 +20,7 @@ You're probably here because you love Django — the ORM, the admin, the migrati
 
 That's exactly what **reflex-django** is for.
 
-You keep writing Django. You write your UI in Python using [Reflex](https://reflex.dev). They run as **one program, on one port**, and your Django session is the same session your buttons see. No CORS, no token gymnastics, no second dev server in another terminal.
+You keep writing Django. You write your UI in Python using [Reflex](https://reflex.dev). They run as **one program** — one port in production; in dev, `run_reflex` starts Vite (`:3000`) and the backend (`:8000`) together. Your Django session is the same session your buttons see. No CORS, no token gymnastics.
 
 ---
 
@@ -69,13 +69,14 @@ Then:
 python manage.py run_reflex
 ```
 
-One command starts **both** your Django backend and the Reflex frontend together. For development, open:
+One command starts **two dev servers**:
 
-```text
-http://localhost:8000/
-```
+- **Vite on `:3000`** — open this for your Reflex UI and hot reload (`http://localhost:3000/`)
+- **Django + Reflex backend on `:8000`** — admin, API, and the `/_event` WebSocket
 
-That's your **single dev URL**. Django listens on port `8000` and quietly reverse-proxies the SPA to Vite on port `3000` (hot reload still works — you just don't browse to `:3000` yourself). Your reactive UI is at `/`, the Django admin at `/admin/`, your API at `/api/`, and the Reflex WebSocket on `/_event` — all on the same origin, sharing cookies and session. Edit a page in `views.py`, save, and the browser updates in place. Backend/state edits are picked up when you restart `run_reflex`.
+Vite proxies `/admin`, `/api`, and `/_event` to `:8000`, so cookies and session still line up. Edit a page in `views.py`, save, and the browser updates in place. Backend/state edits are picked up when you restart `run_reflex`.
+
+Prefer one URL in the address bar? Pass `--single-port` and browse `:8000` instead. See [Local development](local_development.md).
 
 > In production there's no Vite: you build the SPA and serve everything from your ASGI server on a single port. See [Deployment](deployment.md).
 

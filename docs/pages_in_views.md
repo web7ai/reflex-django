@@ -24,7 +24,7 @@ def about() -> rx.Component:
     return rx.text("This page lives in shop/views.py.")
 ```
 
-That's it. Visit `http://localhost:8000/` and `/about` — both pages render. You never edit `urls.py` to add these routes.
+That's it. After `python manage.py run_reflex`, visit `http://localhost:3000/` and `/about` — both pages render. You never edit `urls.py` to add SPA routes (do import the views module so `@page` runs).
 
 > Important distinction: these are **Reflex pages**, not Django views. Django doesn't need a `path(...)` for them. The Reflex client-side router handles `/`, `/about`, and everything else that's not a Django-owned prefix.
 
@@ -267,7 +267,7 @@ class HomeState(AppState):
 python manage.py run_reflex
 ```
 
-Then visit `http://localhost:8000/`. Your admin stays at `/admin/`, your API at `/api/`, and your Reflex pages everywhere else.
+Open **`http://localhost:3000/`** for Reflex pages (default two-port dev). Admin and API are on `:8000` (Vite proxies them when you navigate from the SPA). See [Local development](local_development.md).
 
 For details on the URL dispatcher, the SPA catch-all, and how WebSocket scopes are routed, see [Routing & URL dispatching](routing.md).
 

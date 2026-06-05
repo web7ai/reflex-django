@@ -360,13 +360,13 @@ If those fit your needs, use them. They're great for adding selective interactiv
 
 ### Which URL do I open in dev — `localhost:8000` or `3000`?
 
-**`http://localhost:8000/`** (the backend port). That's the default in DJANGO_OUTER mode: Django listens on `:8000` and reverse-proxies the SPA to Vite on `:3000` for hot reload. You get one origin for pages, admin, API, and `/_event`.
+**`http://localhost:3000/`** for frontend work. `python manage.py run_reflex` starts **both** Vite (`:3000`, SPA + hot reload) and the Django/Reflex backend (`:8000`, admin, API, `/_event`). Vite proxies backend paths to `:8000` so cookies still work.
 
-Vite on `:3000` is internal — you don't need to browse there unless you're on the legacy two-port layout (`reflex_led`). Full setup: [Local development](local_development.md).
+Use **`http://localhost:8000/`** directly when you want admin or API without going through Vite. Pass **`--single-port`** to `run_reflex` if you prefer browsing only `:8000` (Django reverse-proxies Vite). Full setup: [Local development](local_development.md).
 
 ### "Reflex SPA bundle not found" on `:8000`
 
-The dev proxy is off and there's no compiled bundle. Start dev with `python manage.py run_reflex` (not `runserver`). If port `3000` is already taken, free it and restart. See [Local development — troubleshooting](local_development.md#troubleshooting).
+In default two-port dev, `:8000` does not serve the SPA shell — open **`http://localhost:3000/`**. If you use `--single-port` and still see this, start dev with `python manage.py run_reflex --single-port` (not `runserver`). If port `3000` is busy, free it and restart. See [Local development — troubleshooting](local_development.md#troubleshooting).
 
 ### Django admin returns 403 CSRF
 

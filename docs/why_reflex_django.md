@@ -52,7 +52,7 @@ When Reflex fires an event, it doesn't go through Django's HTTP pipeline. By def
 - There's no `HttpRequest`. So no `request.user`, no `request.session`, no `request.COOKIES`.
 - **No middleware runs.** None of it. Not the session middleware, not the auth middleware, not your custom multi-tenant or rate-limit middleware.
 - Reflex doesn't know that the user logged into `/admin/` two seconds ago, because it never saw the session cookie.
-- And by default, Reflex wants its own dev server on its own port — which used to mean juggling `localhost:3000` and `localhost:8000` with fragile cookie sharing. **reflex-django** fixes that: you browse one URL (`:8000`) and Vite hot-reloads behind the scenes.
+- Reflex wants its own dev server on its own port. **reflex-django** embraces that: `run_reflex` starts Vite on `:3000` and the Django/Reflex backend on `:8000`. You browse `:3000` for the SPA; Vite proxies admin, API, and `/_event` to `:8000` so cookies still line up. Optional `--single-port` if you want one URL in the bar.
 
 So even though both frameworks are written in Python and could happily live in the same process, in practice they sit on opposite sides of a glass wall. You end up writing a token bridge, configuring CORS, running two terminals, and re-implementing auth twice.
 
@@ -64,9 +64,11 @@ That's the gap. It's not glamorous. It's just *plumbing*.
 
 `reflex-django` is the plumbing. It does three concrete things:
 
-### 1. One process, one port
+### 1. One process — one port in production, two in default dev
 
-Django becomes the outer ASGI app. Reflex's internal endpoints — `/_event` (the WebSocket), `/_upload` (file uploads), `/_health` (health probes) — are mounted *inside* Django. Your compiled Reflex SPA is served straight from disk by Django.
+Django becomes the outer ASGI app. Reflex's internal endpoints — `/_event` (the WebSocket), `/_upload` (file uploads), `/_health` (health probes) — are mounted *inside* Django.
+
+**Production** (and `--single-port` dev): everything on one port:
 
 ```text
   Browser  →  port 8000  →  Django  →  /admin/   → Django admin
@@ -75,7 +77,9 @@ Django becomes the outer ASGI app. Reflex's internal endpoints — `/_event` (th
                                     →  /_event   → Reflex WebSocket
 ```
 
-One port. One origin. One set of cookies. No CORS.
+**Default dev:** `run_reflex` starts Vite on `:3000` (SPA + HMR) and the backend on `:8000`. You browse `:3000`; Vite proxies admin, API, and `/_event` to `:8000`.
+
+One process. Shared cookies. No CORS.
 
 ### 2. Full middleware chain on every Reflex event
 

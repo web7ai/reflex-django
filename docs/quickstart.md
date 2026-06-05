@@ -312,10 +312,10 @@ The first time, this will:
 
 Open it:
 
-- `http://localhost:8000/` — the todo page.
-- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created).
+- `http://localhost:3000/` — the todo page (SPA + hot reload).
+- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created). Vite on `:3000` can proxy you here too.
 
-(Vite hot-reloads on port `3000` behind the scenes — you only need the `:8000` URL.)
+(`run_reflex` starts both servers. Prefer one URL? Use `python manage.py run_reflex --single-port` and browse `:8000`.)
 
 Try this flow:
 
@@ -325,7 +325,7 @@ Try this flow:
 4. Type "Buy milk", hit Add. The row appears.
 5. Click the checkbox. The text goes line-through.
 
-That's a full reactive CRUD page in about 80 lines of Python, with real Django auth, in one process, on one port.
+That's a full reactive CRUD page in about 80 lines of Python, with real Django auth, in one process (two dev ports by default; one port in production).
 
 ---
 

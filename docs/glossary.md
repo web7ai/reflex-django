@@ -232,7 +232,7 @@ A mixin that auto-scopes CRUD queries to the current user. Replaces three manual
 ---
 
 ### `Vite`
-The frontend build tool Reflex uses internally. `run_reflex` starts it on the frontend port (default **3000**) for HMR; in DJANGO_OUTER mode Django reverse-proxies SPA traffic to it while you browse **:8000**. See [Local development](local_development.md).
+The frontend build tool Reflex uses internally. `run_reflex` starts it on the frontend port (default **3000**) for HMR — **browse `:3000` for the SPA** in default dev. The backend port (default **8000**) serves admin, API, and `/_event`; Vite proxies those paths in two-port mode. Pass `--single-port` to browse only `:8000`. See [Local development](local_development.md).
 
 ### `DEFAULT_DEV_MIDDLEWARE`
 A tuple of dotted middleware paths in `reflex_django.django_dev_middleware` for Vite-port admin and CSRF (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`). Prepend to `MIDDLEWARE` in development settings only.

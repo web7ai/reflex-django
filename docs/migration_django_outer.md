@@ -24,9 +24,10 @@ You get: one port, one origin, full middleware on Reflex events, and Django-firs
 
 | | Before | After |
 |:---|:---|:---|
-| **Ports** | Two (Reflex frontend + Django backend) | One (everything on `8000`) |
+| **Ports (production)** | Two (Reflex frontend + Django backend) | One (everything on `8000`) |
+| **Ports (default dev)** | Varies | Two: Vite `:3000` (SPA) + backend `:8000`; optional `--single-port` |
 | **Outer app** | Reflex | Django |
-| **Config** | `rxconfig.py` with plugin kwargs | `reflex_mount()` in `urls.py` + `REFLEX_DJANGO_*` settings |
+| **Config** | `rxconfig.py` with plugin kwargs | `REFLEX_DJANGO_RX_CONFIG` in `settings.py` + optional `reflex_mount()` overrides |
 | **Pages** | `{app}/{app}.py` with `app = rx.App()` | `{app}/views.py` with `@page` |
 | **Middleware on events** | Limited subset (Session, Auth, Locale) | Full `settings.MIDDLEWARE` chain |
 | **Bound context** | `self.request`, `self.user`, `self.session` | Above + `self.response`, `self.messages`, `self.csrf_token` |
@@ -256,7 +257,7 @@ The legacy mode is supported for backwards compatibility. New projects should us
 
 After migrating, walk through these and make sure each one is true:
 
-- [ ] `python manage.py run_reflex` starts without errors and you can open `http://localhost:8000/` (single dev URL; Vite hot-reloads on `:3000` behind the scenes).
+- [ ] `python manage.py run_reflex` starts without errors; open `http://localhost:3000/` for the SPA (Vite + backend on `:8000` run together).
 - [ ] `/admin/` works and you can log in.
 - [ ] After logging in at `/admin/`, a Reflex page that uses `self.request.user.is_authenticated` reports `True`.
 - [ ] A custom Django middleware you previously had (if any) shows its effects inside a Reflex event handler.

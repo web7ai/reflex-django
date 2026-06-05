@@ -1,6 +1,6 @@
 # reflex-django
 
-**Keep Django. Get a reactive UI in Python. Same process, same port, same cookies.**
+**Keep Django. Get a reactive UI in Python. One process, shared cookies, native Reflex dev.**
 
 [![PyPI](https://img.shields.io/pypi/v/reflex-django?color=%23e91e63&label=pypi)](https://pypi.org/project/reflex-django)
 [![Python](https://img.shields.io/pypi/pyversions/reflex-django.svg?color=%23ad1457)](https://pypi.org/project/reflex-django)
@@ -17,7 +17,7 @@ You love Django — the ORM, the admin, migrations, the way it just *works*. You
 
 `reflex-django` runs Django and [Reflex](https://reflex.dev) as **one ASGI app on one port**. Reflex config lives in `settings.py`. Pages live in `views.py`. The SPA catch-all is automatic. The Django session you got from `/admin/login/` is the same session your Reflex button handlers see.
 
-- **Same port** — Django at `8000`, Reflex at `8000`. No CORS, no token bridge, no second dev server.
+- **One process** — production on one port; dev runs Vite (`:3000`) + backend (`:8000`) via `run_reflex`. No CORS, no token bridge.
 - **Same cookies** — log in once at `/admin/`, every Reflex event sees `self.request.user`.
 - **Same middleware** — your full `settings.MIDDLEWARE` chain runs on every Reflex event.
 - **One command** — `python manage.py run_reflex`.
@@ -118,7 +118,11 @@ python manage.py migrate
 python manage.py run_reflex
 ```
 
-Open <http://localhost:8000/>. Admin at <http://localhost:8000/admin/>.
+`run_reflex` starts **two** dev servers: Vite on **:3000** (SPA + hot reload) and Django/Reflex on **:8000** (admin, API, `/_event`).
+
+Open <http://localhost:3000/> for your Reflex UI. Admin at <http://localhost:8000/admin/> (Vite proxies admin/API paths to `:8000`).
+
+Optional: `python manage.py run_reflex --single-port` to browse only <http://localhost:8000/>.
 
 That's it.
 

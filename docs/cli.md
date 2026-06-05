@@ -27,18 +27,20 @@ Nothing changes about those.
 
 ## `manage.py run_reflex` — the dev server
 
-This is the one you'll run all day. By default it does four things:
+This is the one you'll run all day. By default it starts **two dev servers**:
 
 1. **Compile** the Reflex SPA into `.web/`
-2. **Start Vite** for hot-module reload on port `3000` (background — you don't browse to it)
-3. **Wait** until Vite is serving the SPA, then **start uvicorn** on port `8000` (or wherever you set `backend_port`), pointed at `reflex_django.asgi_entry:application`
-4. **Watch** the Reflex source for `.py` changes. Each change recompiles the SPA into `.web` and Vite **hot-reloads only the frontend** — the backend is not restarted
+2. **Start Vite** on port `3000` (frontend — **open this URL for the SPA**)
+3. **Wait** until Vite is serving, then **start uvicorn** on port `8000` (backend — admin, API, `/_event`)
+4. **Watch** the Reflex source for `.py` changes. Each change recompiles `.web` and Vite **hot-reloads only the frontend** — the backend is not restarted
 
 ```bash
 python manage.py run_reflex
 ```
 
-That's the default. Open **`http://localhost:8000/`** — one URL for everything: the SPA at `/`, your admin at `/admin/`, your API, and the Reflex WebSocket on `/_event`, all on the same origin with shared cookies and session. Django reverse-proxies SPA traffic to Vite on `:3000` behind the scenes.
+Open **`http://localhost:3000/`** for UI work. Vite proxies `/admin`, `/api`, and `/_event` to `:8000`. Use **`http://localhost:8000/admin/`** when you want the admin directly.
+
+Pass **`--single-port`** to browse only **`http://localhost:8000/`** (Django reverse-proxies Vite). See [Local development](local_development.md).
 
 In production there's no Vite — you serve the compiled SPA from your ASGI server on one port (see [Deployment](deployment.md)).
 
@@ -48,7 +50,8 @@ Because the backend stays up, edits to **states, event handlers, or other server
 
 | Flag | Effect |
 |:---|:---|
-| `--with-vite` | The default. Run Vite for hot-module reload, proxied through Django. Frontend edits hot-reload; the backend stays up. |
+| `--with-vite` | The default. Run Vite for hot-module reload on `:3000`; backend on `:8000`. Frontend edits hot-reload; the backend stays up. |
+| `--single-port` | Browse `:8000` only — Django reverse-proxies Vite instead of two-port layout. |
 | `--from-build` | Opt out of Vite. Auto-export the SPA and serve the compiled bundle from disk; the watcher re-exports + restarts uvicorn on every `.py` change. |
 | `--skip-rebuild` | (with `--from-build`) Skip the SPA build before starting. Good for "I only edited a Django model" iterations. |
 | `--no-reload` | Don't watch for changes. The server runs once and exits when you Ctrl+C. (In the default Vite mode this disables the frontend recompile loop too.) |
@@ -86,7 +89,7 @@ python manage.py run_reflex --from-build --frontend-only
 4. Wait until Vite serves the SPA (HTTP probe, not just TCP)
 5. uvicorn subprocess
      reflex_django.asgi_entry:application on port 8000 — boots once, stays up
-     Django reverse-proxies SPA routes to Vite; Reflex WebSocket on /_event
+     Vite on :3000 proxies admin/API/_event to :8000 (default two-port dev)
 ```
 
 With `--from-build` instead:
@@ -100,7 +103,7 @@ With `--from-build` instead:
      - on .py change: stop uvicorn, re-export, start fresh uvicorn
 ```
 
-Open the browser, the page loads, the WebSocket connects, you're in.
+Open `http://localhost:3000/`, the page loads, the WebSocket connects, you're in.
 
 ### Common warnings, easily fixed
 
@@ -108,7 +111,7 @@ Open the browser, the page loads, the WebSocket connects, you're in.
 Set it in your shell: `export DJANGO_SETTINGS_MODULE=config.settings`. The auto-discovery via `manage.py` usually catches this, but if it can't, set it explicitly.
 
 **"Could not find compiled SPA" / "Reflex SPA bundle not found"**
-You're probably not running `run_reflex` (e.g. `runserver` or bare `uvicorn`), or Vite didn't start. Use `python manage.py run_reflex` and open `http://localhost:8000/`. If port `3000` is busy, free it first — see [Local development](local_development.md#troubleshooting).
+You're probably not running `run_reflex` (e.g. `runserver` or bare `uvicorn`), or Vite didn't start. Use `python manage.py run_reflex` and open `http://localhost:3000/`. If port `3000` is busy, free it first — see [Local development](local_development.md#troubleshooting).
 
 **"Port 3000 is already in use"**
 Stop the other dev server (`netstat` / Task Manager), then re-run `run_reflex`.

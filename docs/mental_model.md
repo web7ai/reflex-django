@@ -91,7 +91,7 @@ def index() -> rx.Component:
 python manage.py run_reflex
 ```
 
-Open `http://localhost:8000/` — one port, Django session, reactive UI.
+Starts **two** dev servers (Vite `:3000` + backend `:8000`). Open **`http://localhost:3000/`** for the SPA; admin and API are proxied to `:8000`. Optional: `--single-port` to browse only `:8000`. See [Local development](local_development.md).
 
 ---
 
