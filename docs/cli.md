@@ -81,16 +81,14 @@ python manage.py run_reflex --from-build --frontend-only
 ```text
 1. install_reflex_django_integration()
      - configures Django, patches reflex.config.get_config, builds in-memory rxconfig
-2. Check frontend port is free (fail fast if :3000 is already taken)
-3. Vite dev server (frontend runner subprocess)
-     - compiles .web once, runs `vite dev` on the frontend port (strictPort: true)
-     - watches the Reflex source: on .py change, recompiles .web in a fresh
-       interpreter so Vite hot-reloads the frontend
-4. Wait until Vite serves the SPA (HTTP probe, not just TCP)
-5. uvicorn subprocess
-     reflex_django.asgi_entry:application on port 8000 — boots once, stays up
-     Vite on :3000 proxies admin/API/_event to :8000 (default two-port dev)
+     - patches reflex run so the backend serves reflex_django.asgi_entry:application
+2. Sets two-port dev env (REFLEX_DJANGO_SEPARATE_DEV_PORTS=1, DEV_PROXY=0)
+3. reflex run (native Reflex dev loop)
+     - compiles .web, starts Vite on :3000 and the Django-outer ASGI backend on :8000
+     - frontend page edits hot-reload via Vite; backend reload skips views.py (see dev_watch)
 ```
+
+Browse **`http://localhost:3000/`** for the SPA. Admin, API, and `/_event` use **`http://localhost:8000/`** directly (env.json points the browser at the backend port).
 
 With `--from-build` instead:
 

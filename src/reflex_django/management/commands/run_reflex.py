@@ -1,18 +1,13 @@
 """Run the unified Reflex + Django dev server via ``manage.py``.
 
 In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
-this command launches:
-
-- Vite as a background subprocess on ``frontend_port`` for HMR (dev only).
-- An ASGI server (uvicorn by default, granian if installed) serving
-  :func:`reflex_django.asgi_entry.application` on ``backend_port``.
-
-The user opens **one** URL — ``http://localhost:<backend_port>/`` — and
-gets the SPA, ``/admin``, ``/api``, and Reflex Socket.IO all on the same
-port. Vite is invisible to the user; Django reverse-proxies ``/`` to it.
+the default Vite-HMR dev loop delegates to ``reflex run`` with the backend
+patched to serve :func:`reflex_django.asgi_entry.application`. Custom
+orchestration remains for ``--from-build``, ``--single-port`` dev, and
+``--env prod``.
 
 In legacy routing modes (``reflex_led`` / ``django_led``), the command
-falls back to delegating to Reflex's own CLI for backward compatibility.
+delegates to Reflex's own CLI unchanged.
 """
 
 from __future__ import annotations
@@ -151,7 +146,7 @@ class Command(BaseCommand):
         if mode == UrlRoutingMode.DJANGO_OUTER:
             self._run_django_outer(options)
             return
-        self._run_legacy_reflex_cli(options)
+        self._invoke_reflex_run(options)
 
     # ------------------------------------------------------------------
     # Django-outer single-port mode
@@ -276,17 +271,29 @@ class Command(BaseCommand):
         if serve_from_disk:
             self._warn_if_spa_missing()
 
-        if frontend_only:
-            if from_build:
-                # ``--from-build --frontend-only`` reduces to "just rebuild
-                # the bundle and exit" — useful in CI/pre-deploy steps.
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        "reflex-django: --from-build --frontend-only finished. "
-                        "Bundle is staged; start the ASGI server when ready."
-                    )
+        if frontend_only and from_build:
+            # ``--from-build --frontend-only`` reduces to "just rebuild
+            # the bundle and exit" — useful in CI/pre-deploy steps.
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "reflex-django: --from-build --frontend-only finished. "
+                    "Bundle is staged; start the ASGI server when ready."
                 )
-                return
+            )
+            return
+
+        # Default Vite-HMR dev delegates to native ``reflex run`` (two-port layout).
+        # ``--from-build``, ``--env prod``, and ``--single-port`` keep custom paths.
+        if not serve_from_disk and not options.get("single_port"):
+            os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
+            os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+            from reflex_django.auto_mount import refresh_reflex_mount_catchall
+
+            refresh_reflex_mount_catchall()
+            self._invoke_reflex_run(options)
+            return
+
+        if frontend_only:
             self._spawn_vite_blocking(
                 frontend_port, watch=not options.get("no_reload")
             )
@@ -1216,11 +1223,11 @@ class Command(BaseCommand):
         asyncio.run(serve(application, cfg))
 
     # ------------------------------------------------------------------
-    # Legacy Reflex-CLI path
+    # Reflex CLI delegation
     # ------------------------------------------------------------------
 
-    def _run_legacy_reflex_cli(self, options: dict[str, Any]) -> None:
-        """Defer to Reflex's own ``run`` CLI for the Reflex-outer modes."""
+    def _invoke_reflex_run(self, options: dict[str, Any]) -> None:
+        """Defer to Reflex's ``run`` CLI (``reflex run``)."""
         try:
             from reflex.reflex import cli as reflex_cli
         except ImportError as exc:
@@ -1231,6 +1238,11 @@ class Command(BaseCommand):
 
         if reflex_cli.commands.get("run") is None:
             raise CommandError("Reflex CLI has no 'run' command.")
+
+        if options.get("no_reload"):
+            os.environ["REFLEX_DJANGO_BACKEND_RELOAD"] = "0"
+        else:
+            os.environ.pop("REFLEX_DJANGO_BACKEND_RELOAD", None)
 
         forward: list[str] = ["run"]
         if options.get("env"):

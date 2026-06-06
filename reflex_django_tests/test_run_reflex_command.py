@@ -12,12 +12,7 @@ from reflex_django.routing import UrlRoutingMode
 
 
 def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Legacy Reflex-led routing modes delegate to ``reflex run`` CLI verbatim.
-
-    ``DJANGO_OUTER`` (the new default) takes a different code path entirely
-    (it spawns Vite + uvicorn locally), so we pin the routing mode to a
-    legacy value for this test.
-    """
+    """``run_reflex`` delegates to ``reflex run`` for legacy and default dev paths."""
     captured_argv: list[str] = []
 
     def _capture_main(**_kwargs: object) -> None:
@@ -35,13 +30,17 @@ def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
         "reflex_django.integration.install_reflex_django_integration",
         install_mock,
     )
-    # Force the legacy Reflex-led code path. Without this the command takes
-    # the DJANGO_OUTER branch, which spawns its own ASGI server instead of
-    # invoking ``reflex run``. The handler imports ``resolve_url_routing``
-    # lazily from :mod:`reflex_django.routing`, so we patch the source.
+    monkeypatch.setattr(
+        "reflex_django.integration.refresh_get_config_bindings",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.auto_mount.refresh_reflex_mount_catchall",
+        mock.MagicMock(),
+    )
     monkeypatch.setattr(
         "reflex_django.routing.resolve_url_routing",
-        lambda: UrlRoutingMode.REFLEX_LED,
+        lambda: UrlRoutingMode.DJANGO_OUTER,
     )
 
     Command().handle(frontend_port="3005")
@@ -92,6 +91,14 @@ def _force_django_outer_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         "reflex_django.integration.refresh_get_config_bindings",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.auto_mount.refresh_reflex_mount_catchall",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
         mock.MagicMock(),
     )
     # Avoid real TCP port checks / Vite boot waits when the host has :3000 busy.
@@ -368,14 +375,15 @@ def test_with_vite_opts_out_of_from_build(
     """``--with-vite`` overrides ``REFLEX_DJANGO_SERVE_FROM_BUILD=True``.
 
     Users who want the legacy Vite-HMR loop pass ``--with-vite`` (alias
-    ``--no-from-build``); we must skip the auto-export AND spawn Vite.
+    ``--no-from-build``); we must skip the auto-export AND delegate to
+    ``reflex run``.
     """
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
-    vite_spawn = mock.MagicMock()
+    invoke = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        vite_spawn,
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
     )
 
     from django.conf import settings
@@ -387,7 +395,7 @@ def test_with_vite_opts_out_of_from_build(
     Command().handle(with_vite=True)
 
     export_call.assert_not_called()
-    vite_spawn.assert_called_once()
+    invoke.assert_called_once()
 
 
 def test_from_build_uses_parent_watch_reload(
@@ -491,17 +499,13 @@ def test_default_spawns_vite_and_skips_export(
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """Plain ``run_reflex`` (no flags, setting unset/False) runs the Vite loop.
-
-    The Vite-HMR loop is the default now: we must spawn Vite and must NOT
-    auto-export the SPA.
-    """
+    """Plain ``run_reflex`` (no flags) delegates to ``reflex run`` without export."""
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
-    vite_spawn = mock.MagicMock()
+    invoke = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        vite_spawn,
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
     )
     monkeypatch.delenv("REFLEX_DJANGO_SERVE_FROM_BUILD", raising=False)
 
@@ -513,7 +517,7 @@ def test_default_spawns_vite_and_skips_export(
 
     Command().handle()  # no flags at all
 
-    vite_spawn.assert_called_once()
+    invoke.assert_called_once()
     export_call.assert_not_called()
 
 
@@ -524,10 +528,6 @@ def test_vite_default_two_port_dev_proxy_off(
 ) -> None:
     """Default two-port dev sets DEV_PROXY=0 and SEPARATE_DEV_PORTS=1."""
     monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        mock.MagicMock(),
-    )
     monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
     monkeypatch.delenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", raising=False)
 
@@ -545,26 +545,17 @@ def test_vite_default_two_port_dev_proxy_off(
     assert os.environ.get("REFLEX_DJANGO_SEPARATE_DEV_PORTS") == "1"
 
 
-def test_vite_default_enables_fast_backend_reload(
+def test_vite_default_delegates_to_reflex_run(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """Default Vite dev spawns uvicorn with ``--reload`` (backend-only globs)."""
+    """Default Vite dev calls ``_invoke_reflex_run`` instead of manual subprocesses."""
     monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
+    invoke = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        mock.MagicMock(return_value=mock.Mock(poll=lambda: None)),
-    )
-    spawn_backend = mock.MagicMock(return_value=mock.Mock(poll=lambda: None))
-    supervise = mock.MagicMock()
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
-        spawn_backend,
-    )
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._supervise_vite_dev_procs",
-        supervise,
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
     )
 
     from django.conf import settings
@@ -575,10 +566,7 @@ def test_vite_default_enables_fast_backend_reload(
 
     Command().handle()
 
-    _stub_asgi_server.assert_not_called()
-    spawn_backend.assert_called_once()
-    assert spawn_backend.call_args.kwargs.get("reload") is True
-    supervise.assert_called_once()
+    invoke.assert_called_once()
 
 
 def test_single_port_enables_fast_backend_reload(
@@ -652,55 +640,212 @@ def test_default_compiles_in_parent_and_starts_vite_with_skip_compile(
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """Default dev compiles once in the parent and skips recompile in Vite child."""
-    compile_once = mock.MagicMock()
+    """Default dev delegates compile + Vite boot to ``reflex run``."""
+    invoke = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._compile_dev_app_once",
-        compile_once,
-    )
-    vite_spawn = mock.MagicMock()
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        vite_spawn,
-    )
-    notifier = mock.MagicMock()
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._start_vite_ready_notifier",
-        notifier,
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
     )
 
     Command().handle()
 
-    compile_once.assert_called_once()
-    vite_spawn.assert_called_once()
-    assert vite_spawn.call_args.kwargs.get("skip_compile") is True
-    notifier.assert_called_once()
+    invoke.assert_called_once()
 
 
-def test_no_reload_passes_no_watch_to_vite(
+def test_no_reload_sets_backend_reload_env(
     monkeypatch: pytest.MonkeyPatch,
-    _force_django_outer_mode: None,
-    _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """``run_reflex --no-reload`` spawns the frontend runner with watching off.
+    """``run_reflex --no-reload`` disables backend reload via env for ``reflex run``."""
+    import os
 
-    ``--no-reload`` means "don't watch for changes", so the recompile-on-edit
-    loop in the frontend runner must be disabled too.
-    """
-    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
-    vite_spawn = mock.MagicMock()
+    cli_mock = mock.MagicMock()
+    cli_mock.commands = {"run": mock.MagicMock()}
+    cli_mock.main = mock.MagicMock()
+
+    import reflex.reflex as reflex_module
+
+    monkeypatch.setattr(reflex_module, "cli", cli_mock)
+    monkeypatch.delenv("REFLEX_DJANGO_BACKEND_RELOAD", raising=False)
+
+    Command()._invoke_reflex_run({"no_reload": True})
+
+    assert os.environ.get("REFLEX_DJANGO_BACKEND_RELOAD") == "0"
+    cli_mock.main.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# reflex run backend patch (DJANGO_OUTER)
+# ---------------------------------------------------------------------------
+
+
+def _reset_backend_patch_flag() -> None:
+    import reflex.utils.exec as exec_module
+
+    if hasattr(exec_module, "_reflex_django_run_backend_patched"):
+        exec_module._reflex_django_run_backend_patched = False
+
+
+def test_patched_uvicorn_backend_uses_asgi_entry_with_reload_excludes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dev backend with Vite spawns ``_backend_runner`` (Windows-safe subprocess)."""
+    _reset_backend_patch_flag()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        vite_spawn,
+        "reflex_django.routing.resolve_url_routing",
+        lambda: UrlRoutingMode.DJANGO_OUTER,
     )
 
-    from django.conf import settings
-
+    spawn = mock.MagicMock()
     monkeypatch.setattr(
-        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False, raising=False
+        "reflex_django.integration._spawn_django_outer_backend_subprocess",
+        spawn,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.should_use_granian",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.get_web_dir",
+        lambda: mock.Mock(exists=lambda: False),
     )
 
-    Command().handle(no_reload=True)
+    from reflex_django.integration import install_reflex_django_integration
+    import reflex.utils.exec as exec_module
 
-    vite_spawn.assert_called_once()
-    assert vite_spawn.call_args.kwargs.get("watch") is False
+    install_reflex_django_integration()
+
+    import os
+
+    os.environ.pop("REFLEX_DJANGO_BACKEND_RELOAD", None)
+    os.environ["REFLEX_DJANGO_FRONTEND_PRESENT"] = "1"
+    exec_module.run_backend("0.0.0.0", 8000, frontend_present=True)
+
+    spawn.assert_called_once()
+    assert spawn.call_args.kwargs.get("reload") is True
+
+
+def test_patched_uvicorn_backend_inprocess_without_frontend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Backend-only dev uses in-process uvicorn on the main thread."""
+    _reset_backend_patch_flag()
+    monkeypatch.setattr(
+        "reflex_django.routing.resolve_url_routing",
+        lambda: UrlRoutingMode.DJANGO_OUTER,
+    )
+
+    uvicorn_run = mock.MagicMock()
+    monkeypatch.setattr("uvicorn.run", uvicorn_run)
+    monkeypatch.setattr(
+        "reflex.utils.exec.get_reload_paths",
+        lambda: ["/project"],
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.should_use_granian",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.get_web_dir",
+        lambda: mock.Mock(exists=lambda: False),
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.notify_backend",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.integration._spawn_django_outer_backend_subprocess",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.integration.sys.platform",
+        "linux",
+    )
+
+    from reflex_django.integration import install_reflex_django_integration
+    import reflex.utils.exec as exec_module
+
+    install_reflex_django_integration()
+
+    import os
+
+    os.environ.pop("REFLEX_DJANGO_BACKEND_RELOAD", None)
+    os.environ.pop("REFLEX_DJANGO_FRONTEND_PRESENT", None)
+    exec_module.run_backend("0.0.0.0", 8000, frontend_present=False)
+
+    uvicorn_run.assert_called_once()
+    kwargs = uvicorn_run.call_args.kwargs
+    assert kwargs["app"] == "reflex_django.asgi_entry:application"
+    assert kwargs["reload"] is True
+
+
+def test_patched_uvicorn_backend_honors_no_reload_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``REFLEX_DJANGO_BACKEND_RELOAD=0`` disables uvicorn reload."""
+    _reset_backend_patch_flag()
+    monkeypatch.setattr(
+        "reflex_django.routing.resolve_url_routing",
+        lambda: UrlRoutingMode.DJANGO_OUTER,
+    )
+
+    spawn = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.integration._spawn_django_outer_backend_subprocess",
+        spawn,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.should_use_granian",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.get_web_dir",
+        lambda: mock.Mock(exists=lambda: False),
+    )
+    monkeypatch.setattr(
+        "reflex.utils.exec.notify_backend",
+        mock.MagicMock(),
+    )
+
+    from reflex_django.integration import install_reflex_django_integration
+    import reflex.utils.exec as exec_module
+
+    install_reflex_django_integration()
+
+    import os
+
+    os.environ["REFLEX_DJANGO_BACKEND_RELOAD"] = "0"
+    os.environ["REFLEX_DJANGO_FRONTEND_PRESENT"] = "1"
+    exec_module.run_backend("0.0.0.0", 8000, frontend_present=True)
+
+    spawn.assert_called_once()
+    assert spawn.call_args.kwargs.get("reload") is False
+
+
+def test_backend_runner_passes_reload_excludes_when_vite_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uvicorn_run = mock.MagicMock()
+    monkeypatch.setattr("uvicorn.run", uvicorn_run)
+    monkeypatch.setattr(
+        "reflex_django.integration.install_reflex_django_integration",
+        mock.MagicMock(),
+    )
+    monkeypatch.setattr(
+        "reflex_django._backend_runner._resolve_watch_root",
+        lambda: "/project",
+    )
+
+    import os
+
+    os.environ["REFLEX_DJANGO_FRONTEND_PRESENT"] = "1"
+    os.environ.pop("REFLEX_DJANGO_BACKEND_RELOAD", None)
+    monkeypatch.setattr("reflex_django._backend_runner.sys.platform", "linux")
+
+    from reflex_django._backend_runner import main
+
+    main(["--host", "127.0.0.1", "--port", "8000"])
+
+    kwargs = uvicorn_run.call_args.kwargs
+    assert kwargs["app"] == "reflex_django.asgi_entry:application"
+    assert kwargs["reload"] is True
+    assert kwargs.get("reload_excludes")
