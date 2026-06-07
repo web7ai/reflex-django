@@ -84,6 +84,12 @@ def configure_django(settings_module: str | None = None) -> str:
 
         django.setup()
         _SETUP_DONE = True
+        try:
+            from reflex_django.auto_mount import maybe_auto_mount
+
+            maybe_auto_mount()
+        except Exception:
+            pass
         _bootstrap_reflex_integration_for_django_mode()
         return active
 

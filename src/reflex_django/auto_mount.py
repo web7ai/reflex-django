@@ -287,6 +287,48 @@ def refresh_reflex_mount_catchall() -> ReflexMountHandle | None:
     return handle
 
 
+def _reflex_before_admin_in_installed_apps() -> bool:
+    """Return whether ``reflex_django`` is listed before ``django.contrib.admin``."""
+    try:
+        from django.conf import settings
+
+        installed = list(getattr(settings, "INSTALLED_APPS", ()))
+        return installed.index("reflex_django") < installed.index("django.contrib.admin")
+    except ValueError:
+        return False
+
+
+def schedule_auto_mount_after_admin() -> None:
+    """Schedule :func:`maybe_auto_mount` once admin autodiscover has finished.
+
+    ``ReflexDjangoConfig.ready()`` can run before ``django.contrib.admin``
+    autodiscover. Importing ``ROOT_URLCONF`` at that point evaluates
+    ``admin.site.urls`` while the admin registry is still empty, so Django
+    never registers the per-app ``app_list`` routes and ``/admin/`` raises
+    ``NoReverseMatch`` for ``admin:app_list``.
+    """
+    from django.contrib.admin.apps import AdminConfig
+
+    if getattr(AdminConfig, "_reflex_auto_mount_scheduled", False):
+        return
+    AdminConfig._reflex_auto_mount_scheduled = True
+
+    if not _auto_mount_enabled() or not _should_auto_mount_urls():
+        return
+
+    if not _reflex_before_admin_in_installed_apps():
+        maybe_auto_mount()
+        return
+
+    original_ready = AdminConfig.ready
+
+    def ready_with_auto_mount(self: AdminConfig, *args: Any, **kwargs: Any) -> None:
+        original_ready(self, *args, **kwargs)
+        maybe_auto_mount()
+
+    AdminConfig.ready = ready_with_auto_mount  # type: ignore[method-assign]
+
+
 def maybe_auto_mount() -> ReflexMountHandle | None:
     """Append SPA catch-all from settings when enabled (boot-only, idempotent)."""
     global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE
@@ -338,6 +380,13 @@ def clear_auto_mount_state() -> None:
     _MOUNT_BOOT_COMPLETED = False
     _MOUNT_HANDLE = None
     _SETTINGS_MOUNT_REGISTERED = False
+    try:
+        from django.contrib.admin.apps import AdminConfig
+
+        if hasattr(AdminConfig, "_reflex_auto_mount_scheduled"):
+            delattr(AdminConfig, "_reflex_auto_mount_scheduled")
+    except Exception:
+        pass
 
 
 __all__ = [
@@ -348,4 +397,5 @@ __all__ = [
     "maybe_auto_mount",
     "refresh_reflex_mount_catchall",
     "register_mount_from_settings",
+    "schedule_auto_mount_after_admin",
 ]
