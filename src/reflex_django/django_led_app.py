@@ -1,23 +1,23 @@
-"""Reflex ``app`` entry for Django-first projects (no ``{app}/{app}.py`` on disk)."""
+"""Deprecated module path — use :mod:`reflex_django.reflex_app`."""
 
 from __future__ import annotations
 
-from typing import Any
+import warnings
 
-_app: Any | None = None
+from reflex_django.reflex_app import _app, _load_app
+
+warnings.warn(
+    "reflex_django.django_led_app is deprecated; use reflex_django.reflex_app.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str):
     if name == "app":
         return _load_app()
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 
 
-def _load_app() -> Any:
-    global _app
-    if _app is None:
-        from reflex_django.app_factory import get_or_create_app
-
-        _app = get_or_create_app()
-    return _app
+__all__ = ["_app", "app"]

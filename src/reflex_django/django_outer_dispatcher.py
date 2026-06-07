@@ -30,6 +30,7 @@ from typing import Any
 logger = logging.getLogger("reflex_django.django_outer_dispatcher")
 
 from reflex_django._frontend_runner import BUILD_ID_PATH
+from reflex_django.core.constants import RESERVED_REFLEX_PREFIXES
 
 ASGIScope = MutableMapping[str, Any]
 ASGIMessage = MutableMapping[str, Any]
@@ -38,16 +39,8 @@ ASGISend = Callable[[ASGIMessage], Awaitable[None]]
 ASGIApp = Callable[[ASGIScope, ASGIReceive, ASGISend], Awaitable[None]]
 
 
-# Paths owned by Reflex regardless of routing mode. Kept in sync with
-# :data:`reflex_django.asgi.RESERVED_REFLEX_PREFIXES`.
-DEFAULT_RESERVED_REFLEX_PREFIXES: tuple[str, ...] = (
-    "/_event",
-    "/_upload",
-    "/_health",
-    "/_all_routes",
-    "/ping",
-    "/auth-codespace",
-)
+# Backward-compatible alias for docs and settings references.
+DEFAULT_RESERVED_REFLEX_PREFIXES: tuple[str, ...] = RESERVED_REFLEX_PREFIXES
 
 
 def _path_matches(path: str, prefix: str) -> bool:

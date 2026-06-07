@@ -10,17 +10,11 @@ from typing import TYPE_CHECKING, Any
 
 import reflex as rx
 from reflex_django.context import current_user
+from reflex_django.core.users import username_str
 from reflex_django.state.auth_bridge import AuthBridgeMixin
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
-
-
-def _username_str(user: Any) -> str:
-    getusername = getattr(user, "get_username", None)
-    if callable(getusername):
-        return str(getusername())
-    return str(getattr(user, "username", "") or "")
 
 
 def user_snapshot(
@@ -55,7 +49,7 @@ def user_snapshot(
     uid = getattr(user, "pk", None)
     return {
         "id": int(uid) if uid is not None else None,
-        "username": _username_str(user),
+        "username": username_str(user),
         "email": str(getattr(user, "email", "") or ""),
         "first_name": str(getattr(user, "first_name", "") or ""),
         "last_name": str(getattr(user, "last_name", "") or ""),

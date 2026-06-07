@@ -81,9 +81,9 @@ def _spa_bundle_missing() -> bool:
     "missing" so we err on the side of (re)building.
     """
     try:
-        from reflex_django.views.mount import _resolve_spa_index
+        from reflex_django.mount.spa_paths import resolve_spa_index
 
-        return _resolve_spa_index() is None
+        return resolve_spa_index() is None
     except Exception:  # noqa: BLE001
         return True
 
@@ -250,11 +250,25 @@ def _disable_reflex_frontend_mount() -> None:
 def _build_reflex_outer_application() -> ASGIApp:
     """Build the Reflex-outer ASGI app (``reflex_led`` / ``reflex_outer``)."""
     from reflex_django.app_factory import ensure_django_led_app_ready
+    from reflex_django.django_http_proxy import make_django_http_proxy
+    from reflex_django.django_http_subprocess import (
+        resolve_django_http_upstream,
+        wrap_reflex_asgi_with_django_http_lifecycle,
+    )
     from reflex_django.integration import install_reflex_django_integration
+    from reflex_django.prefixes import resolve_prefixes
+    from reflex_django.reflex_outer_dispatcher import ReflexOuterDispatcher
 
     install_reflex_django_integration()
     rx_app = ensure_django_led_app_ready()
-    return rx_app()
+    reflex_inner = rx_app()
+    prefix_config = resolve_prefixes()
+    dispatcher = ReflexOuterDispatcher(
+        reflex=reflex_inner,
+        django=make_django_http_proxy(resolve_django_http_upstream()),
+        django_prefixes=prefix_config.backend_prefixes_for_asgi(),
+    )
+    return wrap_reflex_asgi_with_django_http_lifecycle(dispatcher)
 
 
 def build_django_outer_application() -> ASGIApp:

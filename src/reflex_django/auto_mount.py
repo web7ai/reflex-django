@@ -62,10 +62,7 @@ def _auto_mount_enabled() -> bool:
 def _should_auto_mount_urls() -> bool:
     from reflex_django.routing import UrlRoutingMode, resolve_url_routing
 
-    return resolve_url_routing() in (
-        UrlRoutingMode.DJANGO_OUTER,
-        UrlRoutingMode.DJANGO_LED,
-    )
+    return resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER
 
 
 def has_reflex_mount(urlpatterns: Sequence[Any]) -> bool:
@@ -93,9 +90,15 @@ def register_mount_from_settings(**overrides: Any) -> None:
             "REFLEX_DJANGO_MOUNT_PREFIX",
             os.environ.get("REFLEX_DJANGO_MOUNT_PREFIX", "/"),
         )
+        settings_django_prefix = getattr(
+            django_settings,
+            "REFLEX_DJANGO_DJANGO_PREFIX",
+            None,
+        )
     except Exception:
         settings_rx = {}
         mount_prefix = os.environ.get("REFLEX_DJANGO_MOUNT_PREFIX", "/")
+        settings_django_prefix = None
 
     opts = dict(overrides)
     merged_rx = _coerce_rx_config_dict(
@@ -111,7 +114,7 @@ def register_mount_from_settings(**overrides: Any) -> None:
         rx_config=merged_rx,
         django_plugin=opts.get("django_plugin"),
         mount_prefix=opts.get("mount_prefix", mount_prefix),
-        django_prefix=opts.get("django_prefix"),
+        django_prefix=opts.get("django_prefix", settings_django_prefix),
     )
     _SETTINGS_MOUNT_REGISTERED = True
 

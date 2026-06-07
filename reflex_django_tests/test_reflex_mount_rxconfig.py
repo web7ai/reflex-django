@@ -9,7 +9,6 @@ from django.conf import settings
 
 from reflex_django.mount_config import clear_mount_rx_config
 from reflex_django.mount_registry import clear_mount_registry
-from reflex_django.plugin import ReflexDjangoPlugin
 from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
 
 
@@ -44,7 +43,6 @@ def test_reflex_mount_registers_plugins_in_rx_config(
     config = ensure_rxconfig_from_django()
 
     assert any(getattr(p, "marker", None) == "mount_test" for p in config.plugins)
-    assert any(isinstance(p, ReflexDjangoPlugin) for p in config.plugins)
     assert config.frontend_port == 3100
 
 

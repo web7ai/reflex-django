@@ -40,6 +40,10 @@ from reflex_django.dev_proxy import (
     dev_uses_separate_ports,
     reverse_proxy_to_vite,
 )
+from reflex_django.mount.spa_paths import (
+    resolve_spa_index as _resolve_spa_index_impl,
+    spa_root_candidates as _spa_root_candidates_impl,
+)
 from reflex_django.routing import UrlRoutingMode, resolve_url_routing
 from reflex_django.spa_template import maybe_render_spa_html
 
@@ -49,75 +53,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger("reflex_django.views.mount")
 
 
-_SPA_DIR_CANDIDATES: tuple[str, ...] = ("_reflex", "_static", "reflex")
-
-
-def _compile_dev_mode_enabled() -> bool:
-    return str(os.environ.get("REFLEX_DJANGO_COMPILE_DEV", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def _append_web_spa_roots(roots: list[Path], base: Path) -> None:
-    """Append in-place Reflex build output directories under ``base/.web``."""
-    from reflex_django._frontend_runner import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
-
-    roots.append(base / ".web" / "build" / "client")
-    if _compile_dev_mode_enabled():
-        roots.append(base / ".web" / COMPILE_DEV_CLIENT_BACKUP_DIRNAME)
-    roots.append(base / ".web" / "_static")
-    roots.append(base / ".web" / "build")
-
-
 def _spa_root_candidates() -> Iterable[Path]:
-    """Yield directories on disk that may hold the compiled Reflex SPA.
-
-    The discovery order matters — the first match wins. We try staging
-    directories first (``STATIC_ROOT/_reflex`` etc., populated by
-    ``manage.py export_reflex --stage-to-static-root`` or ``collectstatic``),
-    then fall back to the in-place Reflex build outputs:
-
-    - ``.web/build/client/`` — SSR-enabled builds (current Reflex default;
-      Vite SSR puts the client bundle here and pre-renders pages
-      alongside).
-    - ``.web/.compile-dev-client-backup/`` — previous client bundle kept
-      during compile-dev rebuilds so pages stay servable while Reflex
-      wipes ``.web/build``.
-    - ``.web/_static/`` — ``--no-ssr`` builds and pre-SSR Reflex versions.
-    - ``.web/build/`` — some intermediate Reflex versions.
-    """
-    try:
-        from django.conf import settings
-    except Exception:
-        return ()
-
-    roots: list[Path] = []
-    static_root = getattr(settings, "STATIC_ROOT", None)
-    if static_root:
-        base = Path(static_root)
-        for sub in _SPA_DIR_CANDIDATES:
-            roots.append(base / sub)
-        roots.append(base)
-
-    project = getattr(settings, "BASE_DIR", None)
-    if project:
-        _append_web_spa_roots(roots, Path(project))
-
-    seen: set[Path] = set()
-    out: list[Path] = []
-    for r in roots:
-        try:
-            resolved = r.resolve()
-        except OSError:
-            continue
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        out.append(r)
-    return out
+    """Backward-compatible wrapper around :func:`mount.spa_paths.spa_root_candidates`."""
+    return _spa_root_candidates_impl()
 
 
 def _resolve_spa_asset(request_path: str) -> Path | None:
@@ -167,12 +105,8 @@ def _resolve_spa_asset(request_path: str) -> Path | None:
 
 
 def _resolve_spa_index() -> Path | None:
-    """Return the compiled SPA's ``index.html`` path, or ``None`` if missing."""
-    for root in _spa_root_candidates():
-        candidate = root / "index.html"
-        if candidate.is_file():
-            return candidate
-    return None
+    """Backward-compatible wrapper around :func:`mount.spa_paths.resolve_spa_index`."""
+    return _resolve_spa_index_impl()
 
 
 def _serve_spa_response(request_path: str) -> HttpResponse:

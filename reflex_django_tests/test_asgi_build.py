@@ -29,7 +29,6 @@ def fake_django_app() -> Any:
 def _patch_get_asgi_application(monkeypatch: pytest.MonkeyPatch, app: Any) -> None:
     """Stub Django's ``get_asgi_application`` and ``configure_django``."""
     monkeypatch.setattr(asgi_module, "configure_django", lambda: "stub")
-    monkeypatch.setattr(asgi_module, "bootstrap_django_led_runtime", lambda: None)
     monkeypatch.setattr("django.core.asgi.get_asgi_application", lambda: app)
 
 
@@ -94,8 +93,6 @@ def test_build_django_asgi_calls_configure_first(
         "django.conf.settings",
         mock.Mock(INSTALLED_APPS=[], REFLEX_DJANGO_PLUGIN={}),
     )
-    monkeypatch.setattr(asgi_module, "bootstrap_django_led_runtime", lambda: None)
-
     asgi_module.build_django_asgi()
 
     assert order == ["configured", "get_asgi"]

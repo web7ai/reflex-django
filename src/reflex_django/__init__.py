@@ -21,11 +21,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from reflex_django.asgi import build_django_asgi, make_dispatcher
+from reflex_django.asgi import build_django_asgi
 from reflex_django.cli import django_cli
 from reflex_django.conf import configure_django
 from reflex_django.app_factory import create_app
-from reflex_django.plugin import ReflexDjangoPlugin
+from reflex_django.plugin import ReflexDjangoPlugin, make_dispatcher
 
 if TYPE_CHECKING:
     from reflex_django.admin import register as register_admin
@@ -137,7 +137,7 @@ __all__ = [
 # ``INSTALLED_APPS``). Resolve them on first attribute access instead so the
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
-    "app": ("reflex_django.django_led_app", "app"),
+    "app": ("reflex_django.reflex_app", "app"),
     "asgi_application": ("reflex_django.asgi_entry", "application"),
     "build_asgi_application": ("reflex_django.asgi_entry", "build_application"),
     "build_django_outer_application": (

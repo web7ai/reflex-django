@@ -8,7 +8,6 @@ import pytest
 from django.conf import settings
 from reflex_base.config import Config
 
-from reflex_django.plugin import ReflexDjangoPlugin
 from reflex_django.rxconfig_bridge import (
     _apply_built_with_reflex_default,
     ensure_reflex_django_plugin,
@@ -37,18 +36,10 @@ def test_merge_rx_config_fill_missing() -> None:
     assert merged.frontend_port == 3000
 
 
-def test_ensure_reflex_django_plugin_appends() -> None:
+def test_ensure_reflex_django_plugin_is_noop() -> None:
     base = Config(app_name="app", plugins=(), _skip_plugins_checks=True)
     merged = ensure_reflex_django_plugin(base)
-    assert len(merged.plugins) == 1
-    assert isinstance(merged.plugins[0], ReflexDjangoPlugin)
-
-
-def test_ensure_reflex_django_plugin_no_duplicate() -> None:
-    existing = ReflexDjangoPlugin()
-    base = Config(app_name="app", plugins=(existing,), _skip_plugins_checks=True)
-    merged = ensure_reflex_django_plugin(base)
-    assert len(merged.plugins) == 1
+    assert not merged.plugins
 
 
 def test_invalid_rx_config_key_raises() -> None:

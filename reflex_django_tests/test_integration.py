@@ -37,7 +37,7 @@ def test_install_patches_get_config(
     cfg = get_config()
     assert cfg.frontend_port == 4000
     assert cfg.app_name == "frontend"
-    assert any(
+    assert cfg.plugins == () or not any(
         type(p).__name__ == "ReflexDjangoPlugin" for p in (cfg.plugins or ())
     )
 
@@ -62,7 +62,7 @@ def test_configure_django_bootstraps_integration(
 
     cfg = get_config()
     assert cfg.frontend_port == 4000
-    assert any(
+    assert cfg.plugins == () or not any(
         type(p).__name__ == "ReflexDjangoPlugin" for p in (cfg.plugins or ())
     )
 

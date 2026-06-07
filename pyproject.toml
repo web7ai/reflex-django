@@ -1,6 +1,6 @@
 [project]
 name = "reflex-django"
-version = "0.5.0"
+version = "1.0.0"
 description = "Run a Django backend (Django ORM, Django Admin) alongside a Reflex app."
 license = "Apache-2.0"
 readme = "README.md"

@@ -283,30 +283,10 @@ class Command(BaseCommand):
 
     @staticmethod
     def _resolve_build_dir() -> Path | None:
-        """Return the directory that contains the compiled SPA's ``index.html``.
+        """Return the directory that contains the compiled SPA's ``index.html``."""
+        from reflex_django.mount.spa_paths import resolve_build_dir
 
-        Reflex's output directory depends on whether SSR is enabled:
-
-        - ``--no-ssr`` and pre-SSR Reflex versions: ``.web/_static/index.html``.
-        - SSR enabled (the new default): Vite writes to ``.web/build/client/``
-          with pre-rendered pages alongside (``about.html``, ``items.html``,
-          ``__spa-fallback.html``, …); the SPA shell is ``client/index.html``.
-        - Some older Reflex versions: ``.web/build/index.html`` (no ``client``
-          subdir).
-
-        We try each layout in order of "newest Reflex first" so SSR users land
-        on the right place, then fall back to the legacy paths.
-        """
-        web = Path.cwd() / ".web"
-        candidates = (
-            web / "build" / "client",
-            web / "_static",
-            web / "build",
-        )
-        for candidate in candidates:
-            if candidate.is_dir() and (candidate / "index.html").is_file():
-                return candidate
-        return None
+        return resolve_build_dir()
 
     def _print_discovery_hint(self) -> None:
         """Tell the user where ``ReflexMountView`` will look for the bundle."""

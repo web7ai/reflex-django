@@ -147,12 +147,9 @@ def _spawn_django_outer_backend_subprocess(
     try:
         proc.wait()
     except KeyboardInterrupt:
-        with contextlib.suppress(Exception):
-            proc.terminate()
-        with contextlib.suppress(Exception):
-            proc.wait(timeout=5)
-        with contextlib.suppress(Exception):
-            proc.kill()
+        from reflex_django.dev.process_utils import terminate_process
+
+        terminate_process(proc, timeout=5.0, use_sigint=False)
 
 
 def _patch_reflex_run_backend() -> None:
@@ -349,16 +346,9 @@ def install_reflex_django_integration() -> None:
     maybe_auto_mount()
     ensure_reflex_cli_layout()
     ensure_rxconfig_from_django()
-    if resolve_url_routing() == UrlRoutingMode.DJANGO_LED:
-        from reflex_django.app_factory import ensure_django_led_app_ready
+    from reflex_django.bootstrap.patches.registry import apply_post_rxconfig_patches
 
-        ensure_django_led_app_ready()
-
-    _patch_reflex_compile()
-    _patch_reflex_page()
-    _patch_apply_decorated_pages()
-    _patch_assert_in_reflex_dir()
-    _patch_needs_reinit()
+    apply_post_rxconfig_patches()
     _INSTALLED = True
 
 

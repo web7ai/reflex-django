@@ -15,7 +15,7 @@ _CONTRIB_APP_PREFIX = "django."
 _APP_INSTANCE: Any | None = None
 _IMPORTED_VIEW_MODULES: set[str] = set()
 
-_DJANGO_LED_APP_MODULE = "reflex_django.django_led_app"
+_REFLEX_APP_MODULE = "reflex_django.reflex_app"
 
 
 def _django_settings() -> Any:
@@ -56,18 +56,18 @@ def _resolve_user_create_app() -> Any | None:
 def get_or_create_app() -> Any:
     """Return the singleton :class:`reflex.app.App` for Django-first projects.
 
-    Honors a pre-set :data:`reflex_django.django_led_app._app`, then
+    Honors a pre-set :data:`reflex_django.reflex_app._app`, then
     :data:`~django.conf.settings.REFLEX_DJANGO_CREATE_APP`, else ``rx.App()``.
     """
     global _APP_INSTANCE
-    import reflex_django.django_led_app as django_led_module
+    import reflex_django.reflex_app as reflex_app_module
 
-    if django_led_module._app is not None:
-        _APP_INSTANCE = django_led_module._app
-        return django_led_module._app
+    if reflex_app_module._app is not None:
+        _APP_INSTANCE = reflex_app_module._app
+        return reflex_app_module._app
 
     if _APP_INSTANCE is not None:
-        django_led_module._app = _APP_INSTANCE
+        reflex_app_module._app = _APP_INSTANCE
         return _APP_INSTANCE
 
     user_app = _resolve_user_create_app()
@@ -76,7 +76,7 @@ def get_or_create_app() -> Any:
     from reflex_django.mount_config import resolve_app_name
 
     register_reflex_app_module(resolve_app_name(), app)
-    django_led_module._app = app
+    reflex_app_module._app = app
     _APP_INSTANCE = app
     return app
 
@@ -86,9 +86,14 @@ def reflex_app_module_name(app_name: str) -> str:
     return f"{app_name}.{app_name}"
 
 
-def django_led_app_module_import() -> str:
+def reflex_app_module_import() -> str:
     """Dotted import path Reflex uses for ``app`` in Django-first mode."""
-    return _DJANGO_LED_APP_MODULE
+    return _REFLEX_APP_MODULE
+
+
+def django_led_app_module_import() -> str:
+    """Deprecated alias for :func:`reflex_app_module_import`."""
+    return reflex_app_module_import()
 
 
 def register_reflex_app_module(app_name: str, app: Any) -> str:
@@ -427,7 +432,7 @@ def ensure_django_led_app_ready() -> Any:
         The configured Reflex app.
     """
     from reflex_django.integration import _ensure_runtime_event_patches
-    from reflex_django.plugin import apply_reflex_plugins_to_app
+    from reflex_django.bootstrap.app_setup import apply_reflex_plugins_to_app
 
     _ensure_runtime_event_patches()
     # prepare_pages_for_compile deduplicates routes already registered by
@@ -501,9 +506,9 @@ def reset_app_factory_cache() -> None:
             delattr(_APP_INSTANCE, "_reflex_django_decorated_pages_applied")
     _APP_INSTANCE = None
     _IMPORTED_VIEW_MODULES.clear()
-    import reflex_django.django_led_app as django_led_app
+    import reflex_django.reflex_app as reflex_app
 
-    django_led_app._app = None
+    reflex_app._app = None
     from reflex_django.auto_mount import clear_auto_mount_state
 
     clear_auto_mount_state()

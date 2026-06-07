@@ -24,9 +24,17 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 
+from reflex_django.core.constants import (
+    DEFAULT_BACKEND_PORT,
+    DEFAULT_FRONTEND_PORT,
+    ENV_SERVE_FROM_BUILD,
+)
+from reflex_django.core.env import setting_or_env_bool
+from reflex_django.dev.process_utils import terminate_process
+from reflex_django.dev.run_plan import RunPlan, build_run_plan
 
-_DEFAULT_FRONTEND_PORT = 3000
-_DEFAULT_BACKEND_PORT = 8000
+_DEFAULT_FRONTEND_PORT = DEFAULT_FRONTEND_PORT
+_DEFAULT_BACKEND_PORT = DEFAULT_BACKEND_PORT
 
 
 class Command(BaseCommand):
@@ -139,7 +147,12 @@ class Command(BaseCommand):
         if mode == UrlRoutingMode.REFLEX_OUTER:
             self._run_reflex_outer(options)
             return
-        self._invoke_reflex_run(options)
+        from reflex_django.errors import RoutingModeError
+
+        raise RoutingModeError(
+            f"Unsupported routing mode {mode!r}. "
+            "Use django_outer (default) or reflex_outer."
+        )
 
     # ------------------------------------------------------------------
     # Reflex-outer mode (Django HTTP subprocess)
@@ -180,49 +193,21 @@ class Command(BaseCommand):
 
     def _run_django_outer(self, options: dict[str, Any]) -> None:
         """Spawn Vite + uvicorn/granian wired around the Django-outer ASGI app."""
-        env_name = options.get("env") or "dev"
-        is_prod = env_name == "prod"
-
-        backend_port = int(
-            options.get("backend_port")
-            or os.environ.get("REFLEX_DJANGO_BACKEND_PORT")
-            or _DEFAULT_BACKEND_PORT
-        )
-        backend_host = (
-            options.get("backend_host")
-            or os.environ.get("REFLEX_DJANGO_BACKEND_HOST")
-            or "0.0.0.0"
-        )
-        frontend_port = int(
-            options.get("frontend_port")
-            or os.environ.get("REFLEX_DJANGO_FRONTEND_PORT")
-            or _DEFAULT_FRONTEND_PORT
-        )
-        loglevel = options.get("loglevel") or "info"
-        frontend_only = bool(options.get("frontend_only"))
-        backend_only = bool(options.get("backend_only"))
-        skip_rebuild = bool(options.get("skip_rebuild"))
-
-        # Resolve from-build mode. Precedence, highest first:
-        #   1. ``--env prod``                       → True  (always export and serve from disk)
-        #   2. ``--env dev`` (explicit)             → False (compile-only loop; browse ``:8000``)
-        #   3. ``--with-vite`` / ``--no-from-build``→ False (explicit two-port Vite opt-in)
-        #   4. ``--from-build``                     → True  (explicit serve-from-disk export)
-        #   5. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default False)
-        with_vite = bool(options.get("with_vite"))
+        plan = build_run_plan(options)
+        env_name = plan.env_name
+        is_prod = plan.is_prod
+        backend_port = plan.backend_port
+        backend_host = plan.backend_host
+        frontend_port = plan.frontend_port
+        loglevel = plan.loglevel
+        frontend_only = plan.frontend_only
+        backend_only = plan.backend_only
+        skip_rebuild = plan.skip_rebuild
+        from_build = plan.from_build
+        is_single_port_dev = plan.is_single_port_dev
+        serve_from_disk = plan.serve_from_disk
         explicit_from_build = bool(options.get("from_build"))
-        is_env_dev = options.get("env") == "dev"
-        is_single_port_dev = is_env_dev and not with_vite
-        if is_prod:
-            from_build = True
-        elif is_env_dev:
-            from_build = False
-        elif with_vite and not explicit_from_build:
-            from_build = False
-        elif explicit_from_build:
-            from_build = True
-        else:
-            from_build = self._setting_serve_from_build()
+        with_vite = plan.with_vite
 
         os.environ.setdefault("REFLEX_DJANGO_FRONTEND_PORT", str(frontend_port))
         os.environ.setdefault("REFLEX_DJANGO_BACKEND_PORT", str(backend_port))
@@ -236,12 +221,6 @@ class Command(BaseCommand):
         # operator who explicitly set the env keep their choice.
         os.environ.setdefault("REFLEX_DJANGO_AUTO_EXPORT_ON_START", "0")
 
-        # ``--env prod`` and ``--from-build`` both serve the SPA from disk and
-        # must not try to reach Vite. We treat them uniformly here: no Vite
-        # spawn, no dev proxy, and a pre-flight SPA check. ``--env prod``
-        # additionally flips DEBUG off so the default settings stop honoring
-        # development conveniences.
-        serve_from_disk = is_prod or from_build or is_single_port_dev
         if serve_from_disk:
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
             os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "0"
@@ -469,14 +448,7 @@ class Command(BaseCommand):
                     self.stdout.write(
                         self.style.NOTICE(f"reflex-django: stopping {label}.")
                     )
-                    try:
-                        if sys.platform == "win32":
-                            proc.terminate()
-                        else:
-                            proc.send_signal(signal.SIGINT)
-                        proc.wait(timeout=5)
-                    except Exception:  # noqa: BLE001
-                        proc.kill()
+                    terminate_process(proc, timeout=5.0)
 
     def _setting_serve_from_build(self) -> bool:
         """Return whether ``settings.REFLEX_DJANGO_SERVE_FROM_BUILD`` is on.
@@ -490,15 +462,11 @@ class Command(BaseCommand):
         gets the Vite default. Pass ``--from-build`` (or set the key/env to a
         truthy value) to opt into the serve-from-disk build loop.
         """
-        env = os.environ.get("REFLEX_DJANGO_SERVE_FROM_BUILD")
-        if env is not None:
-            return str(env).strip().lower() not in {"0", "false", "no"}
-        try:
-            from django.conf import settings
-
-            return bool(getattr(settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False))
-        except Exception:  # noqa: BLE001
-            return False
+        return setting_or_env_bool(
+            ENV_SERVE_FROM_BUILD,
+            "REFLEX_DJANGO_SERVE_FROM_BUILD",
+            default=False,
+        )
 
     def _auto_export_for_build_mode(self, env: str = "prod") -> None:
         """Run the export command in-process before serving the SPA.
@@ -583,11 +551,11 @@ class Command(BaseCommand):
         treated as "missing" so we err on the side of (re)building.
         """
         try:
-            from reflex_django.views.mount import _resolve_spa_index
+            from reflex_django.mount.spa_paths import resolve_spa_index
         except Exception:  # noqa: BLE001
             return True
         try:
-            return _resolve_spa_index() is None
+            return resolve_spa_index() is None
         except Exception:  # noqa: BLE001
             return True
 
@@ -604,10 +572,10 @@ class Command(BaseCommand):
         proxy. We pre-check the disk and emit a single, clear warning instead.
         """
         try:
-            from reflex_django.views.mount import _resolve_spa_index
+            from reflex_django.mount.spa_paths import resolve_spa_index
         except Exception:  # noqa: BLE001
             return
-        index = _resolve_spa_index()
+        index = resolve_spa_index()
         if index is not None:
             self.stdout.write(
                 self.style.SUCCESS(
@@ -1180,24 +1148,7 @@ class Command(BaseCommand):
         self, proc: subprocess.Popen[bytes] | None
     ) -> None:
         """Terminate the uvicorn subprocess quickly (dev reload loop)."""
-        if proc is None or proc.poll() is not None:
-            return
-        try:
-            if sys.platform == "win32":
-                proc.terminate()
-            else:
-                proc.send_signal(signal.SIGINT)
-            try:
-                proc.wait(timeout=2)
-                return
-            except subprocess.TimeoutExpired:
-                pass
-            proc.kill()
-            with contextlib.suppress(Exception):
-                proc.wait(timeout=2)
-        except Exception:  # noqa: BLE001
-            with contextlib.suppress(Exception):
-                proc.kill()
+        terminate_process(proc, timeout=2.0)
 
     def _run_uvicorn(
         self,

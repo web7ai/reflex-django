@@ -149,7 +149,7 @@ def _resolve_plugins_from_settings() -> tuple[Any, ...]:
 
 def get_mount_rx_config_overrides() -> dict[str, Any]:
     """Merged ``rx.Config`` keyword arguments from settings and ``reflex_mount()``."""
-    from reflex_django.app_factory import django_led_app_module_import
+    from reflex_django.app_factory import reflex_app_module_import
     from reflex_django.rxconfig_bridge import _coerce_rx_config_dict
 
     ensure_mount_config_loaded()
@@ -160,7 +160,7 @@ def get_mount_rx_config_overrides() -> dict[str, Any]:
         if key not in kwargs:
             kwargs[key] = value
     kwargs.setdefault("app_name", resolve_app_name())
-    kwargs.setdefault("app_module_import", django_led_app_module_import())
+    kwargs.setdefault("app_module_import", reflex_app_module_import())
     return kwargs
 
 

@@ -26,21 +26,21 @@ def _reset() -> None:
 
 
 def test_get_or_create_app_singleton() -> None:
-    import reflex_django.django_led_app as django_led
+    import reflex_django.reflex_app as reflex_app
 
-    django_led._app = None
+    reflex_app._app = None
     first = get_or_create_app()
     second = get_or_create_app()
     assert first is second
-    assert django_led.app is first
+    assert reflex_app.app is first
 
 
 def test_add_page_on_django_led_app() -> None:
     import reflex as rx
-    import reflex_django.django_led_app as django_led
+    import reflex_django.reflex_app as reflex_app
 
-    django_led._app = None
-    app = django_led.app
+    reflex_app._app = None
+    app = reflex_app.app
 
     def sample_page() -> rx.Component:
         return rx.text("hello")

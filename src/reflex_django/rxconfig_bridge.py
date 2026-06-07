@@ -186,50 +186,7 @@ def _merge_mount_plugins(config: Config) -> Config:
 
 
 def ensure_reflex_django_plugin(config: Config) -> Config:
-    """Always append :class:`ReflexDjangoPlugin` (django_led integration)."""
-    settings = _django_settings()
-    if not getattr(settings, "REFLEX_DJANGO_AUTO_PLUGIN", True):
-        import warnings
-
-        warnings.warn(
-            "REFLEX_DJANGO_AUTO_PLUGIN=False is ignored; ReflexDjangoPlugin is always "
-            "enabled in django_led mode. Remove REFLEX_DJANGO_AUTO_PLUGIN from settings.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    plugins = list(config.plugins or ())
-    if _has_reflex_django_plugin(plugins):
-        return config
-
-    settings_kwargs = getattr(settings, "REFLEX_DJANGO_PLUGIN", None) or {}
-    if not isinstance(settings_kwargs, dict):
-        msg = "REFLEX_DJANGO_PLUGIN must be a dict of ReflexDjangoPlugin keyword arguments."
-        raise TypeError(msg)
-
-    from reflex_django.mount_config import ensure_mount_config_loaded, get_merged_mount_rx_config
-
-    ensure_mount_config_loaded()
-    mount = get_merged_mount_rx_config()
-    plugin_kwargs = {**settings_kwargs, **mount.django_plugin}
-    if mount.django_prefix:
-        existing = plugin_kwargs.get("django_prefix", ())
-        plugin_kwargs.setdefault(
-            "django_prefix",
-            tuple(dict.fromkeys((*existing, *mount.django_prefix))),
-        )
-
-    if "settings_module" in plugin_kwargs:
-        import warnings
-
-        warnings.warn(
-            "REFLEX_DJANGO_PLUGIN.settings_module is deprecated; "
-            "use manage.py / DJANGO_SETTINGS_MODULE instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    plugins.append(ReflexDjangoPlugin(**plugin_kwargs))
-    config.plugins = tuple(plugins)
+    """No-op in v1.0 — ReflexDjangoPlugin was removed."""
     return config
 
 
@@ -336,12 +293,12 @@ def ensure_rxconfig_file(*, for_cli: bool = False) -> Path | None:
     if not getattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False):
         return None
 
-    from reflex_django.app_factory import django_led_app_module_import
+    from reflex_django.app_factory import reflex_app_module_import
     from reflex_django.mount_config import ensure_mount_config_loaded, resolve_app_name
 
     ensure_mount_config_loaded()
     app_name = resolve_app_name()
-    app_module_import = django_led_app_module_import()
+    app_module_import = reflex_app_module_import()
     body = _format_rxconfig_stub(
         app_name=app_name,
         app_module_import=app_module_import,

@@ -431,9 +431,9 @@ def _clear_compile_dev_client_backup() -> None:
 def build_id_for_disk_bundle() -> str:
     """Return a token that changes whenever the SPA or compile output updates."""
     try:
-        from reflex_django.views.mount import _resolve_spa_index
+        from reflex_django.mount.spa_paths import resolve_spa_index
 
-        index = _resolve_spa_index()
+        index = resolve_spa_index()
     except Exception:  # noqa: BLE001
         index = None
     if index is not None:

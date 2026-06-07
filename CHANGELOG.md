@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-07
+
+### Removed (breaking)
+
+- Legacy routing modes `reflex_led` and `django_led` — use `django_outer` (default) or `reflex_outer`.
+- `ReflexDjangoPlugin` and rxconfig-first setup — use Django-first configuration (see `docs/migration/v0-to-v1.md`).
+- `reflex_django.asgi.make_dispatcher` — use `reflex_django.asgi_entry.build_django_outer_application`.
+
+### Added
+
+- `reflex_django.core` — shared constants, env parsing, and user helpers.
+- `reflex_django.mount.spa_paths` — unified SPA bundle discovery.
+- `reflex_django.dev` — dev orchestration helpers (`run_plan`, `process_utils`, `asgi_runners`).
+- `reflex_django.bootstrap` — app setup and patch registry.
+- `reflex_django.bridge` — event bridge package layout.
+- `reflex_django.errors` — typed configuration exceptions.
+- `docs/migration/v0-to-v1.md` and pytest CI workflow.
+
+### Changed
+
+- `reflex_django.django_led_app` deprecated in favor of `reflex_django.reflex_app`.
+- `manage.py run_reflex` uses `RunPlan` for flag resolution.
+- Plugin auto-injection in rxconfig merge is a no-op; event bridge installs via `bootstrap.app_setup`.
+
 ## [0.5.0] - 2026-06-05
 
 ### Removed (breaking)

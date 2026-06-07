@@ -27,15 +27,9 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from reflex_django.context import current_request, current_session, current_user
+from reflex_django.core.users import username_str
 
 _REFLEX_HEADERS_ATTR = "_reflex_django_headers"
-
-
-def _username_str(user: Any) -> str:
-    getusername = getattr(user, "get_username", None)
-    if callable(getusername):
-        return str(getusername())
-    return str(getattr(user, "username", "") or "")
 
 
 class RequestHeaders(Mapping[str, str]):
@@ -118,7 +112,7 @@ class RequestProxy:
         """Username string (safe for display); empty when anonymous."""
         user = current_user()
         if getattr(user, "is_authenticated", False):
-            return _username_str(user)
+            return username_str(user)
         return ""
 
     @property

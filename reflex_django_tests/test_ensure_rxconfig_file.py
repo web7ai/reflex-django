@@ -35,7 +35,7 @@ def test_ensure_rxconfig_file_writes_stub(tmp_path: Path, monkeypatch: pytest.Mo
     assert (tmp_path / "rxconfig.py").is_file()
     text = (tmp_path / "rxconfig.py").read_text(encoding="utf-8")
     assert 'app_name="myfrontend"' in text or "app_name='myfrontend'" in text
-    assert "app_module_import='reflex_django.django_led_app'" in text
+    assert "app_module_import='reflex_django.reflex_app'" in text
 
     assert ensure_rxconfig_file() is None
 

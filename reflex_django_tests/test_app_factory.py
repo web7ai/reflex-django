@@ -35,11 +35,14 @@ def test_resolve_url_routing_default() -> None:
     assert resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER
 
 
-def test_resolve_url_routing_django_led(
+def test_resolve_url_routing_legacy_django_led_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from reflex_django.errors import RoutingModeError
+
     monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "django_led")
-    assert resolve_url_routing() == UrlRoutingMode.DJANGO_LED
+    with pytest.raises(RoutingModeError):
+        resolve_url_routing()
 
 
 def test_import_page_packages_registers_pages(

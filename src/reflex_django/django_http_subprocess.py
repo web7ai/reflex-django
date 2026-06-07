@@ -13,6 +13,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from reflex_django.asgi import ASGIApp, ASGIReceive, ASGIScope, ASGISend
+from reflex_django.core.env import truthy_env_or_none
+from reflex_django.dev.process_utils import terminate_process
 
 logger = logging.getLogger("reflex_django.django_http_subprocess")
 
@@ -25,15 +27,8 @@ _django_http_proc: subprocess.Popen[bytes] | None = None
 _spawned_by_us = False
 
 
-def _truthy_env(name: str) -> bool | None:
-    raw = os.environ.get(name)
-    if raw is None:
-        return None
-    return str(raw).strip().lower() not in {"0", "false", "no"}
-
-
 def _http_subprocess_enabled() -> bool:
-    env = _truthy_env(_HTTP_SUBPROCESS_ENV)
+    env = truthy_env_or_none(_HTTP_SUBPROCESS_ENV)
     if env is not None:
         return env
     try:
@@ -210,13 +205,7 @@ def terminate_django_http_subprocess() -> None:
     if proc.poll() is not None:
         return
 
-    proc.terminate()
-    try:
-        proc.wait(timeout=5.0)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        with contextlib.suppress(Exception):
-            proc.wait(timeout=2.0)
+    terminate_process(proc, timeout=5.0, use_sigint=False)
 
 
 def wrap_reflex_asgi_with_django_http_lifecycle(inner: ASGIApp) -> ASGIApp:
