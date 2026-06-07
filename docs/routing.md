@@ -446,7 +446,7 @@ The built-in authentication SPA pages register in one line:
 # shop/views.py
 from reflex_django.auth import add_auth_pages
 
-add_auth_pages()    # registers /login, /register, /password_reset, /password_reset_confirm
+add_auth_pages()    # registers /login, /register, /password-reset, /password-reset/confirm/[uid]/[key]
 ```
 
 These are SPA routes — they live in the Reflex client router, not in `urls.py`. Customize via `REFLEX_DJANGO_AUTH` in settings. ([Details](authentication.md).)

@@ -5,7 +5,7 @@ Definitions of every term in these docs, in one place. If you've forgotten what 
 ---
 
 ### `add_auth_pages()`
-A helper from `reflex_django.auth` that registers the built-in `/login`, `/register`, `/password_reset`, and `/password_reset_confirm` pages in one call.
+A helper from `reflex_django.auth` that registers the built-in `/login`, `/register`, `/password-reset`, and `/password-reset/confirm/[uid]/[key]` pages in one call.
 
 ### `AnonymousUser`
 Django's stand-in for "no logged-in user". When a request has no valid session, `request.user` is an `AnonymousUser` instance. `is_authenticated` is `False`.
@@ -238,7 +238,7 @@ A mixin that auto-scopes CRUD queries to the current user. Replaces three manual
 ---
 
 ### `Vite`
-The frontend build tool Reflex uses internally. `run_reflex` starts it on the frontend port (default **3000**) for HMR — **browse `:3000` for the SPA** in default dev. The backend port (default **8000**) serves admin, API, and `/_event`; Vite proxies those paths in two-port mode. Pass `--single-port` to browse only `:8000`. See [Local development](local_development.md).
+The frontend build tool Reflex uses internally. `run_reflex` starts it on the frontend port (default **3000**) for HMR — **browse `:3000` for the SPA** in default dev. The backend port (default **8000**) serves admin, API, and `/_event`; in `django_outer` mode the SPA reaches those via `env.json`, not Vite proxy. Use `--env dev` for compile-only dev on `:8000`. See [Local development](local_development.md).
 
 ### `DEFAULT_DEV_MIDDLEWARE`
 A tuple of dotted middleware paths in `reflex_django.django_dev_middleware` for Vite-port admin and CSRF (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`). Prepend to `MIDDLEWARE` in development settings only.

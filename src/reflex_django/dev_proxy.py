@@ -1,12 +1,12 @@
-"""Reverse-proxy frontend requests to the Vite dev server (single-port dev mode).
+"""Reverse-proxy frontend requests to the Vite dev server (advanced dev mode).
 
-In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER`, Django owns
-the outer ASGI app on a single port (default ``8000``). During development,
-Reflex still runs Vite on a separate port (default ``3000``) for hot-module
-reload. Rather than asking developers to remember two ports, this module
-reverse-proxies every non-Reflex, non-Django request (the SPA shell, Vite's
-``@vite/client`` HMR WebSocket, ``/_next/static/...`` bundle assets) from
-Django back to Vite.
+When ``REFLEX_DJANGO_DEV_PROXY=1`` and ``REFLEX_DJANGO_SEPARATE_DEV_PORTS=0``,
+Django owns the outer ASGI app on a single port (default ``8000``) while Reflex
+still runs Vite on a separate port (default ``3000``) for hot-module reload.
+This module reverse-proxies SPA shell and Vite asset requests from Django to Vite.
+
+Default ``run_reflex`` uses two-port dev instead (``DEV_PROXY=0``); browse ``:3000``
+for the SPA. For compile-only single port, use ``--env dev`` (no Vite proxy).
 
 The proxy is used by :class:`reflex_django.views.mount.ReflexMountView` in
 ``DEBUG=True``. In production, Vite is not running; the same view serves the
@@ -171,7 +171,7 @@ def _dev_vite_target_or_none() -> str | None:
         "no",
     }:
         return None
-    # ``run_reflex --single-port`` sets the env explicitly; that must win over
+    # ``REFLEX_DJANGO_DEV_PROXY=1`` sets the env explicitly; that must win over
     # a project setting such as ``REFLEX_DJANGO_DEV_PROXY = False`` in dev.py.
     if not dev_proxy_explicitly_enabled() and not getattr(
         settings, "REFLEX_DJANGO_DEV_PROXY", True

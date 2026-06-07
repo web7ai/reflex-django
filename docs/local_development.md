@@ -10,60 +10,73 @@ This page explains how the dev server actually works — which URLs to open, wha
 python manage.py run_reflex
 ```
 
-That **one command starts two servers**:
+That **one command starts two servers** (default `django_outer` mode):
 
 | Server | Port (default) | What you open it for |
 |:---|:---|:---|
 | **Vite** (frontend) | `3000` | **Reflex UI** — pages, hot reload, in-browser navigation |
 | **uvicorn** (backend) | `8000` | **Django + Reflex backend** — admin, API, `/_event` WebSocket |
 
-**For frontend work, open `http://localhost:3000/`** — same as native Reflex. Vite proxies Django-owned paths (`/admin`, `/api`, …) and the Reflex backend (`/_event`) to `:8000` for you.
+**For frontend work, open `http://localhost:3000/`** — same as native Reflex.
 
-**For backend-only checks**, you can also hit `http://localhost:8000/admin/` or your API directly on `:8000`.
+**For backend-only checks**, hit `http://localhost:8000/admin/` or your API directly on `:8000`.
 
 ---
 
-## How the two ports fit together
+## How the two ports fit together (default `django_outer`)
 
-Default **two-port** dev (native Reflex layout — no extra flags):
+Default **two-port** dev matches native Reflex: UI on Vite, backend on Django/Reflex ASGI.
 
 ```text
 Browser  →  http://localhost:3000/     (open this for the SPA)
                 │
-                ├─ /, /about, …           →  Vite serves the Reflex SPA (HMR)
-                ├─ /admin, /api, …      →  Vite proxies to Django on :8000
-                └─ /_event                →  Vite proxies to Reflex backend on :8000
+                └─ /, /about, …           →  Vite serves the Reflex SPA (HMR)
 
-Backend  →  http://localhost:8000/     (Django + Reflex ASGI — admin, API, WebSocket)
+Browser  →  http://localhost:8000/     (admin, API, WebSocket — direct or via env.json)
+                ├─ /admin, /api, …      →  Django
+                └─ /_event              →  Reflex backend
 ```
+
+In **`django_outer`** (the default), reflex-django does **not** inject Vite `server.proxy` rules. The compiled SPA's `env.json` tells the browser to reach admin, API, and `/_event` on **`http://localhost:8000`** while you browse the UI on `:3000`. Session cookies still work because both ports share `localhost`.
+
+**Legacy modes** (`django_led`, `reflex_outer`) still inject Vite→Django proxy rules at compile time — see [Routing modes](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
 
 | Port | Who listens | When you open it |
 |:---|:---|:---|
 | **3000** (frontend) | Vite (HMR) | **Yes** — your SPA dev URL |
-| **8000** (backend) | Django + Reflex ASGI | Admin, API, or debugging backend routes |
-
-Cookie sharing still works: Vite's proxy forwards session cookies to the backend on the same paths you'd use in production.
+| **8000** (backend) | Django + Reflex ASGI | Admin, API, WebSocket, or debugging backend routes |
 
 ---
 
-## Optional: single-port mode (`--single-port`)
+## Optional: compile dev on one port (`--env dev`)
 
-If you prefer **one browser URL**, pass `--single-port`:
+If you prefer **one browser URL** without running Vite, use compile dev:
 
 ```bash
-python manage.py run_reflex --single-port
+python manage.py run_reflex --env dev
 ```
 
-Then open **`http://localhost:8000/`** for everything. Django reverse-proxies SPA traffic to Vite on `:3000`; you don't browse `:3000` yourself.
+Then open **`http://localhost:8000/`** for everything. Each save recompiles into `.web/` and Django serves the bundle from disk (no HMR, no Node after the first compile).
 
 ```text
 Browser  →  http://localhost:8000/
                 ├─ /admin, /api, /static  →  Django handles these directly
                 ├─ /_event, /ping, …      →  Reflex backend (same process)
-                └─ /, /@vite/client, …    →  Django proxies to Vite on :3000
+                └─ /, /about, …           →  compiled SPA from .web/
 ```
 
-Use this when you want a single origin in the address bar. Default remains two-port (`:3000` for UI) because it matches native Reflex and gives the best HMR experience.
+For live Vite HMR on two ports again, pass **`--with-vite`** (or omit `--env dev` and use plain `run_reflex`).
+
+### Optional: Django reverse-proxies Vite on one URL (advanced)
+
+To browse **`http://localhost:8000/`** while Vite still runs on `:3000` for HMR (Django proxies SPA assets to Vite), set in development settings:
+
+```python
+REFLEX_DJANGO_DEV_PROXY = True
+REFLEX_DJANGO_SEPARATE_DEV_PORTS = False
+```
+
+There is **no CLI flag** for this today — set the env vars or settings explicitly before starting the server. Default `run_reflex` keeps `DEV_PROXY=0` and two-port layout.
 
 ---
 
@@ -75,7 +88,7 @@ When you run the default command (no extra flags):
 2. **Starts Vite** on the frontend port (default `3000`)
 3. **Waits** until Vite is actually serving the SPA (not just listening on a socket)
 4. **Starts uvicorn** on the backend port (default `8000`) with `reflex_django.asgi_entry:application`
-5. **Watches** your `.py` files — frontend edits hot-reload through Vite; backend edits need a restart
+5. **Watches** your `.py` files — page edits hot-reload through Vite; backend reloads on most Python changes (see [CLI reference](cli.md))
 
 You should see something like:
 
@@ -83,15 +96,16 @@ You should see something like:
 reflex-django: two-port dev (native Reflex layout).
     UI + hot reload: http://localhost:3000/
     Django + Reflex backend: http://localhost:8000/ (admin, API, /_event — not the SPA shell).
-    Pass --single-port to browse only the backend port.
+    Pass --env dev to compile-serve on :8000 only, or --from-build for disk bundle + watcher.
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-With `--single-port`:
+With `--env dev`:
 
 ```text
-reflex-django: Vite ready on port 3000 (reverse-proxied by Django on port 8000).
-    Open http://localhost:8000/ — frontend edits hot-reload via Vite; ...
+reflex-django: single-port compile dev (--env dev) - compiles to `.web/` on each save
+    and serves from Django on port 8000.
+    Pass `--with-vite` for live Vite HMR on :3000 instead.
 ```
 
 ### What you should *not* use for local dev
@@ -128,8 +142,14 @@ urlpatterns = [path("admin/", admin.site.urls)]
 Optional overrides in development settings:
 
 ```python
-REFLEX_DJANGO_DEV_PROXY = True   # set by run_reflex; only for --single-port
-REFLEX_DJANGO_SEPARATE_DEV_PORTS = True  # set by run_reflex in default two-port mode
+# Set by run_reflex in default two-port Vite mode:
+REFLEX_DJANGO_SEPARATE_DEV_PORTS = True
+REFLEX_DJANGO_DEV_PROXY = False
+
+# For Django→Vite reverse-proxy on one URL (advanced — set manually):
+# REFLEX_DJANGO_DEV_PROXY = True
+# REFLEX_DJANGO_SEPARATE_DEV_PORTS = False
+
 REFLEX_DJANGO_FRONTEND_PORT = 3000
 REFLEX_DJANGO_BACKEND_PORT = 8000
 ```
@@ -171,9 +191,13 @@ Do **not** add Vite aliases that map `react` to `react/index.js` — that breaks
 
 ---
 
-## Vite proxy rules (two-port mode)
+## Vite proxy rules (legacy routing modes only)
 
-In default two-port dev, reflex-django injects Vite `server.proxy` rules at compile time so `/admin`, `/api`, and `/_event` reach Django on `:8000`. In `--single-port` mode those rules are **removed** — Django owns the outer port and reverse-proxies to Vite instead (avoids request loops).
+In **`django_outer`** (default), Vite **does not** proxy `/admin`, `/api`, or `/_event` — the SPA uses `env.json` to call `:8000` directly.
+
+In **`django_led`** and **`reflex_outer`**, reflex-django injects Vite `server.proxy` rules at compile time so those paths reach the backend from `:3000`.
+
+When **`REFLEX_DJANGO_DEV_PROXY=1`**, Django's catch-all reverse-proxies SPA routes to Vite on `:3000` while you browse `:8000` (advanced single-origin HMR).
 
 ---
 
@@ -183,7 +207,7 @@ In default two-port dev, reflex-django injects Vite `server.proxy` rules at comp
 
 In **default two-port mode**, `:8000` does not serve the SPA shell — open **`http://localhost:3000/`** instead.
 
-If you use `--single-port` and still see this, the dev proxy is off and there's no compiled bundle. Start dev with `python manage.py run_reflex --single-port` (not `runserver`). If port `3000` is already taken, free it and restart.
+If you use **`--env dev`** or **`--from-build`**, browse **`http://localhost:8000/`** — those modes serve the compiled bundle from disk on the backend port.
 
 ### Port 3000 is already in use
 
@@ -196,7 +220,7 @@ Stop the other Vite or `run_reflex` instance, then re-run `python manage.py run_
 
 ### Static files reloading forever on `:8000`
 
-Usually means you're in single-port mode without a working Vite proxy, or you're on `runserver` instead of `run_reflex`. Use the default two-port command and browse `:3000`.
+Usually means you're on `runserver` instead of `run_reflex`, or `REFLEX_DJANGO_DEV_PROXY=1` without a running Vite. Use the default two-port command and browse `:3000`, or use `--env dev` for compile-only single port.
 
 ### Django admin returns 403 CSRF
 

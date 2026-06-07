@@ -337,6 +337,7 @@ Errors appear inline next to the relevant field. The same three-stage pipeline a
 | Defer the round trip until Submit | `Meta.use_form_submit = True` (Style 2) |
 | Reset form fields after save | `Meta.reset_after_save = True` + `key=form_reset_key` on `<form>` |
 | Show per-field errors | `Meta.structured_errors = True` + bind to `<list_var>_field_errors` |
+| Upload files from the browser | `rx.upload` + handler — see [File uploads](file_uploads.md) |
 
 ---
 

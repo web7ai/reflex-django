@@ -313,9 +313,9 @@ The first time, this will:
 Open it:
 
 - `http://localhost:3000/` — the todo page (SPA + hot reload).
-- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created). Vite on `:3000` can proxy you here too.
+- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created).
 
-(`run_reflex` starts both servers. Prefer one URL? Use `python manage.py run_reflex --single-port` and browse `:8000`.)
+(`run_reflex` starts both servers. Prefer one URL? Use `python manage.py run_reflex --env dev` and browse `:8000`.)
 
 Try this flow:
 

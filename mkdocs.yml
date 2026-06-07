@@ -119,6 +119,8 @@ nav:
     - AppState — your bridge to Django: state_management.md
     - Talking to the database: database_integration.md
     - Login & sessions: authentication.md
+    - Auth page branding: auth_branding.md
+    - Media files: media_files.md
   - Build Real Things:
     - CRUD the manual way: crud_without_mixins.md
     - CRUD with ModelState: reactive_model_state.md
@@ -126,6 +128,7 @@ nav:
     - Choosing ModelState vs ModelCRUDView: model_state_and_crud_view.md
     - Mixins — compose your own state: reflex_django_mixins.md
     - Forms & validation: forms_and_validation.md
+    - File uploads (rx.upload): file_uploads.md
     - Model serializers: serializers.md
     - i18n & translations: i18n.md
     - HTTP APIs alongside Reflex: api_integration.md

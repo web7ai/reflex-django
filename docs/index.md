@@ -74,9 +74,9 @@ One command starts **two dev servers**:
 - **Vite on `:3000`** — open this for your Reflex UI and hot reload (`http://localhost:3000/`)
 - **Django + Reflex backend on `:8000`** — admin, API, and the `/_event` WebSocket
 
-Vite proxies `/admin`, `/api`, and `/_event` to `:8000`, so cookies and session still line up. Edit a page in `views.py`, save, and the browser updates in place. Backend/state edits are picked up when you restart `run_reflex`.
+The SPA's `env.json` points `/admin`, `/api`, and `/_event` at `:8000`, so cookies and session still line up on `localhost`. Edit a page in `views.py`, save, and the browser updates in place. Most other Python changes restart the backend automatically.
 
-Prefer one URL in the address bar? Pass `--single-port` and browse `:8000` instead. See [Local development](local_development.md).
+Prefer one URL in the address bar? Use `python manage.py run_reflex --env dev` and browse `:8000` instead. See [Local development](local_development.md).
 
 > In production there's no Vite: you build the SPA and serve everything from your ASGI server on a single port. See [Deployment](deployment.md).
 

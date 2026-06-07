@@ -129,7 +129,7 @@ python manage.py migrate
 python manage.py run_reflex
 ```
 
-`run_reflex` starts **both** Vite (`:3000`) and the Django/Reflex backend (`:8000`). Open **`http://localhost:3000/`** for your Reflex UI and hot reload. Use **`http://localhost:8000/admin/`** (or let Vite proxy you there) for the admin. The first run takes a moment while the SPA compiles and Vite comes up. Pass `--single-port` if you prefer browsing only `:8000`. Details: [Local development](local_development.md).
+`run_reflex` starts **both** Vite (`:3000`) and the Django/Reflex backend (`:8000`). Open **`http://localhost:3000/`** for your Reflex UI and hot reload. Use **`http://localhost:8000/admin/`** for the admin directly. The first run takes a moment while the SPA compiles and Vite comes up. Pass `--env dev` if you prefer compile-only dev on `:8000`. Details: [Local development](local_development.md).
 
 ---
 

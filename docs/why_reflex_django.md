@@ -52,7 +52,7 @@ When Reflex fires an event, it doesn't go through Django's HTTP pipeline. By def
 - There's no `HttpRequest`. So no `request.user`, no `request.session`, no `request.COOKIES`.
 - **No middleware runs.** None of it. Not the session middleware, not the auth middleware, not your custom multi-tenant or rate-limit middleware.
 - Reflex doesn't know that the user logged into `/admin/` two seconds ago, because it never saw the session cookie.
-- Reflex wants its own dev server on its own port. **reflex-django** embraces that: `run_reflex` starts Vite on `:3000` and the Django/Reflex backend on `:8000`. You browse `:3000` for the SPA; Vite proxies admin, API, and `/_event` to `:8000` so cookies still line up. Optional `--single-port` if you want one URL in the bar.
+- Reflex wants its own dev server on its own port. **reflex-django** embraces that: `run_reflex` starts Vite on `:3000` and the Django/Reflex backend on `:8000`. You browse `:3000` for the SPA; `env.json` routes admin, API, and `/_event` to `:8000` so cookies still line up. Use `--env dev` if you want compile-only dev on one URL.
 
 So even though both frameworks are written in Python and could happily live in the same process, in practice they sit on opposite sides of a glass wall. You end up writing a token bridge, configuring CORS, running two terminals, and re-implementing auth twice.
 
@@ -68,7 +68,7 @@ That's the gap. It's not glamorous. It's just *plumbing*.
 
 Django becomes the outer ASGI app. Reflex's internal endpoints — `/_event` (the WebSocket), `/_upload` (file uploads), `/_health` (health probes) — are mounted *inside* Django.
 
-**Production** (and `--single-port` dev): everything on one port:
+**Production** (and `--env dev` compile dev): everything on one port:
 
 ```text
   Browser  →  port 8000  →  Django  →  /admin/   → Django admin
@@ -77,7 +77,7 @@ Django becomes the outer ASGI app. Reflex's internal endpoints — `/_event` (th
                                     →  /_event   → Reflex WebSocket
 ```
 
-**Default dev:** `run_reflex` starts Vite on `:3000` (SPA + HMR) and the backend on `:8000`. You browse `:3000`; Vite proxies admin, API, and `/_event` to `:8000`.
+**Default two-port dev:** `run_reflex` starts Vite on `:3000` (SPA + HMR) and the backend on `:8000`. You browse `:3000`; the SPA calls admin, API, and `/_event` on `:8000` via `env.json`.
 
 One process. Shared cookies. No CORS.
 

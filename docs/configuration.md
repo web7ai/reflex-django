@@ -148,11 +148,15 @@ Optional tunables in `settings.py`. The defaults are sensible — most projects 
 | Setting | Default | What it does |
 |:---|:---|:---|
 | `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (→ `"django_outer"`) | Routing mode. Default is Django-outer (one process). Set `"reflex_outer"` when Reflex should own the public port and Django HTTP runs in a separate worker — see [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer). Legacy: `"reflex_led"`, `"django_led"`. |
-| `REFLEX_DJANGO_SERVE_FROM_BUILD` | `True` | `run_reflex` auto-builds the SPA and serves it from disk. Set to `False` (or use `--with-vite`) for the Vite HMR loop. |
+| `REFLEX_DJANGO_SERVE_FROM_BUILD` | `False` | When `False` (default), `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to auto-build the SPA and serve it from disk. |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `()` | Extra path prefixes always routed to Reflex. |
-| `REFLEX_DJANGO_DEV_PROXY` | `False` | Auto-managed by `run_reflex --with-vite`. Don't set manually. |
+| `REFLEX_DJANGO_DEV_PROXY` | `True` in settings; `False` when `run_reflex` runs default Vite mode | When `True`, Django reverse-proxies SPA routes to Vite in DEBUG. Set manually with env `REFLEX_DJANGO_DEV_PROXY=1` for single-origin HMR on `:8000`. |
 
 For the dev URL (`:8000`), CSRF trusted origins, and optional dev HTTP middleware, see **[Local development](local_development.md)**.
+
+### Media files
+
+User uploads need standard Django media settings plus a dev URL mount — reflex-django only auto-routes the `/media` prefix in DEBUG; it does not serve files. See **[Media files](media_files.md)** for `MEDIA_URL`, `MEDIA_ROOT`, and `urlpatterns += static(...)`.
 
 ### SPA shell rendering
 
@@ -295,7 +299,7 @@ app.add_page(home, route="/")
 | `REFLEX_DJANGO_RX_CONFIG` | Any allowed `rx.Config` field, including **`app_name`** |
 | `REFLEX_DJANGO_PLUGINS` | Reflex plugins |
 | `REFLEX_DJANGO_PLUGIN` | `ReflexDjangoPlugin` kwargs (`django_prefix`, …) |
-| `REFLEX_DJANGO_URL_ROUTING` | `django_outer` / `django_led` / `reflex_led` |
+| `REFLEX_DJANGO_URL_ROUTING` | `django_outer` / `reflex_outer` / `django_led` / `reflex_led` |
 | `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` | Own on-disk `rxconfig.py` instead of synthesized config |
 
 ### Level 2 — explicit `reflex_mount()` (URL overrides)

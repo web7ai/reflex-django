@@ -120,9 +120,9 @@ python manage.py run_reflex
 
 `run_reflex` starts **two** dev servers: Vite on **:3000** (SPA + hot reload) and Django/Reflex on **:8000** (admin, API, `/_event`).
 
-Open <http://localhost:3000/> for your Reflex UI. Admin at <http://localhost:8000/admin/> (Vite proxies admin/API paths to `:8000`).
+Open <http://localhost:3000/> for your Reflex UI. Admin at <http://localhost:8000/admin/>.
 
-Optional: `python manage.py run_reflex --single-port` to browse only <http://localhost:8000/>.
+Optional: `python manage.py run_reflex --env dev` to browse only <http://localhost:8000/>.
 
 That's it.
 

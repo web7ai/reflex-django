@@ -28,6 +28,21 @@ No matter which side you start from, you will:
 
 Your `@page` routes, `@rx.event` handlers, and Django `urlpatterns` for `/admin` and `/api` work together. See [Routing](routing.md) for how URLs are split.
 
+### Choosing a routing mode
+
+```text
+Need Django ORM + admin in the same process as Reflex?
+  └─ Default: django_outer (one ASGI process)
+
+Heavy Django HTTP load and want Reflex isolated on the public port?
+  └─ reflex_outer (Reflex + separate Django HTTP worker)
+
+Legacy brownfield app already on reflex_led?
+  └─ Keep reflex_led until you migrate — see migration guide
+```
+
+Media and uploads work in all modes once Django media is configured: [Media files](media_files.md), [File uploads](file_uploads.md).
+
 ---
 
 ## What differs

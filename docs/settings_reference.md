@@ -21,7 +21,8 @@ In short:
 
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
-| `REFLEX_DJANGO_AUTO_MOUNT` | `bool` | `True` | Append the Reflex SPA catch-all to `ROOT_URLCONF` at startup (`ReflexDjangoConfig.ready()` and ASGI bootstrap). Set `False` for Django-only installs, tests, or custom URL layouts. Env `REFLEX_DJANGO_AUTO_MOUNT=0` also disables it. Skipped automatically in `REFLEX_LED` routing mode. |
+| `REFLEX_DJANGO_MOUNT_PREFIX` | `str` | `"/"` | Catch-all mount prefix for `reflex_mount()` / auto-mount. Env `REFLEX_DJANGO_MOUNT_PREFIX`. |
+| `REFLEX_DJANGO_AUTO_MOUNT` | `bool` | `True` | Append the Reflex SPA catch-all to `ROOT_URLCONF` at startup (`ReflexDjangoConfig.ready()` and ASGI bootstrap). Set `False` for Django-only installs, tests, or custom URL layouts. Env `REFLEX_DJANGO_AUTO_MOUNT=0` also disables it. Skipped automatically in `reflex_led` and `reflex_outer` routing modes. |
 | `REFLEX_DJANGO_URL_ROUTING` | `str` | `"auto"` → `"django_outer"` | Routing mode. Values: `"django_outer"` (default), `"reflex_outer"` (Reflex outer + Django HTTP worker), `"reflex_led"` / `"django_led"` (legacy in-process). See [routing modes](routing.md#choosing-a-mode-django_outer-vs-reflex_outer). |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `tuple[str, ...]` | `()` | Extra path prefixes always routed to Reflex (added to the built-in list: `/_event`, `/_upload`, `/_health`, `/ping`, `/_all_routes`, `/auth-codespace`). |
 | `REFLEX_DJANGO_HTTP_SUBPROCESS` | `bool` | `True` | **`reflex_outer` only.** When `True`, `run_reflex` auto-spawns a Django-only HTTP worker if nothing is listening on the upstream port. Set `False` in production when Supervisor/systemd runs the worker for you. Env `REFLEX_DJANGO_HTTP_SUBPROCESS=0`. |
@@ -40,12 +41,36 @@ How the compiled SPA is built, proxied in dev, and served in production.
 | `REFLEX_DJANGO_AUTO_EXPORT_ON_START` | `bool` | `True` | When the ASGI entry point (`reflex_django.asgi_entry:application`) boots and finds no compiled SPA on disk, build it once (equivalent to `export_reflex --frontend-only --no-zip --stage-to-static-root`). Lets a bare `uvicorn backend.asgi:application` deploy work without a separate `reflex export` step. Set `False` (or env `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0`) when the bundle is pre-built in CI / the filesystem is read-only. `run_reflex` disables it automatically (it builds itself). Requires Node/npm on the host. |
 | `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE` | `bool` | `True` | Pipe `STATIC_ROOT/_reflex/index.html` through Django's template engine so `{{ request.user }}`, `{% csrf_token %}` work in the SPA shell. |
 | `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` | `bool` | `False` | Show or hide the "Built with Reflex" footer. |
-| `REFLEX_DJANGO_SEPARATE_DEV_PORTS` | `bool` | `False` in settings; `True` when `run_reflex` runs (default) | Two-port dev: browse Vite (`frontend_port`) for the SPA; backend port serves admin, API, `/_event`. Set by `run_reflex`; pass `--single-port` to flip off and use Django reverse-proxy instead. |
-| `REFLEX_DJANGO_DEV_PROXY` | `bool` | `True` when `DEBUG=True` | Auto-managed by `run_reflex`. On only with `--single-port` (Django reverse-proxies SPA routes to Vite). Off in default two-port dev and for `--from-build`/`--env prod`. Set env `REFLEX_DJANGO_DEV_PROXY=1` to force on, or `0` to force off. |
+| `REFLEX_DJANGO_SEPARATE_DEV_PORTS` | `bool` | `False` in settings; `True` when `run_reflex` runs (default) | Two-port dev: browse Vite (`frontend_port`) for the SPA; backend port serves admin, API, `/_event`. Set by `run_reflex` in default Vite mode. Set `False` with `REFLEX_DJANGO_DEV_PROXY=1` for Django reverse-proxying Vite on one URL. |
+| `REFLEX_DJANGO_DEV_PROXY` | `bool` | `True` in settings | When `True`, Django's catch-all reverse-proxies SPA routes to Vite in DEBUG. **`run_reflex` sets `DEV_PROXY=0`** for default two-port Vite mode. Set env `REFLEX_DJANGO_DEV_PROXY=1` manually for single-origin HMR on `:8000`. Off for `--from-build`, `--env dev`, and `--env prod`. |
 | `REFLEX_DJANGO_FRONTEND_PORT` | `int` | `3000` | Vite dev server port — **open this in the browser** for SPA work (`http://localhost:3000/`). Prefer `REFLEX_DJANGO_RX_CONFIG["frontend_port"]`; also env `REFLEX_DJANGO_FRONTEND_PORT`. |
 | `REFLEX_DJANGO_BACKEND_PORT` | `int` | `8000` | ASGI server port — admin, API, Reflex `/_event` (`http://localhost:8000/`). Prefer `REFLEX_DJANGO_RX_CONFIG["backend_port"]`; also env `REFLEX_DJANGO_BACKEND_PORT`. |
+| `REFLEX_DJANGO_COMPILE_DEV` | env | unset | Set to `1` by `run_reflex --env dev`. Serves compiled SPA from `.web/` on the backend port without Vite. |
+| `REFLEX_DJANGO_DJANGO_PREFIX` | env | unset | Comma-separated override for auto-detected Django URL prefixes (exported at compile time). Prefer fixing `urlpatterns` or passing `django_prefix=` to `reflex_mount()`. |
 
 There are no other `REFLEX_DJANGO_*` keys for Vite CSRF or `EventLoopContext` patches — use Django settings (`CSRF_TRUSTED_ORIGINS`, `USE_X_FORWARDED_HOST`) and optional [`django_dev_middleware`](local_development.md#django-dev-middleware-and-csrf). Frontend stability patches run automatically in `post_compile`.
+
+### `reflex_outer` HTTP worker env vars
+
+| Setting / env | Default | Purpose |
+|:---|:---|:---|
+| `REFLEX_DJANGO_HTTP_HOST` | `127.0.0.1` | Bind host for the auto-spawned Django HTTP worker. |
+| `REFLEX_DJANGO_HTTP_LOG_LEVEL` | `warning` | Log level for the Django HTTP worker subprocess. |
+
+### Bundled defaults (no `DJANGO_SETTINGS_MODULE`)
+
+When reflex-django supplies bundled settings (`reflex_django.default_settings`), these env vars apply:
+
+| Env var | Purpose |
+|:---|:---|
+| `REFLEX_DJANGO_DATABASE_URL` | Database URL (overrides rxconfig `db_url`) |
+| `REFLEX_DJANGO_STATIC_URL` / `REFLEX_DJANGO_STATIC_ROOT` | Static files |
+| `REFLEX_DJANGO_SECRET_KEY` | Django secret key |
+| `REFLEX_DJANGO_DEBUG` | Debug flag |
+| `REFLEX_DJANGO_ALLOWED_HOSTS` | Comma-separated hosts |
+| `REFLEX_DJANGO_URLCONF` | Root URLconf module |
+
+Never ship bundled defaults in production — provide your own settings module.
 
 ---
 
@@ -113,7 +138,7 @@ The override is applied during `install_reflex_django_integration()` — i.e. be
 | `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP` | `tuple[str, ...]` | `("django.middleware.csrf.CsrfViewMiddleware", "reflex_django.streaming_middleware.AsyncStreamingMiddleware")` | Middleware classes (by import path) to skip on WebSocket events. |
 | `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE` | `bool` | `True` | Convert 3xx responses from middleware into `rx.redirect(...)` automatically. |
 | `REFLEX_DJANGO_EVENT_POST_FROM_PAYLOAD` | `bool` | `False` | Feed event handler kwargs into the synthetic `request.POST`. |
-| `REFLEX_DJANGO_ACTIVATE_LANGUAGE_ON_EVENT` | `bool` | `True` | Run `translation.activate(...)` on each event using the bridge's language selection. |
+| `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | `bool` | `True` | Deprecated no-op alias. The full Django middleware chain (including `LocaleMiddleware`) runs on every Reflex event by default via `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN`. |
 
 ---
 
@@ -127,6 +152,8 @@ These control which Django values appear as reactive variables on `DjangoUserSta
 | `REFLEX_DJANGO_MIRROR_CSRF` | `bool` | `True` | Mirror the CSRF token to `DjangoUserState.csrf_token`. |
 | `REFLEX_DJANGO_MIRROR_LANGUAGE` | `bool` | `True` | Mirror language to `DjangoUserState.language` and `language_bidi`. |
 | `REFLEX_DJANGO_AUTH_AUTO_SYNC` | `bool` | `True` | Refresh `AppState` user snapshot fields (`is_authenticated`, `username`, …) on every event. |
+| `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | `bool` | `False` | Include Django group names in the user snapshot when `True`. |
+| `REFLEX_DJANGO_SITE_ORIGIN` | `str` | unset | Origin for password-reset email links when no HTTP request is bound (e.g. `http://localhost:3000`). |
 
 ---
 
@@ -175,7 +202,7 @@ The built-in default value of `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`:
 When you set the setting yourself, your value **replaces** the default. To extend rather than replace:
 
 ```python
-from reflex_django.config import DEFAULT_EVENT_MIDDLEWARE_SKIP
+from reflex_django.event_handler import DEFAULT_EVENT_MIDDLEWARE_SKIP
 
 REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
     *DEFAULT_EVENT_MIDDLEWARE_SKIP,

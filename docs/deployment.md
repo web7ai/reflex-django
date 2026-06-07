@@ -67,6 +67,26 @@ REFLEX_DJANGO_HTTP_SUBPROCESS = False
 
 The reverse proxy still points at `:8000` only. Port `8001` stays on loopback — browsers never talk to it directly. Full walkthrough: [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
 
+Example Supervisor units:
+
+```ini
+; /etc/supervisor/conf.d/reflex-django.conf
+
+[program:reflex-app]
+command=/app/.venv/bin/uvicorn config.asgi:application --host 0.0.0.0 --port 8000
+directory=/app
+autostart=true
+autorestart=true
+
+[program:django-http]
+command=/app/.venv/bin/uvicorn reflex_django.django_http_entry:application --host 127.0.0.1 --port 8001
+directory=/app
+autostart=true
+autorestart=true
+```
+
+Ensure the Django HTTP worker can serve `/media/` (same `MEDIA_ROOT` or storage backend as your main settings). See [Media files](media_files.md).
+
 ---
 
 ## The build pipeline
@@ -309,6 +329,12 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
+    # User-uploaded media (see docs/media_files.md)
+    location /media/ {
+        alias /app/media/;
+        expires 7d;
+    }
+
     # The Reflex WebSocket
     location /_event {
         proxy_pass http://app;
@@ -336,7 +362,8 @@ server {
 Three things matter:
 
 - **`/_event` needs WebSocket upgrade headers.** That's where Reflex talks.
-- **`/static/` served by Nginx** offloads asset traffic from the Python process.
+- **`/static/` and `/media/` served by Nginx** offload asset traffic from the Python process.
+- **`client_max_body_size`** must fit your largest upload (Reflex `/_upload` and Django forms).
 - **`X-Forwarded-Proto: $scheme`** so Django's `SECURE_PROXY_SSL_HEADER` detects HTTPS.
 
 ---

@@ -212,8 +212,8 @@ That registers four routes (with sensible defaults):
 |:---|:---|
 | `/login` | Username/password sign in |
 | `/register` | Create a new user |
-| `/password_reset` | Send a reset email |
-| `/password_reset_confirm` | Set a new password |
+| `/password-reset` | Send a reset email |
+| `/password-reset/confirm/[uid]/[key]` | Set a new password |
 
 ### Customizing them
 

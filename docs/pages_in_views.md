@@ -267,7 +267,7 @@ class HomeState(AppState):
 python manage.py run_reflex
 ```
 
-Open **`http://localhost:3000/`** for Reflex pages (default two-port dev). Admin and API are on `:8000` (Vite proxies them when you navigate from the SPA). See [Local development](local_development.md).
+Open **`http://localhost:3000/`** for Reflex pages (default two-port dev). Admin and API are on `:8000` (the SPA reaches them via `env.json`). See [Local development](local_development.md).
 
 For details on the URL dispatcher, the SPA catch-all, and how WebSocket scopes are routed, see [Routing & URL dispatching](routing.md).
 

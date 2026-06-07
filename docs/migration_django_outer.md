@@ -25,7 +25,7 @@ You get: one port, one origin, full middleware on Reflex events, and Django-firs
 | | Before | After |
 |:---|:---|:---|
 | **Ports (production)** | Two (Reflex frontend + Django backend) | One (everything on `8000`) |
-| **Ports (default dev)** | Varies | Two: Vite `:3000` (SPA) + backend `:8000`; optional `--single-port` |
+| **Ports (default dev)** | Varies | Two: Vite `:3000` (SPA) + backend `:8000`; optional `--env dev` for compile-only single port |
 | **Outer app** | Reflex | Django |
 | **Config** | `rxconfig.py` with plugin kwargs | `REFLEX_DJANGO_RX_CONFIG` in `settings.py` + optional `reflex_mount()` overrides |
 | **Pages** | `{app}/{app}.py` with `app = rx.App()` | `{app}/views.py` with `@page` |
@@ -238,18 +238,29 @@ If you had a custom system to mint a JWT in Django, pass it to the SPA, and re-a
 
 ---
 
-## Keeping the legacy mode
+## Keeping legacy routing modes
 
-If you need to stay on the old layout for now:
+If you need to stay on an older layout for now:
 
 ```python
-# settings.py
+# settings.py — in-process Reflex-outer (legacy two-port Vite proxy)
 REFLEX_DJANGO_URL_ROUTING = "reflex_led"
+
+# settings.py — in-process Django-led alias
+REFLEX_DJANGO_URL_ROUTING = "django_led"
+
+# settings.py — subprocess Django HTTP worker (Reflex owns public port)
+REFLEX_DJANGO_URL_ROUTING = "reflex_outer"
 ```
 
-This pins the routing mode to the legacy two-port layout. New features (full middleware on events, message mirroring, etc.) won't apply, but your existing setup keeps working.
+| Mode | Process layout | Dev notes |
+|:---|:---|:---|
+| `reflex_led` / `django_led` | One process; Reflex outer | Vite injects proxy rules to Django backend |
+| `reflex_outer` | Two processes in dev | Reflex on `:8000`; Django HTTP worker on `:8001` (auto-spawned) |
 
-The legacy mode is supported for backwards compatibility. New projects should use the default `"auto"` (which resolves to `"django_outer"`).
+The full middleware chain and event bridge **still run** in all modes — only URL dispatch and dev networking differ. See [Routing modes](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+
+Legacy modes are supported for backwards compatibility. New projects should use the default `"auto"` (which resolves to `"django_outer"`).
 
 ---
 

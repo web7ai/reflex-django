@@ -91,7 +91,7 @@ def index() -> rx.Component:
 python manage.py run_reflex
 ```
 
-Starts **two** dev servers (Vite `:3000` + backend `:8000`). Open **`http://localhost:3000/`** for the SPA; admin and API are proxied to `:8000`. Optional: `--single-port` to browse only `:8000`. See [Local development](local_development.md).
+Starts **two** dev servers (Vite `:3000` + backend `:8000`). Open **`http://localhost:3000/`** for the SPA; admin and API are on `:8000` (SPA reaches them via `env.json`). Optional: `--env dev` for compile-only dev on `:8000`. See [Local development](local_development.md).
 
 ---
 

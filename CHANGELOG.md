@@ -37,13 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Two-port dev workflow (default)** — `python manage.py run_reflex` now matches native Reflex:
   open the **frontend port** (`:3000`) for the SPA; the **backend port** (`:8000`) serves Django
-  and Reflex endpoints only (admin, API, `/_event`). Vite proxies backend paths. Pass
-  ``--single-port`` for the alternative (browse `:8000`, Django reverse-proxies Vite).
+  and Reflex endpoints only (admin, API, `/_event`). The SPA's `env.json` points backend paths
+  at `:8000`. Pass ``--env dev`` for compile-only single-port dev on `:8000`.
 - Setting ``REFLEX_DJANGO_SEPARATE_DEV_PORTS`` and env ``REFLEX_DJANGO_SEPARATE_DEV_PORTS``.
-- **Single-port dev workflow (DJANGO_OUTER)** — opt-in via ``--single-port``; `python manage.py run_reflex` now expects you
-  to open **`http://localhost:<backend_port>/`** (default **8000**). Vite still runs on the
-  frontend port (default **3000**) for hot reload, but it is reverse-proxied through Django;
-  you do not need to browse to `:3000` in the default setup.
+- **Compile dev on one port (`--env dev`)** — sets ``REFLEX_DJANGO_COMPILE_DEV=1``; recompiles
+  to ``.web/`` on save and serves from Django on port 8000 (no Vite after first compile).
+  Pass ``--with-vite`` to add live HMR on `:3000` again. For Django reverse-proxying Vite on
+  one URL, set ``REFLEX_DJANGO_DEV_PROXY=1`` explicitly (no CLI flag).
 - **`export_rx_port_env()`** — `reflex_mount()` exports `frontend_port` and `backend_port`
   from `rx_config` into the environment so the dev proxy resolves ports even outside
   `run_reflex`.
@@ -72,9 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Dev docs and defaults** — installation, CLI, FAQ, and local-development guides now
-  describe the **single-port** dev URL (`:8000`) instead of telling users to open the Vite
-  port (`:3000`). The legacy two-port layout (`reflex_led` / `django_led`) is still
-  supported but is no longer the documented default.
+  describe default two-port dev (`:3000` for SPA, `:8000` for backend) and ``--env dev`` for
+  compile-only single-port dev. Legacy ``--single-port`` CLI flag removed; use ``--env dev`` or
+  ``REFLEX_DJANGO_DEV_PROXY=1`` instead.
 - **`ReflexDjangoPlugin.pre_compile`** — skips injecting Vite→Django proxy rules in
   DJANGO_OUTER mode; `post_compile` strips any stale proxy block instead.
 - **`ReflexMountView`** — when `REFLEX_DJANGO_DEV_PROXY=1` (set by `run_reflex`), Vite

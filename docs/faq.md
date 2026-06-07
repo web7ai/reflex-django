@@ -375,13 +375,13 @@ If those fit your needs, use them. They're great for adding selective interactiv
 
 ### Which URL do I open in dev — `localhost:8000` or `3000`?
 
-**`http://localhost:3000/`** for frontend work. `python manage.py run_reflex` starts **both** Vite (`:3000`, SPA + hot reload) and the Django/Reflex backend (`:8000`, admin, API, `/_event`). Vite proxies backend paths to `:8000` so cookies still work.
+**`http://localhost:3000/`** for frontend work. `python manage.py run_reflex` starts **both** Vite (`:3000`, SPA + hot reload) and the Django/Reflex backend (`:8000`, admin, API, `/_event`). The SPA's `env.json` points backend paths at `:8000` so cookies still work.
 
-Use **`http://localhost:8000/`** directly when you want admin or API without going through Vite. Pass **`--single-port`** to `run_reflex` if you prefer browsing only `:8000` (Django reverse-proxies Vite). Full setup: [Local development](local_development.md).
+Use **`http://localhost:8000/`** directly when you want admin or API without going through the SPA shell. Pass **`--env dev`** to `run_reflex` if you prefer compile-only dev on `:8000` (no Vite). Full setup: [Local development](local_development.md).
 
 ### "Reflex SPA bundle not found" on `:8000`
 
-In default two-port dev, `:8000` does not serve the SPA shell — open **`http://localhost:3000/`**. If you use `--single-port` and still see this, start dev with `python manage.py run_reflex --single-port` (not `runserver`). If port `3000` is busy, free it and restart. See [Local development — troubleshooting](local_development.md#troubleshooting).
+In default two-port dev, `:8000` does not serve the SPA shell — open **`http://localhost:3000/`**. If you use `--env dev` and still see this, start dev with `python manage.py run_reflex --env dev` (not `runserver`). If port `3000` is busy, free it and restart. See [Local development — troubleshooting](local_development.md#troubleshooting).
 
 ### Django admin returns 403 CSRF
 
@@ -394,6 +394,23 @@ Reflex’s generated `EventLoopContext` default and array destructuring can thro
 ### Should I copy dev middleware into my project?
 
 No — import from `reflex_django.django_dev_middleware` (or use `DEFAULT_DEV_MIDDLEWARE`). Older project-local copies are deprecated in favor of the package module.
+
+### Uploaded images 404 on `/media/...`
+
+reflex-django routes `/media` to Django in dev but **does not serve files**. Add `MEDIA_URL`, `MEDIA_ROOT`, and `urlpatterns += static(MEDIA_URL, document_root=MEDIA_ROOT)` when `DEBUG=True`. See [Media files](media_files.md).
+
+### Upload handler sees anonymous user
+
+Reflex `/_upload` events need session cookies injected by reflex-django's upload patch. Log in first, and ensure dev CSRF/session settings include both `:3000` and `:8000`. See [File uploads](file_uploads.md).
+
+### `--env dev` vs default two-port dev
+
+| Mode | Command | Browse | HMR |
+|:---|:---|:---|:---|
+| Two-port (default) | `run_reflex` | `:3000` for SPA | Vite HMR |
+| Compile dev | `run_reflex --env dev` | `:8000` for everything | Recompile on save, no Vite |
+
+Use `--env dev` when you want one URL without running Node after the first compile. Use default two-port when you want native Reflex HMR. Details: [Local development](local_development.md).
 
 ---
 

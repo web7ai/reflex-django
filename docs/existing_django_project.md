@@ -193,7 +193,7 @@ python manage.py run_reflex
 - `http://localhost:8000/admin/` — your admin, unchanged.
 - `http://localhost:8000/api/...` — your existing API, unchanged.
 
-Vite proxies admin, API, and `/_event` to `:8000`. Optional: `--single-port` to browse only `:8000`. See [Local development](local_development.md).
+The SPA's `env.json` routes admin, API, and `/_event` to `:8000`. Optional: `--env dev` to browse only `:8000`. See [Local development](local_development.md).
 
 Your existing tests, management commands, and migrations all keep working.
 

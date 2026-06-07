@@ -56,6 +56,14 @@ The patterns below are things you'll figure out yourself after a week or two. Re
 
 ---
 
+## Media and uploads
+
+**Configure Django media explicitly.** Set `MEDIA_URL` and `MEDIA_ROOT`, add `urlpatterns += static(...)` in dev, and serve `/media/` from nginx or object storage in production. reflex-django routes the prefix but does not serve bytes. Checklist: [Media files](media_files.md).
+
+**Use `rx.upload` for browser uploads, `/media/` for display.** Upload handlers run through `/_upload`; saved files load via `FileField.url`. See [File uploads](file_uploads.md).
+
+---
+
 ## Forms and validation
 
 **Three stages, in order:** `clean_<field>` for per-field cleaning, `validate_state` for cross-field rules, `run_model_validation = True` to lean on Django's own validators.

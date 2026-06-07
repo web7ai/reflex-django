@@ -3,7 +3,7 @@
 In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
 the default Vite-HMR dev loop delegates to ``reflex run`` with the backend
 patched to serve :func:`reflex_django.asgi_entry.application`. Custom
-orchestration remains for ``--from-build``, ``--single-port`` dev, and
+orchestration remains for ``--from-build``, ``--env dev`` compile dev, and
 ``--env prod``.
 
 In legacy routing modes (``reflex_led`` / ``django_led``), the command
