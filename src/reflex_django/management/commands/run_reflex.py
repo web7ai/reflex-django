@@ -179,15 +179,14 @@ class Command(BaseCommand):
 
         # Resolve from-build mode. The Vite-HMR dev loop is the default now;
         # from-build is the opt-in. Precedence, highest first:
-        #   1. ``--env prod``                       → False (prod is its own contract:
-        #                                              build separately in CI, then run)
+        #   1. ``--env prod``                       → True  (always export and serve from disk)
         #   2. ``--with-vite`` / ``--no-from-build``→ False (explicit Vite opt-in)
         #   3. ``--from-build``                     → True  (explicit serve-from-disk)
         #   4. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default False)
         with_vite = bool(options.get("with_vite"))
         explicit_from_build = bool(options.get("from_build"))
         if is_prod:
-            from_build = False
+            from_build = True
         elif with_vite and not explicit_from_build:
             from_build = False
         elif explicit_from_build:
@@ -223,7 +222,7 @@ class Command(BaseCommand):
         # kicks in so the user sees what mode they are in. Plain
         # ``manage.py run_reflex`` (no flags) lands in the Vite-HMR branch by
         # default; ``--from-build`` opts into the serve-from-disk loop.
-        if from_build:
+        if from_build and not is_prod:
             mode_label = (
                 "--from-build (explicit)"
                 if explicit_from_build
@@ -251,22 +250,6 @@ class Command(BaseCommand):
         if from_build and not skip_rebuild:
             # Rebuild the SPA before serving so the user sees the latest
             # Reflex page tree on every ``manage.py run_reflex``.
-            self._auto_export_for_build_mode()
-        elif is_prod and not skip_rebuild and self._spa_index_missing():
-            # ``--env prod`` normally assumes the SPA was built in CI
-            # (``export_reflex`` + ``collectstatic``) before the server runs.
-            # When that bundle is absent — e.g. a fresh local
-            # ``run_reflex --env prod`` — the catch-all view 404s with
-            # "Reflex SPA bundle not found". Build it once now so the command
-            # works out of the box. A pre-built bundle is left untouched
-            # (deterministic CI), and ``--skip-rebuild`` opts out entirely.
-            self.stdout.write(
-                self.style.NOTICE(
-                    "reflex-django: --env prod — no compiled SPA found on "
-                    "disk; building it now (one-off). Pass --skip-rebuild to "
-                    "skip and serve an existing bundle instead."
-                )
-            )
             self._auto_export_for_build_mode()
         if serve_from_disk:
             self._warn_if_spa_missing()

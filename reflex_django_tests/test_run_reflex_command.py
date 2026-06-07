@@ -228,20 +228,18 @@ def test_from_build_does_not_spawn_vite(
     vite_spawn.assert_not_called()
 
 
-def test_env_prod_serves_existing_bundle_without_export(
+def test_env_prod_always_exports(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """``--env prod`` with a pre-built bundle on disk does NOT re-export.
+    """``--env prod`` always auto-exports.
 
-    A bundle built in CI (``export_reflex`` + ``collectstatic``) must be
-    served as-is — prod boots stay deterministic.
+    Auto-export compiles the SPA on boot and stages it into STATIC_ROOT/_reflex.
     """
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
     monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
-    # Pretend a compiled SPA is already present on disk.
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
         lambda self: False,
@@ -249,7 +247,7 @@ def test_env_prod_serves_existing_bundle_without_export(
 
     Command().handle(env="prod")
 
-    export_call.assert_not_called()
+    export_call.assert_called_once()
     import os
 
     assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
@@ -308,22 +306,22 @@ def test_env_prod_skip_rebuild_never_builds(
     export_call.assert_not_called()
 
 
-def test_env_prod_ignores_serve_from_build_setting(
+def test_env_prod_always_exports_and_does_not_reload(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """``--env prod`` with a present bundle ignores ``SERVE_FROM_BUILD=True``.
+    """``--env prod`` always auto-exports, but does NOT run the reload loop.
 
-    Prod must not take the from-build re-export-every-restart path just
-    because the dev default leaks into production settings; with a bundle on
-    disk it serves as-is.
+    Even if settings.REFLEX_DJANGO_SERVE_FROM_BUILD = True or reload is enabled
+    in dev, production remains a non-reload serve-from-disk run.
     """
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
+    watch_reload = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spa_index_missing",
-        lambda self: False,
+        "reflex_django.management.commands.run_reflex.Command._run_with_watch_reload",
+        watch_reload,
     )
 
     from django.conf import settings
@@ -334,7 +332,8 @@ def test_env_prod_ignores_serve_from_build_setting(
 
     Command().handle(env="prod")
 
-    export_call.assert_not_called()
+    export_call.assert_called_once()
+    watch_reload.assert_not_called()
 
 
 def test_from_build_setting_enables_export_without_flag(
