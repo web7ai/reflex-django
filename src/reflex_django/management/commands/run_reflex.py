@@ -117,16 +117,6 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
-            "--single-port",
-            action="store_true",
-            dest="single_port",
-            help=(
-                "Browse the backend port for the SPA (Django reverse-proxies Vite). "
-                "Default dev mode uses two ports like native Reflex: UI on the "
-                "frontend port, backend on the ASGI port."
-            ),
-        )
-        parser.add_argument(
             "reflex_args",
             nargs="*",
             help="Additional arguments forwarded to ``reflex run`` (prefix with --).",
@@ -266,8 +256,8 @@ class Command(BaseCommand):
             return
 
         # Default Vite-HMR dev delegates to native ``reflex run`` (two-port layout).
-        # ``--from-build``, ``--env prod``, and ``--single-port`` keep custom paths.
-        if not serve_from_disk and not options.get("single_port") and not frontend_only:
+        # ``--from-build`` and ``--env prod`` keep custom paths.
+        if not serve_from_disk and not frontend_only:
             os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
             from reflex_django.auto_mount import refresh_reflex_mount_catchall
@@ -292,13 +282,8 @@ class Command(BaseCommand):
 
         vite_proc: subprocess.Popen[bytes] | None = None
         if vite_active:
-            single_port = bool(options.get("single_port"))
-            if single_port:
-                os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "0"
-                os.environ["REFLEX_DJANGO_DEV_PROXY"] = "1"
-            else:
-                os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
-                os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
+            os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
+            os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
             # Mirror native ``reflex run``: compile once in the parent, then boot
             # Vite and the ASGI backend concurrently (do not block the backend on
             # Vite becoming HTTP-ready).
@@ -307,7 +292,6 @@ class Command(BaseCommand):
             self._print_dev_port_banner(
                 frontend_port=frontend_port,
                 backend_port=backend_port,
-                single_port=single_port,
             )
             vite_proc = self._spawn_vite_background(
                 frontend_port,
@@ -569,27 +553,14 @@ class Command(BaseCommand):
         *,
         frontend_port: int,
         backend_port: int,
-        single_port: bool,
     ) -> None:
         """Print target URLs before services finish booting."""
-        if single_port:
-            self.stdout.write(
-                self.style.NOTICE(
-                    f"reflex-django: single-port dev — Vite on {frontend_port} "
-                    f"(reverse-proxied by Django on {backend_port}).\n"
-                    "    Open http://localhost:"
-                    f"{backend_port}/ — frontend edits hot-reload via Vite; "
-                    "backend/state edits restart uvicorn automatically."
-                )
-            )
-            return
         self.stdout.write(
             self.style.NOTICE(
                 "reflex-django: two-port dev (native Reflex layout).\n"
                 f"    Open the app: http://localhost:{frontend_port}/\n"
                 f"    Backend: http://localhost:{backend_port}/ "
-                f"(admin, API, /_event — browser connects here directly).\n"
-                "    Pass --single-port to serve the SPA from Django on the backend port."
+                f"(admin, API, /_event — browser connects here directly)."
             )
         )
 

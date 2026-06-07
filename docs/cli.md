@@ -40,8 +40,6 @@ python manage.py run_reflex
 
 Open **`http://localhost:3000/`** for UI work. Vite proxies `/admin`, `/api`, and `/_event` to `:8000`. Use **`http://localhost:8000/admin/`** when you want the admin directly.
 
-Pass **`--single-port`** to browse only **`http://localhost:8000/`** (Django reverse-proxies Vite). See [Local development](local_development.md).
-
 In production there's no Vite — you serve the compiled SPA from your ASGI server on one port (see [Deployment](deployment.md)).
 
 Because the backend stays up, edits to **states, event handlers, or other server-side Python** won't take effect until you restart the command (Ctrl+C and re-run, or save again after restarting). Pure UI/page edits hot-reload instantly. If you'd rather have the backend auto-rebuild and serve a compiled bundle from disk (no Node, no HMR), use `--from-build`.
@@ -51,7 +49,6 @@ Because the backend stays up, edits to **states, event handlers, or other server
 | Flag | Effect |
 |:---|:---|
 | `--with-vite` | The default. Run Vite for hot-module reload on `:3000`; backend on `:8000`. Frontend edits hot-reload; the backend stays up. |
-| `--single-port` | Browse `:8000` only — Django reverse-proxies Vite instead of two-port layout. |
 | `--from-build` | Opt out of Vite. Auto-export the SPA and serve the compiled bundle from disk; the watcher re-exports + restarts uvicorn on every `.py` change. |
 | `--skip-rebuild` | (with `--from-build`) Skip the SPA build before starting. Good for "I only edited a Django model" iterations. |
 | `--no-reload` | Don't watch for changes. The server runs once and exits when you Ctrl+C. (In the default Vite mode this disables the frontend recompile loop too.) |

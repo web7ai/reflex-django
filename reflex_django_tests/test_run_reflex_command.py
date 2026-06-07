@@ -606,33 +606,6 @@ def test_frontend_only_in_dev_spawns_vite_blocking_with_watch(
     invoke.assert_not_called()
 
 
-def test_single_port_enables_fast_backend_reload(
-    monkeypatch: pytest.MonkeyPatch,
-    _force_django_outer_mode: None,
-    _stub_asgi_server: mock.MagicMock,
-) -> None:
-    """``--single-port`` also spawns uvicorn with ``--reload`` beside Vite."""
-    monkeypatch.setattr("django.core.management.call_command", mock.MagicMock())
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_vite_background",
-        mock.MagicMock(return_value=mock.Mock(poll=lambda: None)),
-    )
-    spawn_backend = mock.MagicMock(return_value=mock.Mock(poll=lambda: None))
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
-        spawn_backend,
-    )
-    monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._supervise_vite_dev_procs",
-        mock.MagicMock(),
-    )
-
-    Command().handle(single_port=True)
-
-    _stub_asgi_server.assert_not_called()
-    spawn_backend.assert_called_once()
-    assert spawn_backend.call_args.kwargs.get("reload") is True
-
 
 def test_env_prod_sets_separate_dev_ports_off(
     monkeypatch: pytest.MonkeyPatch,
