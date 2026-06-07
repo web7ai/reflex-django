@@ -954,12 +954,12 @@ def test_env_dev_compiles_to_web_with_single_port_compile_dev(
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
 ) -> None:
-    """``--env dev`` compiles to ``.web/``, rebuilds on save, no Vite dev server."""
+    """``--env dev`` compiles to ``.web/`` only; no ``react-router build`` per save."""
     export_call = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
     compile_disk = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._compile_dev_disk_bundle_once",
+        "reflex_django.management.commands.run_reflex.Command._compile_dev_once",
         compile_disk,
     )
     start_recompile_watch = mock.MagicMock()
@@ -967,7 +967,9 @@ def test_env_dev_compiles_to_web_with_single_port_compile_dev(
         "reflex_django._frontend_runner.start_compile_dev_watch",
         start_recompile_watch,
     )
-    spawn_uvicorn = mock.MagicMock(return_value=mock.Mock(poll=lambda: None))
+    spawn_uvicorn = mock.MagicMock(
+        return_value=mock.Mock(poll=lambda: None, wait=mock.MagicMock())
+    )
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
         spawn_uvicorn,
@@ -990,6 +992,7 @@ def test_env_dev_compiles_to_web_with_single_port_compile_dev(
     compile_disk.assert_called_once()
     start_recompile_watch.assert_called_once()
     spawn_uvicorn.assert_called_once()
+    assert spawn_uvicorn.call_args.kwargs.get("reload") is False
     invoke.assert_not_called()
     import os
 

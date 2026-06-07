@@ -126,7 +126,7 @@ def compile_dev_reload_script(*, wait_for_ready: bool = False) -> str:
         f"{wait_init}const wait={str(wait_for_ready).lower()};const path={BUILD_ID_PATH!r};"
         "setInterval(async()=>{try{const r=await fetch(path,{cache:'no-store'});"
         f"const id=await r.text();{reload_logic}"
-        "}catch(_){}},500);})();"
+        "}catch(_){}},1500);})();"
         "</script>"
     )
 

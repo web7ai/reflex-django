@@ -235,12 +235,24 @@ def test_compile_app_for_frontend_applies_stability_patches(
     stability.assert_called_once()
 
 
-def test_build_id_for_disk_bundle_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_id_for_disk_bundle_uses_compile_stamp_when_no_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    web = tmp_path / ".web"
+    web.mkdir()
+    env = web / "env.json"
+    env.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(
         "reflex_django.views.mount._resolve_spa_index",
         lambda: None,
     )
-    assert _frontend_runner.build_id_for_disk_bundle() == "missing"
+    monkeypatch.setattr(
+        "reflex.utils.prerequisites.get_web_dir",
+        lambda: web,
+    )
+    token = _frontend_runner.build_id_for_disk_bundle()
+    assert token.startswith("compile:")
 
 
 def test_build_frontend_client_bundle_uses_reflex_build(

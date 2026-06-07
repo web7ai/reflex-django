@@ -271,6 +271,15 @@ def _recompile_in_subprocess(port: int, *, compile_and_build: bool = False) -> N
             "reflex-django: recompiled and rebuilt `.web/build/client` "
             "(browser will auto-reload)."
         )
+    elif str(os.environ.get("REFLEX_DJANGO_COMPILE_DEV", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        print(
+            "reflex-django: recompiled `.web` (compile-only, no JS build)."
+        )
     else:
         print("reflex-django: recompiled `.web` - Vite hot-reloading frontend.")
 
@@ -420,20 +429,29 @@ def _clear_compile_dev_client_backup() -> None:
 
 
 def build_id_for_disk_bundle() -> str:
-    """Return a token that changes whenever the SPA index.html is rebuilt."""
+    """Return a token that changes whenever the SPA or compile output updates."""
     try:
         from reflex_django.views.mount import _resolve_spa_index
 
         index = _resolve_spa_index()
     except Exception:  # noqa: BLE001
         index = None
-    if index is None:
-        return "missing"
+    if index is not None:
+        try:
+            stat = index.stat()
+            return f"bundle:{stat.st_mtime_ns}:{stat.st_size}"
+        except OSError:
+            pass
     try:
-        stat = index.stat()
-        return f"{stat.st_mtime_ns}:{stat.st_size}"
-    except OSError:
-        return "missing"
+        from reflex.utils.prerequisites import get_web_dir
+
+        env_json = get_web_dir() / "env.json"
+        if env_json.is_file():
+            stat = env_json.stat()
+            return f"compile:{stat.st_mtime_ns}:{stat.st_size}"
+    except Exception:  # noqa: BLE001
+        pass
+    return "missing"
 
 
 def _ensure_dev_env_mode() -> None:
@@ -570,7 +588,7 @@ def run_vite_client_build(*, watch: bool = False) -> subprocess.Popen[bytes] | N
 
 
 def start_compile_dev_watch() -> threading.Thread | None:
-    """Watch ``.py`` files and recompile + rebuild the disk bundle on save."""
+    """Watch ``.py`` files and recompile ``.web/`` (no ``react-router build``)."""
     try:
         from watchfiles import PythonFilter, watch
 
@@ -599,7 +617,7 @@ def start_compile_dev_watch() -> threading.Thread | None:
                 raise_interrupt=False,
             ):
                 if changes:
-                    _recompile_in_subprocess(0, compile_and_build=True)
+                    _recompile_in_subprocess(0, compile_and_build=False)
         except Exception as exc:  # noqa: BLE001
             print(
                 f"reflex-django: compile dev watch stopped ({exc!r}).",
@@ -614,7 +632,7 @@ def start_compile_dev_watch() -> threading.Thread | None:
     thread.start()
     print(
         "reflex-django: watching "
-        f"{', '.join(watch_paths)} for Reflex edits (compile + Reflex build)."
+        f"{', '.join(watch_paths)} for Reflex edits (recompile `.web/` only)."
     )
     return thread
 

@@ -169,7 +169,7 @@ class Command(BaseCommand):
 
         # Resolve from-build mode. Precedence, highest first:
         #   1. ``--env prod``                       → True  (always export and serve from disk)
-        #   2. ``--env dev`` (explicit)             → False (compile + Reflex build; browse ``:8000``)
+        #   2. ``--env dev`` (explicit)             → False (compile-only loop; browse ``:8000``)
         #   3. ``--with-vite`` / ``--no-from-build``→ False (explicit two-port Vite opt-in)
         #   4. ``--from-build``                     → True  (explicit serve-from-disk export)
         #   5. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default False)
@@ -222,11 +222,12 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.MIGRATE_HEADING(
                     "reflex-django: single-port compile dev (--env dev) - "
-                    "compiles to `.web/`, runs Reflex's Python frontend build, "
-                    f"and serves the bundle from Django on port {backend_port}.\n"
-                    "    No Vite dev server, no zip export. The browser "
-                    "auto-reloads when the bundle changes. Pass `--with-vite` "
-                    "for native two-port Vite HMR on :3000 instead."
+                    f"compiles to `.web/` on each save and serves from Django "
+                    f"on port {backend_port}.\n"
+                    "    No ``react-router build`` per edit. Run "
+                    "`export_reflex --frontend-only --no-zip --env dev` once "
+                    "if no bundle exists yet. Pass `--with-vite` for live "
+                    f"Vite HMR on :{frontend_port} instead."
                 )
             )
         elif from_build and not is_prod:
@@ -259,7 +260,7 @@ class Command(BaseCommand):
             # Reflex page tree on every ``manage.py run_reflex``.
             self._auto_export_for_build_mode(env=env_name)
         if is_single_port_dev and not skip_rebuild and not backend_only:
-            self._compile_dev_disk_bundle_once()
+            self._compile_dev_once()
         if serve_from_disk:
             self._warn_if_spa_missing()
 
@@ -289,8 +290,7 @@ class Command(BaseCommand):
             )
             return
 
-        # Vite dev server is active for the default two-port ``reflex run`` loop
-        # only. ``--env dev`` uses compile + Reflex ``build.build()`` instead.
+        # ``--env dev`` compiles to ``.web/`` only (no ``react-router build``).
         vite_active = not serve_from_disk and not backend_only and not is_single_port_dev
         watch_frontend = vite_active and not options.get("no_reload")
 
@@ -316,8 +316,8 @@ class Command(BaseCommand):
         elif is_single_port_dev and not backend_only:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"reflex-django: compile dev — serving `.web/build/client` "
-                    f"from Django on port {backend_port} (no Vite dev server)."
+                    f"reflex-django: compile dev — serving SPA from disk on "
+                    f"port {backend_port} (recompile-only, no JS build per save)."
                 )
             )
             if not options.get("no_reload") and not is_prod:
@@ -370,6 +370,9 @@ class Command(BaseCommand):
         # race on the same save.
         backend_reload = reload_enabled and not use_parent_watch
 
+        # Compile-dev uses a subprocess without uvicorn reload — the recompile
+        # watch thread handles ``views.py`` edits, and in-process ``reload=True``
+        # hangs on Windows before the server binds.
         backend_proc: subprocess.Popen[bytes] | None = None
         try:
             if use_parent_watch:
@@ -385,8 +388,15 @@ class Command(BaseCommand):
                     host=backend_host,
                     port=backend_port,
                     loglevel=loglevel,
-                    reload=backend_reload,
+                    reload=False,
                 )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"reflex-django: open http://127.0.0.1:{backend_port}/ "
+                        "(Ctrl+C to stop)."
+                    )
+                )
+                self.stdout.flush()
                 try:
                     backend_proc.wait()
                 except KeyboardInterrupt:
@@ -607,10 +617,9 @@ class Command(BaseCommand):
         )
         self.stdout.flush()
 
-    def _compile_dev_disk_bundle_once(self) -> None:
-        """Compile to ``.web/`` and run Reflex's Python frontend build."""
+    def _compile_dev_once(self) -> None:
+        """Compile the Reflex app to ``.web/`` (no ``react-router build``)."""
         from reflex_django import _frontend_runner as frontend_runner
-        from reflex_django.views.mount import _resolve_spa_index
 
         self.stdout.write(
             self.style.NOTICE(
@@ -629,31 +638,14 @@ class Command(BaseCommand):
         elapsed = time.monotonic() - start
         self.stdout.write(
             self.style.SUCCESS(
-                f"reflex-django: compile finished in {elapsed:.1f}s - "
-                "running Reflex frontend build..."
+                f"reflex-django: compile finished in {elapsed:.1f}s."
             )
         )
         self.stdout.flush()
-        build_start = time.monotonic()
-        try:
-            frontend_runner.build_frontend_client_bundle()
-        except Exception as exc:  # noqa: BLE001
-            raise CommandError(
-                f"reflex-django: Reflex frontend build failed: {exc!r}"
-            ) from exc
-        build_elapsed = time.monotonic() - build_start
-        if _resolve_spa_index() is None:
-            raise CommandError(
-                "reflex-django: frontend build finished but no index.html was "
-                "found under `.web/build/client`, `.web/_static`, or "
-                "`.web/build`. Check the build output above."
-            )
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"reflex-django: frontend build finished in {build_elapsed:.1f}s."
-            )
-        )
-        self.stdout.flush()
+
+    def _compile_dev_disk_bundle_once(self) -> None:
+        """Backward-compatible alias for :meth:`_compile_dev_once`."""
+        self._compile_dev_once()
 
     def _print_dev_port_banner(
         self,
