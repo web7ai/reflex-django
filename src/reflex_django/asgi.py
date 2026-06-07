@@ -234,10 +234,11 @@ def make_dispatcher(
         backend_prefixes: Path prefixes (e.g. ``("/api", "/admin")``) that
             should be served by Django. Prefixes that collide with Reflex's
             reserved endpoints raise :class:`ValueError`.
-        routing_mode: :attr:`UrlRoutingMode.REFLEX_LED` (default) or
-            :attr:`UrlRoutingMode.DJANGO_LED`. Both route ``backend_prefixes``
-            to Django and other paths to Reflex; ``django_led`` additionally
-            guarantees Reflex reserved paths never hit Django.
+        routing_mode: :attr:`UrlRoutingMode.REFLEX_LED` (default),
+            :attr:`UrlRoutingMode.DJANGO_LED`, or
+            :attr:`UrlRoutingMode.REFLEX_OUTER`. ``django_led`` and
+            ``reflex_outer`` additionally guarantee Reflex reserved paths
+            never hit Django.
 
     Returns:
         A function ``transformer(reflex_asgi) -> ASGIApp`` that returns a
@@ -269,7 +270,7 @@ def make_dispatcher(
 
             path = scope.get("path", "")
 
-            if routing_mode == UrlRoutingMode.DJANGO_LED:
+            if routing_mode in (UrlRoutingMode.DJANGO_LED, UrlRoutingMode.REFLEX_OUTER):
                 if _is_reserved_reflex_path(path):
                     await reflex_asgi(scope, receive, send)
                     return

@@ -108,8 +108,10 @@ nav:
   - Get Started:
     - Install: installation.md
     - Your first app: quickstart.md
-    - Local development (Vite, admin, CSRF): local_development.md
+    - Integration guides: integration_guides.md
     - Add to an existing Django project: existing_django_project.md
+    - Add to an existing Reflex project: existing_reflex_project.md
+    - Local development (Vite, admin, CSRF): local_development.md
   - The Essentials:
     - Project structure: project_structure.md
     - Configuration: configuration.md

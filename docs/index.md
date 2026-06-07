@@ -85,6 +85,10 @@ Prefer one URL in the address bar? Pass `--single-port` and browse `:8000` inste
 ## Pick a path
 
 <div class="path-grid">
+  <a href="integration_guides/" class="path-card">
+    <h3>Brownfield integration</h3>
+    <p>Already have Django or Reflex? Pick the guide that matches your codebase.</p>
+  </a>
   <a href="why_reflex_django/" class="path-card">
     <h3>I want to understand first</h3>
     <p>Read why reflex-django exists, how Django and Reflex actually work, and where they meet. ~10 minutes, no code.</p>
@@ -95,7 +99,11 @@ Prefer one URL in the address bar? Pass `--single-port` and browse `:8000` inste
   </a>
   <a href="existing_django_project/" class="path-card">
     <h3>I have a Django app already</h3>
-    <p>Add a reflex-django page to a real, brownfield Django project without touching your models.</p>
+    <p>Add Reflex pages to a brownfield Django project — keep your models, admin, and API.</p>
+  </a>
+  <a href="existing_reflex_project/" class="path-card">
+    <h3>I have a Reflex app already</h3>
+    <p>Wrap your Reflex project in Django — ORM, admin, and sessions without rewriting your UI.</p>
   </a>
 </div>
 
@@ -121,6 +129,8 @@ Then drop into the build guides when you actually need them — CRUD pages, form
 
 | I want to… | Read |
 |:---|:---|
+| Add Reflex to my Django project | [Existing Django project](existing_django_project.md) |
+| Add Django to my Reflex project | [Existing Reflex project](existing_reflex_project.md) |
 | Configure ports, app name, prefixes | [Configuration](configuration.md) |
 | Dev on `:8000`, ports, admin CSRF, `useContext` errors | [Local development](local_development.md) |
 | Put pages next to my Django models | [Pages live in views.py](pages_in_views.md) |

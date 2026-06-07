@@ -10,11 +10,23 @@ For *how* to use them in context, see [Configuration](configuration.md) and [The
 
 Who handles which URL path — Django views vs the Reflex SPA catch-all vs reserved WebSocket prefixes.
 
+### `django_outer` vs `reflex_outer`
+
+Read the full walkthrough with request-by-request examples in **[Routing & URL dispatching — Choosing a mode](routing.md#choosing-a-mode-django_outer-vs-reflex_outer)**.
+
+In short:
+
+- **`django_outer`** (default) — one process; Django owns HTTP; Reflex owns `/_event` and friends.
+- **`reflex_outer`** — Reflex owns the public port and SPA; Django admin/API/static run in a separate HTTP worker (auto-spawned in dev); ORM and events stay in the Reflex process.
+
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
 | `REFLEX_DJANGO_AUTO_MOUNT` | `bool` | `True` | Append the Reflex SPA catch-all to `ROOT_URLCONF` at startup (`ReflexDjangoConfig.ready()` and ASGI bootstrap). Set `False` for Django-only installs, tests, or custom URL layouts. Env `REFLEX_DJANGO_AUTO_MOUNT=0` also disables it. Skipped automatically in `REFLEX_LED` routing mode. |
-| `REFLEX_DJANGO_URL_ROUTING` | `str` | `"auto"` → `"django_outer"` | Routing mode. Almost never change. Other values: `"reflex_led"` (legacy two-port), `"django_led"`. |
+| `REFLEX_DJANGO_URL_ROUTING` | `str` | `"auto"` → `"django_outer"` | Routing mode. Values: `"django_outer"` (default), `"reflex_outer"` (Reflex outer + Django HTTP worker), `"reflex_led"` / `"django_led"` (legacy in-process). See [routing modes](routing.md#choosing-a-mode-django_outer-vs-reflex_outer). |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `tuple[str, ...]` | `()` | Extra path prefixes always routed to Reflex (added to the built-in list: `/_event`, `/_upload`, `/_health`, `/ping`, `/_all_routes`, `/auth-codespace`). |
+| `REFLEX_DJANGO_HTTP_SUBPROCESS` | `bool` | `True` | **`reflex_outer` only.** When `True`, `run_reflex` auto-spawns a Django-only HTTP worker if nothing is listening on the upstream port. Set `False` in production when Supervisor/systemd runs the worker for you. Env `REFLEX_DJANGO_HTTP_SUBPROCESS=0`. |
+| `REFLEX_DJANGO_HTTP_PORT` | `int` | `8001` | Internal bind port for the auto-spawned Django HTTP worker. Not exposed to browsers — only loopback between Reflex and Django. Env `REFLEX_DJANGO_HTTP_PORT`. |
+| `REFLEX_DJANGO_HTTP_UPSTREAM` | `str` | `""` | Base URL of the Django HTTP worker (e.g. `http://127.0.0.1:8001`). When empty, derived from `REFLEX_DJANGO_HTTP_PORT`. Set explicitly when the worker runs as a separate supervised service. Env `REFLEX_DJANGO_HTTP_UPSTREAM`. |
 
 ---
 

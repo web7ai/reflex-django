@@ -168,6 +168,25 @@ def test_make_dispatcher_rejects_reserved_prefixes(reserved: str) -> None:
         make_dispatcher(_Recorder("django"), backend_prefixes=(reserved,))
 
 
+async def test_reflex_outer_reserved_paths_win_over_admin_prefix() -> None:
+    django = _Recorder("django")
+    reflex = _Recorder("reflex")
+    from reflex_django.routing import UrlRoutingMode
+
+    transformer = make_dispatcher(
+        django,
+        backend_prefixes=("/admin",),
+        routing_mode=UrlRoutingMode.REFLEX_OUTER,
+    )
+    dispatch = transformer(reflex)
+
+    await dispatch({"type": "http", "path": "/_event"}, _noop_receive, _noop_send)
+    await dispatch({"type": "http", "path": "/admin/"}, _noop_receive, _noop_send)
+
+    assert [s["path"] for s in reflex.scopes] == ["/_event"]
+    assert [s["path"] for s in django.scopes] == ["/admin/"]
+
+
 def test_make_dispatcher_rejects_subpath_of_reserved_prefix() -> None:
     with pytest.raises(ValueError, match="reserved endpoint"):
         make_dispatcher(

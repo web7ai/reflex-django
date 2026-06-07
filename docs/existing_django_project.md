@@ -1,8 +1,27 @@
 # Add reflex-django to an existing Django project
 
-This is the brownfield path. You already have a working Django project — models, migrations, admin, maybe a DRF API — and you just want to bolt on a reactive UI without rebuilding anything.
+This is the brownfield path for **Django-first** teams. You already have a working Django project — models, migrations, admin, maybe a DRF API — and you want to bolt on a reactive UI without rebuilding anything.
 
-Good news: you don't have to touch your models or your existing views. You add `reflex-django` like any other Django app, list the URL prefixes you already own, and start dropping Reflex pages into your apps' `views.py`.
+Good news: you don't have to touch your models or your existing views. You add `reflex-django` like any other Django app, import your page modules, and start dropping Reflex pages into your apps' `views.py`.
+
+**Coming from plain Reflex instead?** See [Add to an existing Reflex project](existing_reflex_project.md).
+
+**Not sure which guide?** See [Integration guides](integration_guides.md).
+
+---
+
+## Quick checklist
+
+Use this as a migration punch list:
+
+- [ ] `pip install reflex reflex-django` (or `uv add`)
+- [ ] `"reflex_django"` in `INSTALLED_APPS`
+- [ ] `AsyncStreamingMiddleware` last in `MIDDLEWARE`
+- [ ] `REFLEX_DJANGO_RX_CONFIG` in `settings.py`
+- [ ] `import yourapp.views` in `urls.py` (so `@page` registers)
+- [ ] `config/asgi.py` → `from reflex_django.asgi_entry import application`
+- [ ] First page in `{app}/views.py` with `@page` + optional `AppState`
+- [ ] `python manage.py run_reflex` (not `runserver` + `reflex run`)
 
 ---
 
@@ -196,6 +215,20 @@ Same origin, same port, same cookies. Your mobile app can keep hitting `/api/` w
 
 ---
 
+## Routing mode — stay on the default unless you have a reason not to
+
+New integrations should use **`django_outer`** (the default). Django handles HTTP; Reflex handles `/_event` and your SPA catch-all. One process, simplest ops.
+
+If you later notice heavy admin/API traffic competing with live Reflex sessions, you can switch to **`reflex_outer`** — Reflex stays outer and Django HTTP moves to a dedicated worker. Same `urls.py`, different wiring:
+
+```python
+REFLEX_DJANGO_URL_ROUTING = "reflex_outer"
+```
+
+Read the full comparison with examples: [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+
+---
+
 ## Using your existing models
 
 Inside any `@rx.event` handler on an `AppState` subclass, you can:
@@ -273,9 +306,10 @@ The compiled SPA's dispatcher map is out of sync with your live state classes. S
 
 ## What's next
 
-- **[Project structure](project_structure.md)** — recommended file layout for a hybrid Django/Reflex project.
-- **[Configuration](configuration.md)** — every `reflex_mount()` argument and every `REFLEX_DJANGO_*` setting.
-- **[CRUD with ModelState](reactive_model_state.md)** — declarative CRUD that pairs naturally with your existing Django models.
+- **[Add to an existing Reflex project](existing_reflex_project.md)** — the other brownfield path (Reflex → Django)
+- **[Project structure](project_structure.md)** — recommended file layout for a hybrid Django/Reflex project
+- **[Configuration](configuration.md)** — every `reflex_mount()` argument and every `REFLEX_DJANGO_*` setting
+- **[CRUD with ModelState](reactive_model_state.md)** — declarative CRUD that pairs naturally with your existing Django models
 
 ---
 

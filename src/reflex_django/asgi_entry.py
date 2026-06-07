@@ -248,9 +248,11 @@ def _disable_reflex_frontend_mount() -> None:
 
 
 def _build_reflex_outer_application() -> ASGIApp:
-    """Legacy path: keep the Reflex-outer dispatcher for opt-out users."""
+    """Build the Reflex-outer ASGI app (``reflex_led`` / ``reflex_outer``)."""
     from reflex_django.app_factory import ensure_django_led_app_ready
+    from reflex_django.integration import install_reflex_django_integration
 
+    install_reflex_django_integration()
     rx_app = ensure_django_led_app_ready()
     return rx_app()
 

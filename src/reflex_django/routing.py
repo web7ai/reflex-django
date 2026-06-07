@@ -13,6 +13,10 @@ Three modes are supported:
   upload, and health endpoints are mounted under Django via
   :class:`~reflex_django.django_outer_dispatcher.DjangoOuterDispatcher`,
   and the SPA bundle (or dev Vite reverse-proxy) is served by Django.
+- :attr:`UrlRoutingMode.REFLEX_OUTER` — Reflex is the outer ASGI app on a
+  single public port. Django admin/API/static HTTP runs in a separate worker
+  and is reached via :mod:`reflex_django.django_http_proxy`; ORM and the
+  event bridge stay in the Reflex process. See docs/routing.md.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ class UrlRoutingMode(enum.Enum):
     """How HTTP paths and lifespan are split between Django and Reflex."""
 
     REFLEX_LED = "reflex_led"
+    REFLEX_OUTER = "reflex_outer"
     DJANGO_LED = "django_led"
     DJANGO_OUTER = "django_outer"
 
@@ -36,6 +41,8 @@ _ALIASES = {
     "reflex": UrlRoutingMode.REFLEX_LED,
     "reflex_led": UrlRoutingMode.REFLEX_LED,
     "reflexled": UrlRoutingMode.REFLEX_LED,
+    "reflex_outer": UrlRoutingMode.REFLEX_OUTER,
+    "reflexouter": UrlRoutingMode.REFLEX_OUTER,
     "django": UrlRoutingMode.DJANGO_OUTER,
     "django_led": UrlRoutingMode.DJANGO_LED,
     "djangoled": UrlRoutingMode.DJANGO_LED,
@@ -60,7 +67,7 @@ def resolve_url_routing() -> UrlRoutingMode:
     Resolution order:
 
     1. Environment variable ``REFLEX_DJANGO_URL_ROUTING``
-       (``reflex_led`` | ``django_led`` | ``django_outer`` | ``auto``).
+       (``reflex_led`` | ``reflex_outer`` | ``django_led`` | ``django_outer`` | ``auto``).
     2. ``settings.REFLEX_DJANGO_URL_ROUTING`` when Django is configured.
     3. Default: :attr:`UrlRoutingMode.DJANGO_OUTER`.
 

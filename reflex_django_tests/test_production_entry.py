@@ -63,6 +63,26 @@ def test_maybe_auto_mount_skips_reflex_led_routing(
     assert resolve_url_routing() == UrlRoutingMode.REFLEX_LED
 
 
+def test_maybe_auto_mount_skips_reflex_outer_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import django
+
+    django.setup()
+    urlconf_name = "reflex_django_tests.test_auto_mount_urls"
+    monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
+    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "reflex_outer")
+    import sys
+
+    sys.modules.pop(urlconf_name, None)
+
+    maybe_auto_mount()
+    urlconf = importlib.import_module(urlconf_name)
+    assert len(urlconf.urlpatterns) == 1
+    assert resolve_url_routing() == UrlRoutingMode.REFLEX_OUTER
+
+
 def test_install_reflex_django_integration_auto_mounts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -85,11 +85,25 @@ flowchart TB
   DjangoViews --> DjangoORM
 ```
 
-One Python process owns the database connection pool, the in-memory state manager, and the compiled Reflex bundle. There's no second process, no second port, no CORS, no token bridge.
+One Python process owns the database connection pool, the in-memory state manager, and the compiled Reflex bundle for **`django_outer`** (the default). There's no second port, no CORS, no token bridge.
+
+For **`reflex_outer`**, the picture is slightly different: Reflex and the event bridge still run in one main process, but Django's HTTP stack (admin, API, static) can run in a dedicated worker that Reflex proxies to. From the browser's perspective it's still one origin on `:8000`. See [Choosing a mode: django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
 
 ---
 
-## The outer dispatcher
+## Routing modes at a glance
+
+| Mode | Outer app | Django HTTP | Reflex events / ORM |
+|:---|:---|:---|:---|
+| `django_outer` (default) | Django | Same process | Same process |
+| `reflex_outer` | Reflex | Separate worker (proxied) | Main process |
+| `reflex_led` / `django_led` | Reflex | Same process (legacy) | Same process |
+
+The sections below describe **`django_outer`** in depth — the default topology. If you're on `reflex_outer`, the event bridge and ORM sections still apply; only the HTTP dispatch path differs.
+
+---
+
+## The outer dispatcher (`django_outer`)
 
 `reflex_django.django_outer_dispatcher.DjangoOuterDispatcher` is the ASGI callable returned by `reflex_django.asgi_entry.application`. Every incoming ASGI scope passes through it first.
 

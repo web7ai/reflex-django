@@ -16,6 +16,11 @@ If you'd like to understand what these pieces do before installing, read [Why re
 
 If you don't have a Django project yet, the [Your first app](quickstart.md) tutorial walks you through creating one from scratch.
 
+**Brownfield?** Pick the guide that matches what you already have:
+
+- [Add to an existing Django project](existing_django_project.md) — you have models, admin, API; you want Reflex pages
+- [Add to an existing Reflex project](existing_reflex_project.md) — you have `rxconfig.py` and `reflex run`; you want Django ORM and admin
+
 ---
 
 ## 1. Install the packages

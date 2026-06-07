@@ -147,7 +147,7 @@ Optional tunables in `settings.py`. The defaults are sensible — most projects 
 
 | Setting | Default | What it does |
 |:---|:---|:---|
-| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (→ `"django_outer"`) | Routing mode. Stick with the default. `"reflex_led"` is the legacy two-port layout. |
+| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (→ `"django_outer"`) | Routing mode. Default is Django-outer (one process). Set `"reflex_outer"` when Reflex should own the public port and Django HTTP runs in a separate worker — see [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer). Legacy: `"reflex_led"`, `"django_led"`. |
 | `REFLEX_DJANGO_SERVE_FROM_BUILD` | `True` | `run_reflex` auto-builds the SPA and serves it from disk. Set to `False` (or use `--with-vite`) for the Vite HMR loop. |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `()` | Extra path prefixes always routed to Reflex. |
 | `REFLEX_DJANGO_DEV_PROXY` | `False` | Auto-managed by `run_reflex --with-vite`. Don't set manually. |

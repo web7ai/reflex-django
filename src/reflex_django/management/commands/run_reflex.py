@@ -136,7 +136,43 @@ class Command(BaseCommand):
         if mode == UrlRoutingMode.DJANGO_OUTER:
             self._run_django_outer(options)
             return
+        if mode == UrlRoutingMode.REFLEX_OUTER:
+            self._run_reflex_outer(options)
+            return
         self._invoke_reflex_run(options)
+
+    # ------------------------------------------------------------------
+    # Reflex-outer mode (Django HTTP subprocess)
+    # ------------------------------------------------------------------
+
+    def _run_reflex_outer(self, options: dict[str, Any]) -> None:
+        """Run Reflex as the outer ASGI app with Django HTTP in a subprocess."""
+        from reflex_django.django_http_subprocess import (
+            ensure_django_http_upstream_ready,
+            terminate_django_http_subprocess,
+        )
+
+        os.environ.setdefault("REFLEX_DJANGO_AUTO_EXPORT_ON_START", "0")
+        os.environ.setdefault("REFLEX_DJANGO_SEPARATE_DEV_PORTS", "1")
+        os.environ.setdefault("REFLEX_DJANGO_DEV_PROXY", "0")
+
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                "reflex-django: reflex_outer — Reflex owns the public port; "
+                "Django admin/API/static run in a separate HTTP worker."
+            )
+        )
+
+        try:
+            upstream = ensure_django_http_upstream_ready()
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"reflex-django: Django HTTP worker ready at {upstream}"
+                )
+            )
+            self._invoke_reflex_run(options)
+        finally:
+            terminate_django_http_subprocess()
 
     # ------------------------------------------------------------------
     # Django-outer single-port mode

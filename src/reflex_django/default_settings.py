@@ -110,10 +110,13 @@ REFLEX_DJANGO_AUTO_SETTINGS = True
 
 # ASGI routing mode for combining Reflex + Django:
 # - "django_outer" (default): Django is the outer ASGI app on one port,
-#   Reflex's Socket.IO/upload endpoints are mounted under Django, dev
-#   mode reverse-proxies "/" to Vite. Recommended for new projects.
-# - "reflex_led": Reflex is the outer ASGI app, Django is mounted by prefix.
-# - "django_led": Legacy alias preserved for backward compatibility.
+#   Reflex's Socket.IO/upload endpoints are mounted under Django. One process.
+#   Recommended for new projects. See docs/routing.md.
+# - "reflex_outer": Reflex is the outer app on the public port; Django admin/API/
+#   static run in a separate HTTP worker (auto-spawned in dev, supervised in prod).
+#   ORM and the event bridge stay in the Reflex process. See docs/routing.md.
+# - "reflex_led": Legacy — Reflex outer, Django mounted in-process by prefix.
+# - "django_led": Legacy alias (in-process, reserved-path guarantees).
 # - "auto": resolve from REFLEX_DJANGO_URL_ROUTING env or fall back to default.
 REFLEX_DJANGO_URL_ROUTING = os.environ.get("REFLEX_DJANGO_URL_ROUTING", "auto")
 
@@ -126,6 +129,14 @@ REFLEX_DJANGO_AUTO_MOUNT = os.environ.get("REFLEX_DJANGO_AUTO_MOUNT", "1") not i
     "false",
     "False",
 }
+
+# ``REFLEX_OUTER`` only: spawn a Django-only HTTP worker for admin/API/static.
+REFLEX_DJANGO_HTTP_SUBPROCESS = os.environ.get(
+    "REFLEX_DJANGO_HTTP_SUBPROCESS", "1"
+) not in {"0", "false", "False"}
+REFLEX_DJANGO_HTTP_PORT = int(os.environ.get("REFLEX_DJANGO_HTTP_PORT", "8001"))
+# When empty, derived from REFLEX_DJANGO_HTTP_PORT (http://127.0.0.1:<port>).
+REFLEX_DJANGO_HTTP_UPSTREAM = os.environ.get("REFLEX_DJANGO_HTTP_UPSTREAM", "")
 
 # Optional dotted path to a callable returning rx.App (e.g. "myapp.reflex:create_app").
 # REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"

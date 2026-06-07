@@ -51,6 +51,22 @@ your-project/
 
 In production, an ASGI server runs `reflex_django.asgi_entry:application`. A reverse proxy (Nginx, Caddy, your platform's edge) serves `/static/` from `staticfiles/`. Everything else hits the ASGI process.
 
+### `reflex_outer` in production
+
+If you use `REFLEX_DJANGO_URL_ROUTING = "reflex_outer"`, you run **two** supervised services instead of one:
+
+1. **Reflex-facing process** (public) — `uvicorn config.asgi:application --port 8000`
+2. **Django HTTP worker** (internal) — `uvicorn reflex_django.django_http_entry:application --host 127.0.0.1 --port 8001`
+
+On the Reflex process:
+
+```python
+REFLEX_DJANGO_HTTP_UPSTREAM = "http://127.0.0.1:8001"
+REFLEX_DJANGO_HTTP_SUBPROCESS = False
+```
+
+The reverse proxy still points at `:8000` only. Port `8001` stays on loopback — browsers never talk to it directly. Full walkthrough: [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+
 ---
 
 ## The build pipeline

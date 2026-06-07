@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from reflex_base.plugins.base import Plugin
 from reflex_base.utils import console
 
-from reflex_django.asgi import build_django_asgi, make_dispatcher
+from reflex_django.asgi import build_django_asgi, django_asgi_application, make_dispatcher
 from reflex_django.conf import configure_django
 from reflex_django.prefixes import export_prefix_env, resolve_prefixes
 from reflex_django.routing import UrlRoutingMode, resolve_url_routing
@@ -200,17 +200,37 @@ class ReflexDjangoPlugin(Plugin):
         # ``api_transformer`` because it would try to mount Django *inside* Reflex,
         # causing infinite-recursion-style routing collisions.
         if routing_mode != UrlRoutingMode.DJANGO_OUTER:
-            from reflex_django.asgi import django_asgi_application
+            if routing_mode == UrlRoutingMode.REFLEX_OUTER:
+                from reflex_django.django_http_proxy import make_django_http_proxy
+                from reflex_django.django_http_subprocess import (
+                    resolve_django_http_upstream,
+                    wrap_reflex_asgi_with_django_http_lifecycle,
+                )
 
-            django_asgi = django_asgi_application()
+                upstream = resolve_django_http_upstream()
+                django_asgi = make_django_http_proxy(upstream)
+            else:
+                django_asgi = django_asgi_application()
+
             transformer = make_dispatcher(
                 django_asgi,
                 backend_prefixes=self._all_prefixes(),
                 routing_mode=routing_mode,
             )
 
+            if routing_mode == UrlRoutingMode.REFLEX_OUTER:
+                def _wrap_transformer(reflex_asgi: Any) -> Any:
+                    dispatched = transformer(reflex_asgi)
+                    return wrap_reflex_asgi_with_django_http_lifecycle(dispatched)
+
+                _wrap_transformer.backend_prefixes = transformer.backend_prefixes  # pyright: ignore[reportFunctionMemberAccess]
+                _wrap_transformer.routing_mode = transformer.routing_mode  # pyright: ignore[reportFunctionMemberAccess]
+                final_transformer = _wrap_transformer
+            else:
+                final_transformer = transformer
+
             existing = _as_sequence(app.api_transformer)
-            app.api_transformer = (*existing, transformer)
+            app.api_transformer = (*existing, final_transformer)
 
         if self.install_event_bridge:
             from reflex_django.middleware import DjangoEventBridge

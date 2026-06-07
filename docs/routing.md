@@ -1,18 +1,272 @@
 # Routing & URL dispatching
 
-There are three different "URL resolvers" inside a `reflex-django` process. They run in this order:
+Every HTTP request and WebSocket connection has to answer one question first: **does this go to Django, or to Reflex?**
 
-1. **The outer ASGI dispatcher** — chooses Django or Reflex for each incoming scope.
-2. **Django's `urls.py`** — matches an HTTP request to a Django view or to the SPA catch-all.
-3. **The Reflex client router** — handles SPA navigation in the browser (no server round-trip).
+`reflex-django` gives you two well-supported ways to answer that question. Both serve your SPA, Django admin, and API on **one public port** (usually `:8000`). Both keep the ORM and event bridge in the same Python interpreter as Reflex, so `self.request.user` and `await Model.objects.aget(...)` keep working in your handlers.
 
-This page explains all three, the rules that connect them, and the common pitfalls.
+The difference is **who sits at the front door** — Django or Reflex — and whether Django's HTTP stack runs in the same process or in a dedicated worker.
+
+| | **`django_outer`** (default) | **`reflex_outer`** |
+|:---|:---|:---|
+| Who owns the public port? | Django | Reflex |
+| Where does `/admin` run? | Same process as Reflex events | Separate Django HTTP worker (auto-spawned or external) |
+| Best when… | You're Django-first; admin/API are first-class | Reflex events must stay snappy under heavy admin/API load |
+| Setting | leave default (`"auto"`) | `REFLEX_DJANGO_URL_ROUTING = "reflex_outer"` |
+
+The rest of this page walks through both modes with concrete examples, then dives into the three URL layers (`django_outer` detail), pitfalls, and legacy modes.
 
 If you read [Architecture overview](architecture.md), this is the same picture from the perspective of "where does this URL go?".
 
 ---
 
-## The three layers
+## Choosing a mode: `django_outer` vs `reflex_outer`
+
+### The short version
+
+- **`django_outer`** — Think "Django is the server; Reflex is a guest." Django handles almost all HTTP (`/`, `/admin`, `/api`, `/static`). Reflex only gets a small set of reserved paths (`/_event`, `/_upload`, …) for real-time UI work. **One process. Simple mental model. Default for new projects.**
+
+- **`reflex_outer`** — Think "Reflex is the server; Django admin/API live next door." Reflex owns the public port and your SPA. When someone hits `/admin` or `/api`, Reflex forwards that HTTP request to a **Django-only worker** (started automatically in dev, or managed by you in production). Your Reflex handlers and ORM still run in the main process — only the HTTP-facing Django views are isolated. **Two processes for HTTP, one for events — like Zulip splitting Tornado and Django behind nginx, but wired up for you.**
+
+You don't pick based on syntax. Your `urls.py`, `@page` routes, and state classes look the same either way.
+
+### Side-by-side: what happens when…
+
+Same project in both examples:
+
+```python
+# config/urls.py — identical in both modes
+import shop.views  # noqa: F401
+
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/", include("shop.api_urls")),
+]
+# SPA catch-all is auto-mounted (REFLEX_DJANGO_AUTO_MOUNT=True)
+```
+
+```python
+# shop/views.py — identical in both modes
+import reflex as rx
+from reflex_django import AppState, page
+
+@page(route="/", title="Home")
+def home() -> rx.Component:
+    return rx.heading("Welcome")
+
+class CartState(AppState):
+    async def add_item(self, product_id: int):
+        product = await Product.objects.aget(pk=product_id)
+        # self.request.user works — event bridge runs in the Reflex process
+        ...
+```
+
+#### Example 1 — Someone opens `http://localhost:8000/`
+
+**`django_outer`**
+
+```text
+Browser  →  port 8000  →  DjangoOuterDispatcher
+                              └── not a reserved path  →  Django
+                                    └── urls.py catch-all  →  ReflexMountView
+                                          └── serves STATIC_ROOT/_reflex/index.html
+```
+
+Django serves the SPA shell. The browser loads React; client-side routing takes over for `/about`, `/cart`, etc.
+
+**`reflex_outer`**
+
+```text
+Browser  →  port 8000  →  Reflex outer ASGI
+                              └── not /admin or /api  →  Reflex frontend (StaticFiles / compiled bundle)
+```
+
+Reflex serves the SPA directly. No trip through Django's URL resolver for the homepage.
+
+#### Example 2 — User clicks "Add to cart" (WebSocket / Socket.IO event)
+
+**Both modes — same path**
+
+```text
+Browser  →  /_event  →  Reflex inner ASGI  →  DjangoEventBridge
+                                                  └── synthetic HttpRequest + MIDDLEWARE
+                                                        └── CartState.add_item runs
+                                                              └── await Product.objects.aget(...)
+```
+
+Real-time UI traffic always lands on Reflex. The event bridge and Django ORM live in the **main Reflex process** in both modes. That is why your state handlers feel "Django-native" even in `reflex_outer`.
+
+#### Example 3 — Staff opens `http://localhost:8000/admin/`
+
+**`django_outer`**
+
+```text
+Browser  →  port 8000  →  DjangoOuterDispatcher  →  Django  →  admin.site.urls
+```
+
+One process. Admin runs in the same interpreter as Reflex events.
+
+**`reflex_outer`**
+
+```text
+Browser  →  port 8000  →  Reflex dispatcher  →  HTTP proxy (httpx)
+                                                    └── 127.0.0.1:8001  →  Django HTTP worker
+                                                              └──  admin.site.urls
+```
+
+Reflex recognizes `/admin` as a Django prefix and proxies the request to the worker on port `8001` (configurable). The admin response comes back through Reflex to the browser — still **one origin, one cookie jar** from the browser's point of view.
+
+#### Example 4 — Mobile app calls `GET /api/orders/`
+
+**`django_outer`** — Django view runs in-process.
+
+**`reflex_outer`** — Reflex proxies to the Django HTTP worker; DRF/your views run there.
+
+### Architecture diagrams
+
+=== "`django_outer` — Django at the front"
+
+```mermaid
+flowchart TB
+  Client[Browser on :8000]
+
+  subgraph OneProcess [Single Python process]
+    Dispatcher[DjangoOuterDispatcher]
+    Django[Django ASGI — admin API static SPA catch-all]
+    ReflexInner[Reflex inner — /_event /_upload /ping]
+    Bridge[DjangoEventBridge + ORM]
+  end
+
+  Client --> Dispatcher
+  Dispatcher -->|reserved paths| ReflexInner
+  Dispatcher -->|everything else| Django
+  ReflexInner --> Bridge
+```
+
+=== "`reflex_outer` — Reflex at the front"
+
+```mermaid
+flowchart TB
+  Client[Browser on :8000]
+
+  subgraph MainProcess [Main process — Reflex + ORM + events]
+    ReflexOuter[Reflex outer ASGI]
+    ReflexInner[/_event Socket.IO]
+    Bridge[DjangoEventBridge + ORM]
+    Proxy[HTTP proxy to Django worker]
+  end
+
+  subgraph DjangoWorker [Django HTTP worker — default :8001]
+    DjangoHTTP[Django only — admin API static]
+  end
+
+  Client --> ReflexOuter
+  ReflexOuter -->|/_event etc| ReflexInner
+  ReflexOuter -->|/admin /api /static| Proxy
+  Proxy --> DjangoHTTP
+  ReflexInner --> Bridge
+```
+
+### When should I use which?
+
+**Stay on `django_outer` (default) if:**
+
+- You're adding Reflex to an existing Django project.
+- Admin and API traffic is normal — not hammering the server while hundreds of users have live Reflex sessions open.
+- You want the simplest deployment story (one process, one ASGI entry point).
+- You rely on `ReflexMountView` piping `index.html` through Django's template engine (`{{ request.user }}` in the shell).
+
+**Switch to `reflex_outer` if:**
+
+- Profiling shows slow Django HTTP work (heavy admin queries, slow DRF endpoints) **blocking or delaying** Reflex WebSocket events on the same worker.
+- You want Reflex to own `/` and the compiled frontend mount without going through Django's catch-all.
+- You're okay running (or auto-spawning) a second process for Django HTTP — similar in spirit to how [Zulip](https://github.com/zulip/zulip) runs Tornado for real-time and Django for everything else, with nginx routing between them. Here, reflex-django wires the split for you.
+
+**You probably don't need either legacy mode** (`reflex_led`, `django_led`) unless you're maintaining an older project. They mount Django **in-process** under Reflex without the subprocess worker. See [Migrating from older versions](migration_django_outer.md).
+
+### How to enable each mode
+
+**Default — do nothing**
+
+```python
+# settings.py
+# REFLEX_DJANGO_URL_ROUTING = "auto"   # resolves to django_outer
+```
+
+**`reflex_outer`**
+
+```python
+# settings.py
+REFLEX_DJANGO_URL_ROUTING = "reflex_outer"
+```
+
+Keep `config/asgi.py` as:
+
+```python
+from reflex_django.asgi_entry import application
+```
+
+Run dev:
+
+```bash
+python manage.py run_reflex
+```
+
+`run_reflex` starts the Django HTTP worker for you (default port `8001`) before Reflex binds the public port.
+
+**Production with an external supervisor** — run the Django worker yourself:
+
+```bash
+uvicorn reflex_django.django_http_entry:application --host 127.0.0.1 --port 8001
+```
+
+Then on the Reflex process:
+
+```python
+REFLEX_DJANGO_HTTP_UPSTREAM = "http://127.0.0.1:8001"
+REFLEX_DJANGO_HTTP_SUBPROCESS = False
+```
+
+Only the Reflex-facing process needs the full Reflex app; the HTTP worker is Django-only.
+
+### Settings cheat sheet (`reflex_outer` only)
+
+| Setting | Default | What it does |
+|:---|:---|:---|
+| `REFLEX_DJANGO_HTTP_PORT` | `8001` | Port for the auto-spawned Django HTTP worker |
+| `REFLEX_DJANGO_HTTP_UPSTREAM` | `""` (derived from port) | Full base URL when the worker is managed externally |
+| `REFLEX_DJANGO_HTTP_SUBPROCESS` | `True` | Auto-spawn the worker in dev; set `False` when you run it yourself |
+
+Full reference: [REFLEX_DJANGO_* settings](settings_reference.md#routing).
+
+### Quick comparison table
+
+| Request | `django_outer` | `reflex_outer` |
+|:---|:---|:---|
+| `GET /` | Django → SPA catch-all | Reflex → compiled SPA |
+| `GET /about` (client nav) | Browser only — no server round-trip | Same |
+| `GET /about` (hard refresh) | Django → SPA catch-all | Reflex → SPA |
+| `GET /admin/` | Django in-process | Proxied → Django worker |
+| `GET /api/orders/` | Django in-process | Proxied → Django worker |
+| `GET /static/...` | Django staticfiles | Proxied → Django worker |
+| WebSocket `/_event` | Reflex in-process | Reflex in-process |
+| Reflex handler uses ORM | Main process | Main process (not the HTTP worker) |
+| Processes (typical dev) | 1 (+ Vite if HMR) | 2 (+ Vite if HMR) |
+| Public port | `:8000` | `:8000` |
+
+---
+
+## The three layers (`django_outer` detail)
+
+There are three different "URL resolvers" inside a `django_outer` deployment. They run in this order:
+
+1. **The outer ASGI dispatcher** — chooses Django or Reflex for each incoming scope.
+2. **Django's `urls.py`** — matches an HTTP request to a Django view or to the SPA catch-all.
+3. **The Reflex client router** — handles SPA navigation in the browser (no server round-trip).
+
+In `reflex_outer`, layer 1 is Reflex's path dispatcher (prefixes → proxy or Reflex), and layer 2 applies inside the Django HTTP worker instead of the main process. Layer 3 is the same in both modes.
 
 ```text
 Incoming ASGI scope (HTTP or WebSocket)
@@ -263,14 +517,16 @@ urlpatterns += [path("api/", include("shop.api_urls"))]
 
 ## Configuration knob: `REFLEX_DJANGO_URL_ROUTING`
 
-This setting selects the routing mode. You almost never set it.
+This setting picks the routing mode. Most projects leave it at `"auto"` (which means `django_outer`).
 
 | Value | Behavior |
 |:---|:---|
-| `"auto"` (default → `"django_outer"`) | The current architecture described on this page. |
-| `"reflex_led"` | Legacy two-port layout. Reflex is outer, Django is mounted as sub-paths. Kept for backwards compat. |
+| `"auto"` (default → `"django_outer"`) | Django is the outer ASGI app; Reflex Socket.IO is mounted under it. **Recommended default.** |
+| `"reflex_outer"` | Reflex is the outer app on one public port; Django admin/API/static run in a separate HTTP worker and are reverse-proxied. ORM and the event bridge stay in the Reflex process. See [Choosing a mode](#choosing-a-mode-django_outer-vs-reflex_outer) above. |
+| `"reflex_led"` | Legacy layout. Reflex is outer; Django is mounted **in-process** by URL prefix (no subprocess). |
+| `"django_led"` | Legacy alias; in-process Reflex-outer with reserved-path guarantees. |
 
-New projects should leave this alone. The default is the right answer.
+Environment override: `REFLEX_DJANGO_URL_ROUTING=reflex_outer python manage.py run_reflex`
 
 ---
 

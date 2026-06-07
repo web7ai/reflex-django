@@ -210,6 +210,12 @@ Restart `run_reflex`, hard-refresh the browser, and check the compile log for "f
 
 If you intentionally set `REFLEX_DJANGO_URL_ROUTING=reflex_led`, routing differs from DJANGO_OUTER — see [Migration: django_outer](migration_django_outer.md). **Do not mix** routing modes. New projects should leave `REFLEX_DJANGO_URL_ROUTING` at its default.
 
+### `reflex_outer` — two processes in dev
+
+If you set `REFLEX_DJANGO_URL_ROUTING = "reflex_outer"`, `run_reflex` starts a Django HTTP worker on port `8001` (by default) **and** Reflex on `:8000`. Browse `:8000` as usual — admin and API are proxied internally. You do not need to open `:8001` in the browser.
+
+See [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer) for the full picture.
+
 ---
 
 **Next:** [Deployment →](deployment.md) · [CLI reference](cli.md)

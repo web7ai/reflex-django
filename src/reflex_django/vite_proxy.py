@@ -416,7 +416,10 @@ def ensure_vite_django_dev_proxy_from_config() -> bool:
     if not prefixes:
         return False
 
-    django_led = routing_mode == UrlRoutingMode.DJANGO_LED
+    django_led = routing_mode in (
+        UrlRoutingMode.DJANGO_LED,
+        UrlRoutingMode.REFLEX_OUTER,
+    )
     separate_ports = (
         routing_mode == UrlRoutingMode.DJANGO_OUTER
         and dev_uses_separate_ports()

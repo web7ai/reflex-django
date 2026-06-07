@@ -18,6 +18,10 @@ A little helps. [How Django works in 5 minutes](how_django_works.md) is enough f
 
 Yes — that's a primary use case. See [Add to an existing Django project](existing_django_project.md). Add `REFLEX_DJANGO_RX_CONFIG` to `settings.py`, import page modules in `urls.py`, and start dropping pages into any app's `views.py`. The SPA catch-all is automatic.
 
+### Can I use this with an existing Reflex project?
+
+Yes. See [Add to an existing Reflex project](existing_reflex_project.md). You wrap your Reflex app in a Django project shell, move config from `rxconfig.py` to `settings.py`, switch to `manage.py run_reflex`, and optionally upgrade `rx.State` to `AppState` when you need the ORM or `request.user`.
+
 ### What versions do I need?
 
 Python 3.12+, Django 6.0+, Reflex 0.9.2+. Older Reflex versions don't have the plugin hooks we depend on.
@@ -28,7 +32,18 @@ Python 3.12+, Django 6.0+, Reflex 0.9.2+. Older Reflex versions don't have the p
 
 ### Is this just running two servers behind a reverse proxy?
 
-No. It's one Python process listening on one port. Both Django and Reflex's ASGI internals live in the same process. The outer dispatcher decides per-scope whether to send a request to Django or to Reflex's inner ASGI. ([Details](architecture.md).)
+Not quite — and it depends on your routing mode.
+
+- **`django_outer` (default):** One Python process on one port. An outer dispatcher sends each request to Django or Reflex's inner ASGI. ([Details](architecture.md).)
+- **`reflex_outer`:** Reflex owns the public port; Django admin/API HTTP runs in a separate worker that Reflex proxies to internally. Reflex events and the ORM still run in the main process. Still one origin for the browser. ([Comparison with examples](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).)
+
+### What's the difference between `django_outer` and `reflex_outer`?
+
+**`django_outer`** — Django answers the door. Almost all HTTP goes through Django (`/admin`, `/api`, the SPA catch-all). Reflex only handles reserved paths like `/_event`. One process, simplest setup. **Default for new projects.**
+
+**`reflex_outer`** — Reflex answers the door. Your SPA and WebSocket events stay in the main process; `/admin` and `/api` are forwarded to a Django-only HTTP worker (port `8001` by default). Use this when heavy Django HTTP work was slowing down live Reflex sessions.
+
+Same `urls.py`, same `@page` routes, same `AppState` — only the wiring changes. Full side-by-side examples: [Routing — Choosing a mode](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
 
 ### What about CORS?
 

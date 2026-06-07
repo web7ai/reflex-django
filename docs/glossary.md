@@ -48,7 +48,10 @@ The `reflex-django` component that intercepts every Reflex event, builds a synth
 A small reactive Reflex state that exposes JSON-safe user snapshot fields (`is_authenticated`, `username`, `email`, `messages`, `csrf_token`, `language`). Used in UI components. Inherited transparently by `AppState`.
 
 ### `DjangoOuterDispatcher`
-The outer ASGI callable that owns port 8000. It decides, per incoming scope, whether to send it to Django or to Reflex's inner ASGI.
+The outer ASGI router in **`django_outer`** mode. Reserved Reflex paths go to Reflex's inner ASGI; everything else goes to Django. ([Details](routing.md).)
+
+### `django_outer`
+Default routing mode — Django owns the public port; Reflex handles `/_event` and other reserved paths in the same process. ([Compare with `reflex_outer`](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).)
 
 ### `django_led_app`
 The built-in module (`reflex_django.django_led_app`) that owns the singleton `rx.App()`. Import it as `from reflex_django import app`. Page modules are loaded at compile time via explicit `urls.py` imports, `REFLEX_DJANGO_PAGE_PACKAGES`, or deprecated auto-discover — not by magic at every server boot. Replaces the `{app}/{app}.py` file you'd write in plain Reflex.
@@ -163,7 +166,10 @@ The built-in Reflex plugin that installs all the integration hooks. Added automa
 The DRF-style serializer class shipped with `reflex-django` for turning Django model instances into JSON-safe dicts. ([Details](serializers.md).)
 
 ### `ReflexMountView`
-The Django view that serves the compiled SPA's `index.html` for the catch-all URL pattern.
+The Django view that serves the compiled SPA's `index.html` for the catch-all URL pattern. Used in **`django_outer`**; in **`reflex_outer`**, Reflex serves the SPA directly instead.
+
+### `reflex_outer`
+Routing mode where Reflex owns the public port and proxies `/admin`, `/api`, and `/static` to a separate Django HTTP worker. Reflex events and the ORM stay in the main process. ([Full comparison](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).)
 
 ### `Reserved Reflex prefixes`
 URL prefixes (`/_event`, `/_upload`, `/_health`, `/ping`, `/_all_routes`, `/auth-codespace`) that the outer dispatcher *always* sends to Reflex, regardless of `urls.py`.
