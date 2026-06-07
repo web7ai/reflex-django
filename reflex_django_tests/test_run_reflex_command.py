@@ -568,6 +568,44 @@ def test_vite_default_delegates_to_reflex_run(
     invoke.assert_called_once()
 
 
+def test_frontend_only_in_dev_spawns_vite_blocking_with_watch(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """frontend_only in dev spawns blocking Vite with watch thread, bypassing reflex run."""
+    spawn_vite_blocking = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_vite_blocking",
+        spawn_vite_blocking,
+    )
+    invoke = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
+    )
+
+    from django.conf import settings
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", False, raising=False
+    )
+
+    # test watch=True
+    Command().handle(frontend_only=True)
+    assert spawn_vite_blocking.call_count == 1
+    assert isinstance(spawn_vite_blocking.call_args[0][0], int)
+    assert spawn_vite_blocking.call_args[1].get("watch") is True
+    invoke.assert_not_called()
+
+    # test watch=False with no_reload
+    spawn_vite_blocking.reset_mock()
+    Command().handle(frontend_only=True, no_reload=True)
+    assert spawn_vite_blocking.call_count == 1
+    assert isinstance(spawn_vite_blocking.call_args[0][0], int)
+    assert spawn_vite_blocking.call_args[1].get("watch") is False
+    invoke.assert_not_called()
+
+
 def test_single_port_enables_fast_backend_reload(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
@@ -848,3 +886,55 @@ def test_backend_runner_passes_reload_excludes_when_vite_active(
     assert kwargs["app"] == "reflex_django.asgi_entry:application"
     assert kwargs["reload"] is True
     assert kwargs.get("reload_excludes")
+
+
+def test_invoke_reflex_run_clears_unused_ports_in_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_invoke_reflex_run clears unused ports in config for frontend/backend only runs."""
+    captured_get_config_backend_port = 8000
+    captured_get_config_frontend_port = 3000
+
+    def mock_main(*args, **kwargs):
+        nonlocal captured_get_config_backend_port, captured_get_config_frontend_port
+        import reflex_base.config as config_module
+        cfg = config_module.get_config()
+        captured_get_config_backend_port = cfg.backend_port
+        captured_get_config_frontend_port = cfg.frontend_port
+
+    cli_mock = mock.MagicMock()
+    cli_mock.commands = {"run": mock.MagicMock()}
+    cli_mock.main = mock_main
+
+    import reflex.reflex as reflex_module
+    monkeypatch.setattr(reflex_module, "cli", cli_mock)
+
+    class MockConfig:
+        def __init__(self):
+            self.frontend_port = 3000
+            self.backend_port = 8000
+
+    mock_config = MockConfig()
+    rxconfig_mock = mock.Mock()
+    rxconfig_mock.config = mock_config
+    monkeypatch.setitem(sys.modules, "rxconfig", rxconfig_mock)
+
+    # Mock original get_config to return our mock_config
+    import reflex_base.config as config_module
+    monkeypatch.setattr(config_module, "get_config", lambda *a, **k: mock_config)
+
+    # Test frontend_only resets backend_port
+    Command()._invoke_reflex_run({"frontend_only": True})
+    assert mock_config.backend_port is None
+    assert mock_config.frontend_port == 3000
+    assert captured_get_config_backend_port is None
+    assert captured_get_config_frontend_port == 3000
+
+    # Reset and test backend_only resets frontend_port
+    mock_config.backend_port = 8000
+    mock_config.frontend_port = 3000
+    Command()._invoke_reflex_run({"backend_only": True})
+    assert mock_config.frontend_port is None
+    assert mock_config.backend_port == 8000
+    assert captured_get_config_frontend_port is None
+    assert captured_get_config_backend_port == 8000

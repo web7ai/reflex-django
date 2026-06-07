@@ -267,7 +267,7 @@ class Command(BaseCommand):
 
         # Default Vite-HMR dev delegates to native ``reflex run`` (two-port layout).
         # ``--from-build``, ``--env prod``, and ``--single-port`` keep custom paths.
-        if not serve_from_disk and not options.get("single_port"):
+        if not serve_from_disk and not options.get("single_port") and not frontend_only:
             os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
             from reflex_django.auto_mount import refresh_reflex_mount_catchall
@@ -1227,6 +1227,34 @@ class Command(BaseCommand):
         else:
             os.environ.pop("REFLEX_DJANGO_BACKEND_RELOAD", None)
 
+        # Work around Reflex CLI raising "Cannot specify --frontend-port when not running frontend"
+        # and "Cannot specify --backend-port when not running backend" due to default ports in config.
+        try:
+            import rxconfig
+            if hasattr(rxconfig, "config") and rxconfig.config is not None:
+                if options.get("frontend_only"):
+                    rxconfig.config.backend_port = None
+                elif options.get("backend_only"):
+                    rxconfig.config.frontend_port = None
+        except ImportError:
+            pass
+
+        import reflex_base.config as config_module
+        from reflex_django.integration import _rebind_get_config_imports
+
+        original_get_config = config_module.get_config
+
+        def wrapped_get_config(reload: bool = False) -> Any:
+            cfg = original_get_config(reload=reload)
+            if options.get("frontend_only"):
+                cfg.backend_port = None
+            elif options.get("backend_only"):
+                cfg.frontend_port = None
+            return cfg
+
+        config_module.get_config = wrapped_get_config
+        _rebind_get_config_imports(wrapped_get_config)
+
         forward: list[str] = ["run"]
         if options.get("env"):
             forward.extend(["--env", options["env"]])
@@ -1250,6 +1278,8 @@ class Command(BaseCommand):
             reflex_cli.main(standalone_mode=True)
         finally:
             sys.argv = old_argv
+            config_module.get_config = original_get_config
+            _rebind_get_config_imports(original_get_config)
 
 
 class _ServerNotAvailable(Exception):
