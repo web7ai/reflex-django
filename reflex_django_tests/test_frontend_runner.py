@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -15,6 +16,7 @@ def test_parse_argv_defaults() -> None:
 
     assert args.frontend_port == 3210
     assert args.compile_only is False
+    assert args.compile_and_build is False
     assert args.watch is True
     assert args.skip_compile is False
 
@@ -28,6 +30,26 @@ def test_parse_argv_no_watch_and_compile_only() -> None:
     assert args.frontend_port == 3000
     assert args.watch is False
     assert args.compile_only is True
+
+
+def test_compile_and_build_compiles_and_builds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--compile-and-build`` bootstraps and runs the Reflex disk bundle pipeline."""
+    bootstrap = mock.MagicMock()
+    build_disk = mock.MagicMock()
+
+    monkeypatch.setattr(_frontend_runner, "_bootstrap_integration", bootstrap)
+    monkeypatch.setattr(
+        _frontend_runner, "_apply_persistent_frontend_port", mock.MagicMock()
+    )
+    monkeypatch.setattr(_frontend_runner, "build_frontend_disk_bundle", build_disk)
+
+    rc = _frontend_runner.main(["--compile-and-build"])
+
+    assert rc == 0
+    bootstrap.assert_called_once()
+    build_disk.assert_called_once_with(compile_first=True)
 
 
 def test_compile_only_compiles_and_skips_vite(
@@ -211,3 +233,83 @@ def test_compile_app_for_frontend_applies_stability_patches(
     compile_or_validate.assert_called_once()
     write_env.assert_called_once()
     stability.assert_called_once()
+
+
+def test_build_id_for_disk_bundle_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "reflex_django.views.mount._resolve_spa_index",
+        lambda: None,
+    )
+    assert _frontend_runner.build_id_for_disk_bundle() == "missing"
+
+
+def test_build_frontend_client_bundle_uses_reflex_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup = mock.MagicMock()
+    run_export = mock.MagicMock()
+    finalize = mock.MagicMock()
+    ensure_dev = mock.MagicMock()
+    backup = mock.MagicMock()
+    clear_backup = mock.MagicMock()
+    web_dir = mock.MagicMock()
+    static_dir = mock.MagicMock()
+    index = mock.MagicMock()
+    index.is_file.return_value = True
+    static_dir.__truediv__ = mock.MagicMock(return_value=index)
+    web_dir.__truediv__ = mock.MagicMock(return_value=static_dir)
+
+    monkeypatch.setattr(_frontend_runner, "_ensure_dev_env_mode", ensure_dev)
+    monkeypatch.setattr(_frontend_runner, "_backup_client_bundle_before_build", backup)
+    monkeypatch.setattr(_frontend_runner, "_clear_compile_dev_client_backup", clear_backup)
+    monkeypatch.setattr(_frontend_runner, "_run_compile_dev_frontend_export", run_export)
+    monkeypatch.setattr(_frontend_runner, "_finalize_reflex_client_build", finalize)
+    monkeypatch.setattr(
+        "reflex.utils.prerequisites.get_web_dir",
+        lambda: web_dir,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.build.setup_frontend",
+        setup,
+    )
+
+    _frontend_runner.build_frontend_client_bundle()
+
+    ensure_dev.assert_called_once()
+    backup.assert_called_once()
+    setup.assert_called_once()
+    run_export.assert_called_once()
+    finalize.assert_called_once_with(compress=False)
+    clear_backup.assert_called_once()
+
+
+def test_compile_dev_reload_script_ignores_missing() -> None:
+    from reflex_django.spa_template import compile_dev_reload_script
+
+    script = compile_dev_reload_script(wait_for_ready=False)
+    assert "id!=='missing'" in script
+    assert "last!==null&&id!==last" in script
+
+
+def test_resolve_spa_index_falls_back_to_compile_dev_backup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """While ``.web/build`` is wiped, the previous client bundle remains servable."""
+    from django.conf import settings
+
+    from reflex_django._frontend_runner import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+    from reflex_django.views.mount import _resolve_spa_index
+
+    web = tmp_path / ".web"
+    backup = web / COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+    backup.mkdir(parents=True)
+    (backup / "index.html").write_text("<html>backup</html>", encoding="utf-8")
+
+    monkeypatch.setattr(settings, "BASE_DIR", tmp_path, raising=False)
+    monkeypatch.setenv("REFLEX_DJANGO_COMPILE_DEV", "1")
+    monkeypatch.chdir(tmp_path)
+
+    index = _resolve_spa_index()
+    assert index is not None
+    assert index.read_text(encoding="utf-8") == "<html>backup</html>"

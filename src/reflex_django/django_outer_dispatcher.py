@@ -29,6 +29,8 @@ from typing import Any
 
 logger = logging.getLogger("reflex_django.django_outer_dispatcher")
 
+from reflex_django._frontend_runner import BUILD_ID_PATH
+
 ASGIScope = MutableMapping[str, Any]
 ASGIMessage = MutableMapping[str, Any]
 ASGIReceive = Callable[[], Awaitable[ASGIMessage]]
@@ -94,6 +96,25 @@ class DjangoOuterDispatcher:
     def _is_reserved(self, path: str) -> bool:
         return any(_path_matches(path, p) for p in self.reserved_prefixes)
 
+    @staticmethod
+    async def _serve_compile_dev_build_id(send: ASGISend) -> None:
+        """Return a token that changes when the on-disk SPA bundle is rebuilt."""
+        from reflex_django._frontend_runner import build_id_for_disk_bundle
+
+        body = build_id_for_disk_bundle().encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"text/plain; charset=utf-8"),
+                    (b"cache-control", b"no-store"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
     async def __call__(
         self,
         scope: ASGIScope,
@@ -109,6 +130,10 @@ class DjangoOuterDispatcher:
             return
 
         path = scope.get("path", "") or "/"
+        if scope_type == "http" and path == BUILD_ID_PATH:
+            await self._serve_compile_dev_build_id(send)
+            return
+
         if self._is_reserved(path):
             await self.reflex(scope, receive, send)
             return

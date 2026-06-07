@@ -174,6 +174,12 @@ def patch_vite_react_dedupe(content: str) -> str:
             insert = '\n    dedupe: ["react", "react-dom", "@emotion/react"],'
             pos = match.end()
             updated = updated[:pos] + insert + updated[pos:]
+    if "minify:" not in updated:
+        build_match = re.search(r"(build\s*:\s*\{)", updated)
+        if build_match:
+            pos = build_match.end()
+            insert = '\n    minify: process.env.REFLEX_ENV_MODE !== "dev",'
+            updated = updated[:pos] + insert + updated[pos:]
     return updated
 
 

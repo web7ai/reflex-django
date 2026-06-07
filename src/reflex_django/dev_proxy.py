@@ -113,6 +113,43 @@ def _resolve_frontend_port_from_config() -> int | None:
     return None
 
 
+def _resolve_backend_port_from_config() -> int | None:
+    """Return the Django/ASGI backend port from env, settings, mount registry, or ``rx.Config``."""
+    env_port = os.environ.get("REFLEX_DJANGO_BACKEND_PORT")
+    if env_port and env_port.isdigit():
+        return int(env_port)
+    try:
+        from django.conf import settings
+
+        setting_port = getattr(settings, "REFLEX_DJANGO_BACKEND_PORT", None)
+        if isinstance(setting_port, int) and setting_port > 0:
+            return setting_port
+    except Exception:
+        pass
+    try:
+        from reflex_django.mount_config import (
+            ensure_mount_config_loaded,
+            get_merged_mount_rx_config,
+        )
+
+        ensure_mount_config_loaded()
+        mount_port = get_merged_mount_rx_config().rx_config.get("backend_port")
+        if isinstance(mount_port, int) and mount_port > 0:
+            return mount_port
+    except Exception:
+        pass
+    try:
+        from reflex_base.config import get_config
+
+        cfg = get_config()
+        port = getattr(cfg, "backend_port", None)
+        if isinstance(port, int) and port > 0:
+            return port
+    except Exception:
+        pass
+    return None
+
+
 def _dev_vite_target_or_none() -> str | None:
     """Return ``"http://127.0.0.1:<port>"`` when a Vite dev server should be proxied.
 
@@ -328,6 +365,7 @@ async def proxy_websocket_to_vite(scope: Any, receive: Any, send: Any) -> None:
 
 __all__ = [
     "_dev_vite_target_or_none",
+    "_resolve_backend_port_from_config",
     "_resolve_frontend_port_from_config",
     "dev_proxy_explicitly_enabled",
     "dev_uses_separate_ports",

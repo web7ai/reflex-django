@@ -46,7 +46,7 @@ export default defineConfig({
 def test_patch_context_js_replaces_null_default() -> None:
     out = patch_context_js(_SAMPLE_CONTEXT)
     assert "createContext([() => {}, []])" in out
-    assert "createContext(null)" not in out
+    assert "EventLoopContext = createContext(null)" not in out
 
 
 def test_patch_context_js_idempotent() -> None:
@@ -100,6 +100,11 @@ def test_patch_vite_react_dedupe_adds_dedupe_only() -> None:
     assert 'find: "react"' not in out
 
 
+def test_patch_vite_react_dedupe_adds_minify_to_build() -> None:
+    out = patch_vite_react_dedupe(_SAMPLE_VITE_ADVANCED_CHUNKS)
+    assert 'minify: process.env.REFLEX_ENV_MODE !== "dev"' in out
+
+
 def test_patch_vite_react_dedupe_strips_bad_react_aliases() -> None:
     broken = _SAMPLE_VITE.replace(
         'find: "@",',
@@ -131,7 +136,7 @@ def test_apply_frontend_stability_patches(tmp_path: Path) -> None:
     (web / "app" / "root.jsx").write_text(_SAMPLE_COMPONENT, encoding="utf-8")
     (web / "vite.config.js").write_text(_SAMPLE_VITE, encoding="utf-8")
 
-    changed = apply_frontend_stability_patches(web)
+    changed = [c.replace("\\", "/") for c in apply_frontend_stability_patches(web)]
     assert "utils/context.js" in changed
     assert "utils/components/DefaultOverlayComponents.jsx" in changed
     assert "utils/components/Button_x.jsx" in changed
@@ -160,7 +165,7 @@ def test_apply_frontend_stability_after_compile_uses_web_dir(
         lambda: web,
     )
 
-    changed = apply_frontend_stability_after_compile()
+    changed = [c.replace("\\", "/") for c in apply_frontend_stability_after_compile()]
     assert "utils/context.js" in changed
     assert "createContext([() => {}, []])" in (web / "utils" / "context.js").read_text(
         encoding="utf-8"

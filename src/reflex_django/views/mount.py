@@ -34,6 +34,7 @@ from django.views import View
 
 from reflex_django.dev_proxy import (
     _dev_vite_target_or_none,
+    _resolve_backend_port_from_config,
     _resolve_frontend_port_from_config,
     dev_proxy_explicitly_enabled,
     dev_uses_separate_ports,
@@ -51,6 +52,26 @@ logger = logging.getLogger("reflex_django.views.mount")
 _SPA_DIR_CANDIDATES: tuple[str, ...] = ("_reflex", "_static", "reflex")
 
 
+def _compile_dev_mode_enabled() -> bool:
+    return str(os.environ.get("REFLEX_DJANGO_COMPILE_DEV", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _append_web_spa_roots(roots: list[Path], base: Path) -> None:
+    """Append in-place Reflex build output directories under ``base/.web``."""
+    from reflex_django._frontend_runner import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+
+    roots.append(base / ".web" / "build" / "client")
+    if _compile_dev_mode_enabled():
+        roots.append(base / ".web" / COMPILE_DEV_CLIENT_BACKUP_DIRNAME)
+    roots.append(base / ".web" / "_static")
+    roots.append(base / ".web" / "build")
+
+
 def _spa_root_candidates() -> Iterable[Path]:
     """Yield directories on disk that may hold the compiled Reflex SPA.
 
@@ -62,6 +83,9 @@ def _spa_root_candidates() -> Iterable[Path]:
     - ``.web/build/client/`` — SSR-enabled builds (current Reflex default;
       Vite SSR puts the client bundle here and pre-renders pages
       alongside).
+    - ``.web/.compile-dev-client-backup/`` — previous client bundle kept
+      during compile-dev rebuilds so pages stay servable while Reflex
+      wipes ``.web/build``.
     - ``.web/_static/`` — ``--no-ssr`` builds and pre-SSR Reflex versions.
     - ``.web/build/`` — some intermediate Reflex versions.
     """
@@ -80,12 +104,7 @@ def _spa_root_candidates() -> Iterable[Path]:
 
     project = getattr(settings, "BASE_DIR", None)
     if project:
-        base = Path(project)
-        # SSR-enabled builds (Vite SSR layout: client bundle + pre-rendered HTML).
-        roots.append(base / ".web" / "build" / "client")
-        # Legacy/no-SSR builds.
-        roots.append(base / ".web" / "_static")
-        roots.append(base / ".web" / "build")
+        _append_web_spa_roots(roots, Path(project))
 
     seen: set[Path] = set()
     out: list[Path] = []
@@ -179,16 +198,44 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
             except Exception:
                 debug = False
             if debug:
-                msg = (
-                    "Reflex dev proxy is not active and no compiled SPA was "
-                    "found on disk. Start the dev server with "
-                    "`python manage.py run_reflex` and open "
-                    "http://localhost:<backend_port>/ (not a bare "
-                    "`runserver`/`uvicorn` boot). If Vite is already running, "
-                    "ensure port "
-                    f"{_resolve_frontend_port_from_config() or 3000} is free "
-                    "and matches `frontend_port` in `reflex_mount()`."
-                )
+                if dev_uses_separate_ports():
+                    msg = (
+                        "Reflex SPA is served on the Vite frontend port in "
+                        "two-port dev mode. Open "
+                        f"http://localhost:{_resolve_frontend_port_from_config() or 3000}/ "
+                        "for the UI, or use "
+                        "`python manage.py run_reflex --env dev` to browse "
+                        "the backend port with Vite reverse-proxied through Django."
+                    )
+                elif _compile_dev_mode_enabled():
+                    backend_port = _resolve_backend_port_from_config() or 8000
+                    from reflex_django.spa_template import compile_dev_waiting_html
+
+                    return HttpResponse(
+                        compile_dev_waiting_html(backend_port),
+                        content_type="text/html; charset=utf-8",
+                        status=503,
+                    )
+                elif dev_proxy_explicitly_enabled():
+                    msg = (
+                        "Reflex SPA frontend bundle not found and the Vite dev "
+                        "server is not reachable. Run "
+                        "`python manage.py run_reflex --env dev` (not bare "
+                        "`runserver`/`uvicorn`) and wait for Vite to start, "
+                        f"then open http://localhost:{_resolve_frontend_port_from_config() or 8000}/."
+                    )
+                else:
+                    msg = (
+                        "Reflex SPA frontend bundle not found on disk "
+                        "(expected `index.html` under `.web/build/client`, "
+                        "`.web/_static`, or `STATIC_ROOT/_reflex`). Run "
+                        "`python manage.py run_reflex --env dev` and wait for "
+                        "the export to finish, or build manually with "
+                        "`python manage.py export_reflex --frontend-only "
+                        "--no-zip --env dev`. For Vite hot reload instead, "
+                        "use `python manage.py run_reflex --with-vite` and "
+                        f"open http://localhost:{_resolve_frontend_port_from_config() or 3000}/."
+                    )
             else:
                 msg = (
                     "Reflex SPA bundle not found. Run `reflex export` and "

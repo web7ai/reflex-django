@@ -101,6 +101,67 @@ def _build_request_context(request: HttpRequest, html: str) -> Any:
     return template.render(context=None, request=request)
 
 
+def _compile_dev_live_reload_enabled() -> bool:
+    return str(os.environ.get("REFLEX_DJANGO_COMPILE_DEV", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def compile_dev_reload_script(*, wait_for_ready: bool = False) -> str:
+    """Return JS that polls the compile-dev build id and reloads when it changes."""
+    from reflex_django._frontend_runner import BUILD_ID_PATH
+
+    wait_init = "let last='missing';" if wait_for_ready else "let last=null;"
+    reload_logic = (
+        "if(wait){if(id!=='missing'&&id!==last)location.reload();"
+        "if(id!=='missing')last=id;}"
+        "else{if(id!=='missing'){if(last!==null&&id!==last)location.reload();last=id;}}"
+    )
+    return (
+        "<script id=\"reflex-django-compile-dev-reload\">"
+        "(function(){"
+        f"{wait_init}const wait={str(wait_for_ready).lower()};const path={BUILD_ID_PATH!r};"
+        "setInterval(async()=>{try{const r=await fetch(path,{cache:'no-store'});"
+        f"const id=await r.text();{reload_logic}"
+        "}catch(_){}},500);})();"
+        "</script>"
+    )
+
+
+def compile_dev_waiting_html(backend_port: int) -> str:
+    """HTML shown when compile-dev mode has no bundle on disk yet."""
+    script = compile_dev_reload_script(wait_for_ready=True)
+    return (
+        "<!doctype html><html><head>"
+        "<title>Reflex SPA building</title></head><body>"
+        "<p>Reflex SPA bundle is not ready yet. "
+        "<code>python manage.py run_reflex --env dev</code> compiles to "
+        "<code>.web/</code> and runs Reflex's frontend build.</p>"
+        f"<p>Waiting for the build to finish on "
+        f"<a href=\"http://localhost:{backend_port}/\">"
+        f"http://localhost:{backend_port}/</a>…</p>"
+        f"{script}"
+        "</body></html>"
+    )
+
+
+def _maybe_inject_compile_dev_live_reload(html: str) -> str:
+    """Inject a lightweight full-page reload loop for compile-dev mode."""
+    if not _compile_dev_live_reload_enabled():
+        return html
+    if "reflex-django-compile-dev-reload" in html:
+        return html
+    script = compile_dev_reload_script(wait_for_ready=False)
+    lowered = html.lower()
+    if "</body>" in lowered:
+        idx = lowered.rfind("</body>")
+        return html[:idx] + script + html[idx:]
+    return html + script
+
+
 def maybe_render_spa_html(
     request: HttpRequest,
     response: HttpResponse,
@@ -121,6 +182,20 @@ def maybe_render_spa_html(
         content has been processed by Django's template engine.
     """
     if not _render_via_template_engine_enabled():
+        if _response_is_html(response):
+            body = _extract_body(response)
+            if body is not None:
+                html = _decode_html(body)
+                injected = _maybe_inject_compile_dev_live_reload(html)
+                if injected != html:
+                    from django.http import HttpResponse
+
+                    return HttpResponse(
+                        injected,
+                        status=response.status_code,
+                        content_type=response.get("Content-Type")
+                        or "text/html; charset=utf-8",
+                    )
         return response
     if not _response_is_html(response):
         return response
@@ -138,6 +213,8 @@ def maybe_render_spa_html(
             exc.__class__.__name__,
         )
         return response
+
+    rendered = _maybe_inject_compile_dev_live_reload(rendered)
 
     from django.http import HttpResponse
 

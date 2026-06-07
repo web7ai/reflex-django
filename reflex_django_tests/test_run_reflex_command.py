@@ -56,6 +56,17 @@ def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _stub_compile_frontend(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
+    """Mock the frontend compiler to prevent real Node build execution in tests."""
+    compile_mock = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django._frontend_runner._compile_app_for_frontend",
+        compile_mock,
+    )
+    return compile_mock
+
+
 @pytest.fixture
 def _stub_asgi_server(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
     """Replace ``_run_asgi_server`` and ``_run_with_watch_reload`` with no-ops.
@@ -136,8 +147,9 @@ def test_from_build_triggers_export_and_disables_vite_proxy(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
+    _stub_compile_frontend: mock.MagicMock,
 ) -> None:
-    """``--from-build`` re-exports the SPA AND sets REFLEX_DJANGO_DEV_PROXY=0."""
+    """``--from-build`` exports the SPA to ``.web`` AND sets REFLEX_DJANGO_DEV_PROXY=0."""
     export_call = mock.MagicMock()
     monkeypatch.setattr(
         "django.core.management.call_command", export_call
@@ -149,16 +161,17 @@ def test_from_build_triggers_export_and_disables_vite_proxy(
     )
     monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
 
+    from django.conf import settings
+    monkeypatch.setattr(settings, "STATIC_ROOT", "/static", raising=False)
+
     Command().handle(from_build=True, skip_rebuild=False)
 
-    # Export ran with the canonical --frontend-only --no-zip --stage-to-static-root flags.
     export_call.assert_called_once()
     name, *_ = export_call.call_args.args
     assert name == "export_reflex"
-    kwargs = export_call.call_args.kwargs
-    assert kwargs.get("frontend_only") is True
-    assert kwargs.get("no_zip") is True
-    assert kwargs.get("stage_to_static_root") is True
+    assert export_call.call_args.kwargs.get("env") == "dev"
+    assert export_call.call_args.kwargs.get("stage_to_static_root") is False
+    _stub_compile_frontend.assert_not_called()
 
     # Dev-proxy explicitly turned off so the catch-all view serves from disk.
     import os
@@ -170,6 +183,7 @@ def test_from_build_skip_rebuild_does_not_re_export(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
+    _stub_compile_frontend: mock.MagicMock,
 ) -> None:
     """``--from-build --skip-rebuild`` uses the existing bundle on disk."""
     export_call = mock.MagicMock()
@@ -179,6 +193,7 @@ def test_from_build_skip_rebuild_does_not_re_export(
     Command().handle(from_build=True, skip_rebuild=True)
 
     export_call.assert_not_called()
+    _stub_compile_frontend.assert_not_called()
     # Still flips the dev-proxy off so the user gets the disk SPA.
     import os
 
@@ -189,6 +204,7 @@ def test_setting_serve_from_build_implies_from_build(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
+    _stub_compile_frontend: mock.MagicMock,
 ) -> None:
     """``settings.REFLEX_DJANGO_SERVE_FROM_BUILD = True`` enables the flag globally.
 
@@ -208,6 +224,11 @@ def test_setting_serve_from_build_implies_from_build(
     Command().handle()
 
     export_call.assert_called_once()
+    name, *_ = export_call.call_args.args
+    assert name == "export_reflex"
+    assert export_call.call_args.kwargs.get("env") == "dev"
+    assert export_call.call_args.kwargs.get("stage_to_static_root") is False
+    _stub_compile_frontend.assert_not_called()
 
 
 def test_from_build_does_not_spawn_vite(
@@ -276,12 +297,16 @@ def test_env_prod_builds_spa_when_missing(
         mock.MagicMock(),
     )
 
+    from django.conf import settings
+    monkeypatch.setattr(settings, "STATIC_ROOT", "/static", raising=False)
+
     Command().handle(env="prod")
 
     export_call.assert_called_once()
     name, *_ = export_call.call_args.args
     assert name == "export_reflex"
     assert export_call.call_args.kwargs.get("env") == "prod"
+    assert export_call.call_args.kwargs.get("stage_to_static_root") is True
 
 
 def test_env_prod_skip_rebuild_never_builds(
@@ -340,6 +365,7 @@ def test_from_build_setting_enables_export_without_flag(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
+    _stub_compile_frontend: mock.MagicMock,
 ) -> None:
     """Setting ``REFLEX_DJANGO_SERVE_FROM_BUILD = True`` opts into from-build.
 
@@ -361,6 +387,11 @@ def test_from_build_setting_enables_export_without_flag(
     Command().handle()  # no flags at all
 
     export_call.assert_called_once()
+    name, *_ = export_call.call_args.args
+    assert name == "export_reflex"
+    assert export_call.call_args.kwargs.get("env") == "dev"
+    assert export_call.call_args.kwargs.get("stage_to_static_root") is False
+    _stub_compile_frontend.assert_not_called()
     import os
 
     assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
@@ -467,6 +498,7 @@ def test_explicit_from_build_beats_with_vite(
     monkeypatch: pytest.MonkeyPatch,
     _force_django_outer_mode: None,
     _stub_asgi_server: mock.MagicMock,
+    _stub_compile_frontend: mock.MagicMock,
 ) -> None:
     """If the user passes both ``--from-build`` and ``--with-vite`` (silly), the
     explicit ``--from-build`` wins.
@@ -485,6 +517,10 @@ def test_explicit_from_build_beats_with_vite(
     Command().handle(from_build=True, with_vite=True)
 
     export_call.assert_called_once()
+    name, *_ = export_call.call_args.args
+    assert name == "export_reflex"
+    assert export_call.call_args.kwargs.get("env") == "dev"
+    _stub_compile_frontend.assert_not_called()
     vite_spawn.assert_not_called()
 
 
@@ -911,3 +947,77 @@ def test_invoke_reflex_run_clears_unused_ports_in_config(
     assert mock_config.backend_port == 8000
     assert captured_get_config_frontend_port is None
     assert captured_get_config_backend_port == 8000
+
+
+def test_env_dev_compiles_to_web_with_single_port_compile_dev(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+    _stub_asgi_server: mock.MagicMock,
+) -> None:
+    """``--env dev`` compiles to ``.web/``, rebuilds on save, no Vite dev server."""
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    compile_disk = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._compile_dev_disk_bundle_once",
+        compile_disk,
+    )
+    start_recompile_watch = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django._frontend_runner.start_compile_dev_watch",
+        start_recompile_watch,
+    )
+    spawn_uvicorn = mock.MagicMock(return_value=mock.Mock(poll=lambda: None))
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._spawn_uvicorn_dev_subprocess",
+        spawn_uvicorn,
+    )
+    invoke = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
+    )
+
+    from django.conf import settings
+
+    monkeypatch.setattr(
+        settings, "REFLEX_DJANGO_SERVE_FROM_BUILD", True, raising=False
+    )
+
+    Command().handle(env="dev")
+
+    export_call.assert_not_called()
+    compile_disk.assert_called_once()
+    start_recompile_watch.assert_called_once()
+    spawn_uvicorn.assert_called_once()
+    invoke.assert_not_called()
+    import os
+
+    assert os.environ.get("REFLEX_DJANGO_COMPILE_DEV") == "1"
+    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+    assert os.environ.get("REFLEX_DJANGO_SEPARATE_DEV_PORTS") == "0"
+
+
+def test_env_dev_with_vite_opts_out(
+    monkeypatch: pytest.MonkeyPatch,
+    _force_django_outer_mode: None,
+) -> None:
+    """``--env dev --with-vite`` runs the native two-port ``reflex run`` loop."""
+    export_call = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    watch_reload = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._run_with_watch_reload",
+        watch_reload,
+    )
+    invoke = mock.MagicMock()
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
+    )
+
+    Command().handle(env="dev", with_vite=True)
+
+    export_call.assert_not_called()
+    watch_reload.assert_not_called()
+    invoke.assert_called_once()

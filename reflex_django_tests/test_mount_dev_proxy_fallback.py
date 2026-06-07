@@ -23,6 +23,7 @@ def _isolate_dev_proxy_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mount, "_vite_unreachable_until", 0.0, raising=False)
     monkeypatch.setattr(mount, "_vite_unreachable_logged", False, raising=False)
     monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
+    monkeypatch.delenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", raising=False)
 
 
 class _FakeRequest:

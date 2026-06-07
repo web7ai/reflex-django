@@ -39,6 +39,7 @@ class _RunnerArgs:
 
     frontend_port: int
     compile_only: bool
+    compile_and_build: bool
     watch: bool
     skip_compile: bool
 
@@ -66,6 +67,16 @@ def _parse_argv(argv: list[str]) -> _RunnerArgs:
             "Bootstrap reflex-django, compile the SPA into `.web`, then exit "
             "without starting Vite. Used by the watch loop to recompile in a "
             "fresh interpreter so edited modules are picked up."
+        ),
+    )
+    parser.add_argument(
+        "--compile-and-build",
+        dest="compile_and_build",
+        action="store_true",
+        help=(
+            "Compile the SPA into `.web`, run Reflex's Python frontend build "
+            "(``setup_frontend`` + ``build.build``), then exit. Used by "
+            "compile-dev watch to refresh the disk bundle after Reflex edits."
         ),
     )
     parser.add_argument(
@@ -97,6 +108,7 @@ def _parse_argv(argv: list[str]) -> _RunnerArgs:
     return _RunnerArgs(
         frontend_port=int(port),
         compile_only=bool(args.compile_only),
+        compile_and_build=bool(args.compile_and_build),
         watch=bool(args.watch),
         skip_compile=bool(args.skip_compile),
     )
@@ -226,7 +238,7 @@ def _resolve_watch_paths() -> list[Path]:
     return roots
 
 
-def _recompile_in_subprocess(port: int) -> None:
+def _recompile_in_subprocess(port: int, *, compile_and_build: bool = False) -> None:
     """Recompile the SPA in a fresh interpreter so edited modules are reloaded.
 
     Recompiling in-process would re-use the already-imported (stale) Reflex
@@ -234,15 +246,19 @@ def _recompile_in_subprocess(port: int) -> None:
     edit. Spawning ``python -m reflex_django._frontend_runner --compile-only``
     gives us a clean import every time; Vite (still running in this process)
     then hot-reloads from the freshly written ``.web`` output.
+
+    When ``compile_and_build`` is True, the subprocess also runs Reflex's
+    Python frontend build so the disk bundle under ``.web/build/client`` updates.
     """
     cmd = [
         sys.executable,
         "-m",
         "reflex_django._frontend_runner",
-        "--frontend-port",
-        str(port),
-        "--compile-only",
     ]
+    if compile_and_build:
+        cmd.append("--compile-and-build")
+    else:
+        cmd.extend(["--frontend-port", str(port), "--compile-only"])
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         print(
@@ -250,8 +266,13 @@ def _recompile_in_subprocess(port: int) -> None:
             "bundle. Fix the error above and save again.",
             file=sys.stderr,
         )
+    elif compile_and_build:
+        print(
+            "reflex-django: recompiled and rebuilt `.web/build/client` "
+            "(browser will auto-reload)."
+        )
     else:
-        print("reflex-django: recompiled `.web` — Vite hot-reloading frontend.")
+        print("reflex-django: recompiled `.web` - Vite hot-reloading frontend.")
 
 
 def _start_watch_thread(port: int) -> threading.Thread | None:
@@ -338,6 +359,10 @@ def main(argv: list[str] | None = None) -> int:
     _bootstrap_integration()
     _apply_persistent_frontend_port(args.frontend_port)
 
+    if args.compile_and_build:
+        build_frontend_disk_bundle(compile_first=True)
+        return 0
+
     if args.compile_only:
         # Re-raise SystemExit so a non-zero exit propagates to the watch loop.
         _compile_app_for_frontend()
@@ -355,6 +380,243 @@ def main(argv: list[str] | None = None) -> int:
         return _run_vite(args.frontend_port)
     except KeyboardInterrupt:
         return 0
+
+
+BUILD_ID_PATH = "/__reflex_django/dev/build-id"
+COMPILE_DEV_CLIENT_BACKUP_DIRNAME = ".compile-dev-client-backup"
+
+
+def compile_dev_client_backup_dir() -> Path:
+    """Return the directory that holds the previous client bundle during rebuilds."""
+    from reflex.utils.prerequisites import get_web_dir
+
+    return get_web_dir() / COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+
+
+def _backup_client_bundle_before_build() -> None:
+    """Copy the current client bundle aside before Reflex wipes ``.web/build``."""
+    import shutil
+
+    from reflex.utils import path_ops
+    from reflex.utils.prerequisites import get_web_dir
+    from reflex_base import constants as reflex_constants
+
+    wdir = get_web_dir()
+    static_dir = wdir / reflex_constants.Dirs.STATIC
+    if not (static_dir / "index.html").is_file():
+        return
+    backup = compile_dev_client_backup_dir()
+    path_ops.rm(str(backup))
+    shutil.copytree(static_dir, backup)
+
+
+def _clear_compile_dev_client_backup() -> None:
+    """Remove the compile-dev backup after a successful frontend build."""
+    from reflex.utils import path_ops
+
+    backup = compile_dev_client_backup_dir()
+    if backup.is_dir():
+        path_ops.rm(str(backup))
+
+
+def build_id_for_disk_bundle() -> str:
+    """Return a token that changes whenever the SPA index.html is rebuilt."""
+    try:
+        from reflex_django.views.mount import _resolve_spa_index
+
+        index = _resolve_spa_index()
+    except Exception:  # noqa: BLE001
+        index = None
+    if index is None:
+        return "missing"
+    try:
+        stat = index.stat()
+        return f"{stat.st_mtime_ns}:{stat.st_size}"
+    except OSError:
+        return "missing"
+
+
+def _ensure_dev_env_mode() -> None:
+    from reflex_base import constants as reflex_constants
+    from reflex_base.environment import environment
+
+    environment.REFLEX_ENV_MODE.set(reflex_constants.Env.DEV)
+
+
+def _finalize_reflex_client_build(*, compress: bool = False) -> None:
+    """Mirror ``reflex.utils.build.build`` post-processing without the JS subprocess."""
+    from pathlib import PosixPath
+
+    from reflex.utils import build as reflex_build
+    from reflex.utils import path_ops
+    from reflex.utils.prerequisites import get_web_dir
+    from reflex_base import constants as reflex_constants
+    from reflex_base.config import get_config
+
+    wdir = get_web_dir()
+    static_dir = wdir / reflex_constants.Dirs.STATIC
+    config = get_config()
+
+    reflex_build._duplicate_index_html_to_parent_directory(static_dir)
+
+    for plugin in config.plugins:
+        plugin.post_build(static_dir=static_dir)
+
+    spa_fallback = static_dir / reflex_constants.ReactRouter.SPA_FALLBACK
+    if not spa_fallback.exists():
+        spa_fallback = static_dir / "index.html"
+    if spa_fallback.exists():
+        path_ops.cp(spa_fallback, static_dir / "404.html")
+
+    if compress:
+        reflex_build._compress_static_output(
+            static_dir,
+            tuple(config.frontend_compression_formats),
+        )
+
+    if frontend_path := config.frontend_path.strip("/"):
+        frontend_path = PosixPath(frontend_path)
+        first_part = frontend_path.parts[0]
+        for child in list(static_dir.iterdir()):
+            if child.is_dir() and child.name == first_part:
+                continue
+            path_ops.mv(
+                child,
+                static_dir / frontend_path / child.name,
+            )
+
+
+def _run_compile_dev_frontend_export() -> None:
+    """Run Reflex's ``run export`` step without ``build.build()``'s production UI."""
+    from reflex.utils import js_runtimes, path_ops, prerequisites
+    from reflex_base import constants as reflex_constants
+
+    wdir = prerequisites.get_web_dir()
+    path_ops.rm(str(wdir / reflex_constants.Dirs.BUILD_DIR))
+    js_runtimes.validate_frontend_dependencies(init=False)
+    cmd = [
+        *js_runtimes.get_js_package_executor(raise_on_none=True)[0],
+        "run",
+        "export",
+    ]
+    env = {**os.environ, "NO_COLOR": "1"}
+    print(
+        "reflex-django: building frontend bundle (compile-dev)...",
+        flush=True,
+    )
+    result = subprocess.run(
+        cmd,
+        cwd=wdir,
+        env=env,
+        check=False,
+        shell=reflex_constants.IS_WINDOWS,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Reflex frontend export failed with exit code "
+            f"{result.returncode}."
+        )
+
+
+def build_frontend_client_bundle() -> None:
+    """Build the servable client bundle for compile-dev mode.
+
+    Uses the same ``run export`` subprocess as ``reflex.utils.build.build``,
+    but skips Reflex's hard-coded "Creating Production Build" progress bar
+    (that label is used even when ``REFLEX_ENV_MODE=dev``).
+    """
+    from reflex.utils import build as reflex_build
+    from reflex.utils.prerequisites import get_web_dir
+    from reflex_base import constants as reflex_constants
+
+    _ensure_dev_env_mode()
+    _backup_client_bundle_before_build()
+    reflex_build.setup_frontend(Path.cwd())
+    try:
+        _run_compile_dev_frontend_export()
+        _finalize_reflex_client_build(compress=False)
+    except RuntimeError:
+        raise
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+        raise RuntimeError(
+            f"Reflex frontend build failed (exit {code})."
+        ) from exc
+    static_dir = get_web_dir() / reflex_constants.Dirs.STATIC
+    if (static_dir / "index.html").is_file():
+        _clear_compile_dev_client_backup()
+
+
+def build_frontend_disk_bundle(*, compile_first: bool = True) -> None:
+    """Compile the Reflex app, then build the servable client bundle via Reflex."""
+    if compile_first:
+        _compile_app_for_frontend()
+    build_frontend_client_bundle()
+
+
+def run_client_build() -> None:
+    """Backward-compatible alias for :func:`build_frontend_client_bundle`."""
+    build_frontend_client_bundle()
+
+
+def run_vite_client_build(*, watch: bool = False) -> subprocess.Popen[bytes] | None:
+    """Backward-compatible alias for :func:`build_frontend_client_bundle`."""
+    if watch:
+        raise RuntimeError(
+            "compile-dev watch rebuilds via --compile-and-build, not a watch subprocess."
+        )
+    build_frontend_client_bundle()
+    return None
+
+
+def start_compile_dev_watch() -> threading.Thread | None:
+    """Watch ``.py`` files and recompile + rebuild the disk bundle on save."""
+    try:
+        from watchfiles import PythonFilter, watch
+
+        from reflex_django.dev_watch import (
+            WATCH_DEBOUNCE_MS,
+            build_frontend_watch_filter,
+        )
+    except Exception:  # noqa: BLE001
+        print(
+            "reflex-django: `watchfiles` is not installed — compile dev watch disabled.",
+            file=sys.stderr,
+        )
+        return None
+
+    watch_paths = [str(p) for p in _resolve_watch_paths()]
+    watch_filter = build_frontend_watch_filter(PythonFilter)
+
+    def _loop() -> None:
+        try:
+            for changes in watch(
+                *watch_paths,
+                watch_filter=watch_filter,
+                debounce=WATCH_DEBOUNCE_MS,
+                step=50,
+                yield_on_timeout=False,
+                raise_interrupt=False,
+            ):
+                if changes:
+                    _recompile_in_subprocess(0, compile_and_build=True)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"reflex-django: compile dev watch stopped ({exc!r}).",
+                file=sys.stderr,
+            )
+
+    thread = threading.Thread(
+        target=_loop,
+        name="reflex-django-compile-dev-watch",
+        daemon=True,
+    )
+    thread.start()
+    print(
+        "reflex-django: watching "
+        f"{', '.join(watch_paths)} for Reflex edits (compile + Reflex build)."
+    )
+    return thread
 
 
 if __name__ == "__main__":

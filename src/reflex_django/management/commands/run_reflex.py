@@ -167,16 +167,20 @@ class Command(BaseCommand):
         backend_only = bool(options.get("backend_only"))
         skip_rebuild = bool(options.get("skip_rebuild"))
 
-        # Resolve from-build mode. The Vite-HMR dev loop is the default now;
-        # from-build is the opt-in. Precedence, highest first:
+        # Resolve from-build mode. Precedence, highest first:
         #   1. ``--env prod``                       → True  (always export and serve from disk)
-        #   2. ``--with-vite`` / ``--no-from-build``→ False (explicit Vite opt-in)
-        #   3. ``--from-build``                     → True  (explicit serve-from-disk)
-        #   4. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default False)
+        #   2. ``--env dev`` (explicit)             → False (compile + Reflex build; browse ``:8000``)
+        #   3. ``--with-vite`` / ``--no-from-build``→ False (explicit two-port Vite opt-in)
+        #   4. ``--from-build``                     → True  (explicit serve-from-disk export)
+        #   5. ``REFLEX_DJANGO_SERVE_FROM_BUILD``   → from settings/env (default False)
         with_vite = bool(options.get("with_vite"))
         explicit_from_build = bool(options.get("from_build"))
+        is_env_dev = options.get("env") == "dev"
+        is_single_port_dev = is_env_dev and not with_vite
         if is_prod:
             from_build = True
+        elif is_env_dev:
+            from_build = False
         elif with_vite and not explicit_from_build:
             from_build = False
         elif explicit_from_build:
@@ -201,10 +205,12 @@ class Command(BaseCommand):
         # spawn, no dev proxy, and a pre-flight SPA check. ``--env prod``
         # additionally flips DEBUG off so the default settings stop honoring
         # development conveniences.
-        serve_from_disk = is_prod or from_build
+        serve_from_disk = is_prod or from_build or is_single_port_dev
         if serve_from_disk:
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
             os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "0"
+        if is_single_port_dev:
+            os.environ["REFLEX_DJANGO_COMPILE_DEV"] = "1"
         if is_prod:
             os.environ.setdefault("REFLEX_DJANGO_DEBUG", "0")
 
@@ -212,7 +218,18 @@ class Command(BaseCommand):
         # kicks in so the user sees what mode they are in. Plain
         # ``manage.py run_reflex`` (no flags) lands in the Vite-HMR branch by
         # default; ``--from-build`` opts into the serve-from-disk loop.
-        if from_build and not is_prod:
+        if is_single_port_dev and not backend_only:
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(
+                    "reflex-django: single-port compile dev (--env dev) - "
+                    "compiles to `.web/`, runs Reflex's Python frontend build, "
+                    f"and serves the bundle from Django on port {backend_port}.\n"
+                    "    No Vite dev server, no zip export. The browser "
+                    "auto-reloads when the bundle changes. Pass `--with-vite` "
+                    "for native two-port Vite HMR on :3000 instead."
+                )
+            )
+        elif from_build and not is_prod:
             mode_label = (
                 "--from-build (explicit)"
                 if explicit_from_build
@@ -237,10 +254,12 @@ class Command(BaseCommand):
                 )
             )
 
-        if from_build and not skip_rebuild:
+        if from_build and not skip_rebuild and not is_single_port_dev:
             # Rebuild the SPA before serving so the user sees the latest
             # Reflex page tree on every ``manage.py run_reflex``.
-            self._auto_export_for_build_mode()
+            self._auto_export_for_build_mode(env=env_name)
+        if is_single_port_dev and not skip_rebuild and not backend_only:
+            self._compile_dev_disk_bundle_once()
         if serve_from_disk:
             self._warn_if_spa_missing()
 
@@ -255,9 +274,7 @@ class Command(BaseCommand):
             )
             return
 
-        # Default Vite-HMR dev delegates to native ``reflex run`` (two-port layout).
-        # ``--from-build`` and ``--env prod`` keep custom paths.
-        if not serve_from_disk and not frontend_only:
+        if not serve_from_disk and not frontend_only and not is_single_port_dev:
             os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
             from reflex_django.auto_mount import refresh_reflex_mount_catchall
@@ -272,12 +289,9 @@ class Command(BaseCommand):
             )
             return
 
-        # Vite is active whenever we are not serving the SPA from disk and the
-        # user did not ask for a backend-only run. When Vite is active it owns
-        # the frontend recompile-on-change loop, so the backend must NOT use
-        # uvicorn's ``--reload`` (which would re-import the whole Django+Reflex
-        # ASGI stack and restart on every edit, defeating HMR).
-        vite_active = not serve_from_disk and not backend_only
+        # Vite dev server is active for the default two-port ``reflex run`` loop
+        # only. ``--env dev`` uses compile + Reflex ``build.build()`` instead.
+        vite_active = not serve_from_disk and not backend_only and not is_single_port_dev
         watch_frontend = vite_active and not options.get("no_reload")
 
         vite_proc: subprocess.Popen[bytes] | None = None
@@ -299,6 +313,17 @@ class Command(BaseCommand):
                 skip_compile=True,
             )
             self._start_vite_ready_notifier(frontend_port, vite_proc=vite_proc)
+        elif is_single_port_dev and not backend_only:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"reflex-django: compile dev — serving `.web/build/client` "
+                    f"from Django on port {backend_port} (no Vite dev server)."
+                )
+            )
+            if not options.get("no_reload") and not is_prod:
+                from reflex_django import _frontend_runner as frontend_runner
+
+                frontend_runner.start_compile_dev_watch()
         elif is_prod:
             self.stdout.write(
                 self.style.SUCCESS(
@@ -309,7 +334,7 @@ class Command(BaseCommand):
         elif from_build:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"reflex-django: serving freshly-staged SPA from disk "
+                    f"reflex-django: serving SPA from disk "
                     f"(no Vite). ASGI server on port {backend_port}.\n"
                     "    Re-run `python manage.py run_reflex` to rebuild after "
                     "any Reflex page change. Python/Django edits auto-reload."
@@ -333,7 +358,12 @@ class Command(BaseCommand):
         # after the reload succeeds. Running uvicorn as a subprocess with a
         # parent-side :mod:`watchfiles` loop gives us a clean process restart
         # AND a guaranteed re-export on every change.
-        use_parent_watch = from_build and reload_enabled and not backend_only
+        use_parent_watch = (
+            from_build
+            and reload_enabled
+            and not backend_only
+            and not is_single_port_dev
+        )
         # With Vite active, uvicorn in-process ``--reload`` is much faster than
         # spawning a fresh subprocess.  Frontend and backend watchers are split
         # via ``reload_excludes`` / the frontend-runner filter so they no longer
@@ -348,7 +378,19 @@ class Command(BaseCommand):
                     port=backend_port,
                     loglevel=loglevel,
                     skip_rebuild=skip_rebuild,
+                    env=env_name,
                 )
+            elif is_single_port_dev and not backend_only:
+                backend_proc = self._spawn_uvicorn_dev_subprocess(
+                    host=backend_host,
+                    port=backend_port,
+                    loglevel=loglevel,
+                    reload=backend_reload,
+                )
+                try:
+                    backend_proc.wait()
+                except KeyboardInterrupt:
+                    pass
             elif vite_active and vite_proc is not None:
                 # In-process ``uvicorn.run(..., reload=True)`` while a Vite child
                 # process is running can hang on Windows before binding :8000.
@@ -374,18 +416,21 @@ class Command(BaseCommand):
                 )
         finally:
             self._stop_uvicorn_subprocess(backend_proc)
-            if vite_proc is not None and vite_proc.poll() is None:
-                self.stdout.write(
-                    self.style.NOTICE("reflex-django: stopping Vite.")
-                )
-                try:
-                    if sys.platform == "win32":
-                        vite_proc.terminate()
-                    else:
-                        vite_proc.send_signal(signal.SIGINT)
-                    vite_proc.wait(timeout=5)
-                except Exception:  # noqa: BLE001
-                    vite_proc.kill()
+            for proc, label in (
+                (vite_proc, "Vite"),
+            ):
+                if proc is not None and proc.poll() is None:
+                    self.stdout.write(
+                        self.style.NOTICE(f"reflex-django: stopping {label}.")
+                    )
+                    try:
+                        if sys.platform == "win32":
+                            proc.terminate()
+                        else:
+                            proc.send_signal(signal.SIGINT)
+                        proc.wait(timeout=5)
+                    except Exception:  # noqa: BLE001
+                        proc.kill()
 
     def _setting_serve_from_build(self) -> bool:
         """Return whether ``settings.REFLEX_DJANGO_SERVE_FROM_BUILD`` is on.
@@ -409,7 +454,7 @@ class Command(BaseCommand):
         except Exception:  # noqa: BLE001
             return False
 
-    def _auto_export_for_build_mode(self) -> None:
+    def _auto_export_for_build_mode(self, env: str = "prod") -> None:
         """Run the export command in-process before serving the SPA.
 
         Equivalent to running:
@@ -430,10 +475,24 @@ class Command(BaseCommand):
         from django.core.management import call_command
         from django.core.management.base import CommandError
 
+        try:
+            from django.conf import settings
+            has_static_root = bool(getattr(settings, "STATIC_ROOT", None))
+        except Exception:
+            has_static_root = False
+
+        # Dev/from-build serves from ``.web/`` only; prod may stage into STATIC_ROOT.
+        stage_to_static = env != "dev" and has_static_root
+        if env == "dev":
+            stage_desc = "built to .web (not staged to STATIC_ROOT)"
+        elif stage_to_static:
+            stage_desc = "staged into STATIC_ROOT/_reflex"
+        else:
+            stage_desc = "unstaged"
         self.stdout.write(
             self.style.NOTICE(
-                "reflex-django: auto-exporting Reflex SPA "
-                "(frontend-only, no-zip, staged into STATIC_ROOT/_reflex)..."
+                f"reflex-django: auto-exporting Reflex SPA "
+                f"(frontend-only, no-zip, {stage_desc}, env={env})..."
             )
         )
         start = time.monotonic()
@@ -442,8 +501,8 @@ class Command(BaseCommand):
                 "export_reflex",
                 frontend_only=True,
                 no_zip=True,
-                stage_to_static_root=True,
-                env="prod",
+                stage_to_static_root=stage_to_static,
+                env=env,
             )
         except CommandError as exc:
             self.stdout.write(
@@ -544,6 +603,54 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"reflex-django: compile finished in {elapsed:.1f}s — starting "
                 "frontend and backend together."
+            )
+        )
+        self.stdout.flush()
+
+    def _compile_dev_disk_bundle_once(self) -> None:
+        """Compile to ``.web/`` and run Reflex's Python frontend build."""
+        from reflex_django import _frontend_runner as frontend_runner
+        from reflex_django.views.mount import _resolve_spa_index
+
+        self.stdout.write(
+            self.style.NOTICE(
+                "reflex-django: compiling Reflex app to `.web/` (env=dev)..."
+            )
+        )
+        start = time.monotonic()
+        try:
+            frontend_runner._compile_app_for_frontend()
+        except SystemExit:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CommandError(
+                f"reflex-django: frontend compile failed: {exc!r}"
+            ) from exc
+        elapsed = time.monotonic() - start
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"reflex-django: compile finished in {elapsed:.1f}s - "
+                "running Reflex frontend build..."
+            )
+        )
+        self.stdout.flush()
+        build_start = time.monotonic()
+        try:
+            frontend_runner.build_frontend_client_bundle()
+        except Exception as exc:  # noqa: BLE001
+            raise CommandError(
+                f"reflex-django: Reflex frontend build failed: {exc!r}"
+            ) from exc
+        build_elapsed = time.monotonic() - build_start
+        if _resolve_spa_index() is None:
+            raise CommandError(
+                "reflex-django: frontend build finished but no index.html was "
+                "found under `.web/build/client`, `.web/_static`, or "
+                "`.web/build`. Check the build output above."
+            )
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"reflex-django: frontend build finished in {build_elapsed:.1f}s."
             )
         )
         self.stdout.flush()
@@ -767,6 +874,7 @@ class Command(BaseCommand):
         port: int,
         loglevel: str,
         skip_rebuild: bool,
+        env: str = "dev",
     ) -> None:
         """Run uvicorn as a subprocess and re-export + restart on file changes.
 
@@ -842,7 +950,7 @@ class Command(BaseCommand):
 
                 self._stop_uvicorn_subprocess(proc)
                 if not skip_rebuild:
-                    self._auto_export_for_build_mode()
+                    self._auto_export_for_build_mode(env=env)
                 proc = self._spawn_uvicorn_subprocess(
                     host=host, port=port, loglevel=loglevel
                 )
