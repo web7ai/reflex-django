@@ -1,32 +1,44 @@
 /* ==========================================================================
-   reflex-django docs — modern pink theme
+   reflex-django docs — Django green + Reflex violet
    ========================================================================== */
 
 /* ---------- Color tokens ---------------------------------------------------- */
 
 :root {
-  /* Pink primary palette (light) */
-  --md-primary-fg-color:           #e91e63;
-  --md-primary-fg-color--light:    #f06292;
-  --md-primary-fg-color--dark:     #ad1457;
-  --md-accent-fg-color:            #ec407a;
-  --md-accent-fg-color--transparent: rgba(233, 30, 99, 0.10);
+  /* Reflex violet (reflex.dev marketing palette) */
+  --rd-reflex-50:  #FDFCFE;
+  --rd-reflex-100: #F4F0FE;
+  --rd-reflex-200: #EBE4FF;
+  --rd-reflex-300: #D4CAFE;
+  --rd-reflex-400: #AA99EC;
+  --rd-reflex-500: #6E56CF;
+  --rd-reflex-600: #654DC4;
+  --rd-reflex-700: #6550B9;
+  --rd-reflex-800: #2F265F;
+  --rd-reflex-900: #1E1640;
 
-  --rd-pink-50:   #fff0f5;
-  --rd-pink-100:  #fce4ec;
-  --rd-pink-200:  #f8bbd0;
-  --rd-pink-300:  #f48fb1;
-  --rd-pink-400:  #f06292;
-  --rd-pink-500:  #e91e63;
-  --rd-pink-600:  #d81b60;
-  --rd-pink-700:  #c2185b;
-  --rd-pink-800:  #ad1457;
-  --rd-pink-900:  #880e4f;
+  /* Django green (official #092E20 + djangoproject.com accents) */
+  --rd-django-50:  #EEF7F2;
+  --rd-django-100: #D4EDE2;
+  --rd-django-200: #AADBC6;
+  --rd-django-300: #74C4A4;
+  --rd-django-400: #44B78B;
+  --rd-django-500: #2D9A6F;
+  --rd-django-600: #1A7A55;
+  --rd-django-700: #0C4B33;
+  --rd-django-800: #092E20;
+  --rd-django-900: #061F16;
+
+  --md-primary-fg-color:           var(--rd-django-800);
+  --md-primary-fg-color--light:    var(--rd-django-400);
+  --md-primary-fg-color--dark:     var(--rd-django-900);
+  --md-accent-fg-color:            var(--rd-reflex-500);
+  --md-accent-fg-color--transparent: rgba(110, 86, 207, 0.10);
 
   --rd-surface:        #ffffff;
-  --rd-surface-soft:   #fffafc;
-  --rd-border-soft:    rgba(233, 30, 99, 0.12);
-  --rd-border-strong:  rgba(233, 30, 99, 0.22);
+  --rd-surface-soft:   #FBFCFE;
+  --rd-border-soft:    rgba(9, 46, 32, 0.10);
+  --rd-border-strong:  rgba(110, 86, 207, 0.22);
   --rd-text-soft:      rgba(0, 0, 0, 0.62);
 
   --rd-radius-sm:  8px;
@@ -36,8 +48,8 @@
 
   --rd-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
   --rd-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --rd-shadow-md: 0 8px 24px rgba(233, 30, 99, 0.10), 0 2px 6px rgba(0, 0, 0, 0.04);
-  --rd-shadow-lg: 0 20px 50px rgba(233, 30, 99, 0.18), 0 8px 16px rgba(0, 0, 0, 0.06);
+  --rd-shadow-md: 0 8px 24px rgba(110, 86, 207, 0.10), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --rd-shadow-lg: 0 20px 50px rgba(9, 46, 32, 0.14), 0 8px 16px rgba(110, 86, 207, 0.10);
 
   --rd-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -50,29 +62,29 @@
   --rd-font-size-ui-small:     0.8125rem;
 }
 
-/* Light scheme — pink everywhere */
+/* Light scheme — Django structure, Reflex accents */
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color:        #e91e63;
-  --md-accent-fg-color:         #ec407a;
-  --md-default-bg-color:        #fffafc;
-  --md-typeset-a-color:         #c2185b;
-  --md-code-bg-color:           #fff0f5;
-  --md-code-fg-color:           #880e4f;
+  --md-primary-fg-color:        var(--rd-django-800);
+  --md-accent-fg-color:         var(--rd-reflex-500);
+  --md-default-bg-color:        var(--rd-surface-soft);
+  --md-typeset-a-color:         var(--rd-reflex-600);
+  --md-code-bg-color:           var(--rd-reflex-100);
+  --md-code-fg-color:           var(--rd-django-800);
 }
 
-/* Dark scheme — keep ink black, accent stays pink */
+/* Dark scheme — Reflex slate surfaces, violet + green accents */
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color:        #0f0f12;
-  --md-accent-fg-color:         #f06292;
-  --md-default-bg-color:        #0f0f12;
-  --md-typeset-a-color:         #f48fb1;
-  --rd-surface:                 #15151a;
-  --rd-surface-soft:            #1a1a20;
+  --md-primary-fg-color:        #141619;
+  --md-accent-fg-color:         var(--rd-reflex-400);
+  --md-default-bg-color:        #141619;
+  --md-typeset-a-color:         var(--rd-reflex-300);
+  --rd-surface:                 #1B1D20;
+  --rd-surface-soft:            #141619;
   --rd-border-soft:             rgba(255, 255, 255, 0.06);
-  --rd-border-strong:           rgba(244, 143, 177, 0.30);
+  --rd-border-strong:           rgba(170, 153, 236, 0.28);
   --rd-text-soft:               rgba(255, 255, 255, 0.62);
-  --md-code-bg-color:           rgba(244, 143, 177, 0.08);
-  --md-code-fg-color:           #f8bbd0;
+  --md-code-bg-color:           rgba(110, 86, 207, 0.12);
+  --md-code-fg-color:           var(--rd-reflex-300);
 }
 
 /* ---------- Global ---------------------------------------------------------- */
@@ -88,11 +100,11 @@ body, .md-typeset {
   line-height: 1.75;
 }
 
-/* Subtle pink wash on the page background (light mode) */
+/* Subtle Django + Reflex wash on the page background (light mode) */
 [data-md-color-scheme="default"] .md-main {
   background:
-    radial-gradient(1200px 600px at 100% -10%, rgba(244, 143, 177, 0.10), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(248, 187, 208, 0.18), transparent 60%);
+    radial-gradient(1200px 600px at 100% -10%, rgba(110, 86, 207, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(68, 183, 139, 0.12), transparent 60%);
 }
 
 /* ---------- Header --------------------------------------------------------- */
@@ -100,13 +112,13 @@ body, .md-typeset {
 .md-header {
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
-  background: linear-gradient(135deg, #d81b60 0%, #ad1457 100%);
+  background: linear-gradient(135deg, var(--rd-django-800) 0%, var(--rd-reflex-600) 100%);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, var(--rd-shadow-sm);
 }
 
 [data-md-color-scheme="slate"] .md-header {
   background: linear-gradient(135deg, #15151a 0%, #1a1a20 100%);
-  border-bottom: 1px solid rgba(244, 143, 177, 0.10);
+  border-bottom: 1px solid rgba(170, 153, 236, 0.12);
 }
 
 /* Hide the (removed) logo slot completely so it doesn't reserve space. */
@@ -136,7 +148,7 @@ body, .md-typeset {
 
 [data-md-color-scheme="slate"] .md-tabs {
   background: rgba(0, 0, 0, 0.25);
-  border-top: 1px solid rgba(244, 143, 177, 0.06);
+  border-top: 1px solid rgba(170, 153, 236, 0.08);
 }
 
 .md-tabs__link {
@@ -161,7 +173,7 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .md-nav__title {
-  color: var(--rd-pink-300);
+  color: var(--rd-reflex-300);
 }
 
 .md-nav__link {
@@ -183,7 +195,7 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .md-nav__link--active {
-  color: var(--rd-pink-300);
+  color: var(--rd-reflex-300);
 }
 
 /* ---------- Typography ----------------------------------------------------- */
@@ -194,7 +206,7 @@ body, .md-typeset {
   font-size: 2.2rem;
   line-height: 1.15;
   margin-bottom: 1.2rem;
-  background: linear-gradient(135deg, var(--rd-pink-700), var(--rd-pink-500));
+  background: linear-gradient(135deg, var(--rd-django-800), var(--rd-reflex-500));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -202,7 +214,7 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .md-typeset h1 {
-  background: linear-gradient(135deg, #ffffff 0%, #f8bbd0 100%);
+  background: linear-gradient(135deg, #ffffff 0%, var(--rd-reflex-300) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -236,24 +248,24 @@ body, .md-typeset {
    Code blocks — modern, dark, professional (FastAPI / Vercel / Linear style)
    ========================================================================== */
 
-/* Inline code — soft pink chip in light mode, soft pink-tinted in dark. */
+/* Inline code — soft Reflex violet chip in light mode, tinted in dark. */
 .md-typeset code {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: var(--rd-font-size-code-inline);
   font-weight: 500;
   padding: 1px 7px;
   border-radius: 6px;
-  background: linear-gradient(180deg, #fff0f5 0%, #ffe4ee 100%);
-  color: var(--rd-pink-800);
-  border: 1px solid rgba(233, 30, 99, 0.16);
-  box-shadow: 0 1px 0 rgba(233, 30, 99, 0.04) inset;
+  background: linear-gradient(180deg, var(--rd-reflex-100) 0%, var(--rd-django-50) 100%);
+  color: var(--rd-django-800);
+  border: 1px solid rgba(110, 86, 207, 0.18);
+  box-shadow: 0 1px 0 rgba(9, 46, 32, 0.04) inset;
   word-break: break-word;
 }
 
 [data-md-color-scheme="slate"] .md-typeset code {
-  background: rgba(244, 143, 177, 0.10);
-  color: #f8bbd0;
-  border-color: rgba(244, 143, 177, 0.25);
+  background: rgba(110, 86, 207, 0.12);
+  color: var(--rd-reflex-300);
+  border-color: rgba(170, 153, 236, 0.28);
   box-shadow: none;
 }
 
@@ -288,11 +300,11 @@ body, .md-typeset {
     0 4px 14px -8px rgba(20, 14, 27, 0.25);
 }
 
-/* Light mode: a touch of pink glow around the dark code block. */
+/* Light mode: a touch of violet glow around the dark code block. */
 [data-md-color-scheme="default"] .md-typeset .highlight,
 [data-md-color-scheme="default"] .md-typeset .highlighttable {
   box-shadow:
-    0 14px 40px -16px rgba(233, 30, 99, 0.18),
+    0 14px 40px -16px rgba(110, 86, 207, 0.16),
     0 4px 14px -8px rgba(20, 14, 27, 0.18);
 }
 
@@ -403,14 +415,14 @@ body, .md-typeset {
 
 .md-typeset .highlight pre::-webkit-scrollbar-thumb:hover,
 .md-typeset .highlighttable pre::-webkit-scrollbar-thumb:hover {
-  background: rgba(244, 143, 177, 0.45);
+  background: rgba(110, 86, 207, 0.45);
 }
 
 /* ---------- Highlighted "current line" / range --------------------------- */
 
 .md-typeset .highlight .hll {
-  background: rgba(244, 143, 177, 0.10);
-  border-left: 2px solid var(--rd-pink-400);
+  background: rgba(110, 86, 207, 0.10);
+  border-left: 2px solid var(--rd-reflex-400);
   margin: 0 -20px;
   padding-left: 18px;
 }
@@ -469,15 +481,15 @@ body, .md-typeset {
 .md-typeset .highlight .md-clipboard:hover,
 .md-typeset .highlighttable .md-clipboard:hover,
 .md-typeset .md-clipboard:hover {
-  background-color: rgba(244, 143, 177, 0.32) !important;
-  border-color: rgba(244, 143, 177, 0.60) !important;
+  background-color: rgba(110, 86, 207, 0.32) !important;
+  border-color: rgba(110, 86, 207, 0.60) !important;
   transform: scale(1.06);
 }
 
 .md-typeset .highlight .md-clipboard:focus-visible,
 .md-typeset .highlighttable .md-clipboard:focus-visible,
 .md-typeset .md-clipboard:focus-visible {
-  outline: 2px solid var(--rd-pink-300) !important;
+  outline: 2px solid var(--rd-reflex-300) !important;
   outline-offset: 2px;
 }
 
@@ -591,7 +603,7 @@ body, .md-typeset {
 .md-typeset .highlight .nf,
 .md-typeset .highlight .fm  { color: #7aa2f7; }
 
-/* Built-ins and self/cls (pink — matches our theme) */
+/* Built-ins and self/cls (violet accent) */
 .md-typeset .highlight .nb,
 .md-typeset .highlight .bp  { color: #f7768e; font-style: italic; }
 
@@ -632,16 +644,16 @@ body, .md-typeset {
 }
 
 .md-typeset table:not([class]) th {
-  background: linear-gradient(180deg, var(--rd-pink-50), #fff);
+  background: linear-gradient(180deg, var(--rd-django-50), #fff);
   font-weight: 700;
   letter-spacing: 0.01em;
   border-bottom: 1px solid var(--rd-border-soft);
-  color: var(--rd-pink-800);
+  color: var(--rd-django-800);
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
-  background: linear-gradient(180deg, rgba(244, 143, 177, 0.08), transparent);
-  color: var(--rd-pink-200);
+  background: linear-gradient(180deg, rgba(68, 183, 139, 0.10), transparent);
+  color: var(--rd-django-300);
 }
 
 .md-typeset table:not([class]) td {
@@ -653,11 +665,11 @@ body, .md-typeset {
 }
 
 .md-typeset table:not([class]) tr:hover td {
-  background: rgba(252, 228, 236, 0.35);
+  background: rgba(212, 237, 226, 0.45);
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover td {
-  background: rgba(244, 143, 177, 0.05);
+  background: rgba(110, 86, 207, 0.05);
 }
 
 /* ---------- Admonitions ---------------------------------------------------- */
@@ -693,7 +705,7 @@ body, .md-typeset {
 }
 
 .md-button--primary {
-  background: linear-gradient(135deg, var(--rd-pink-500), var(--rd-pink-700));
+  background: linear-gradient(135deg, var(--rd-django-700), var(--rd-reflex-600));
   color: #fff;
   border-color: transparent;
 }
@@ -728,7 +740,7 @@ body, .md-typeset {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--rd-pink-400), var(--rd-pink-600));
+  background: linear-gradient(90deg, var(--rd-django-400), var(--rd-reflex-500));
   opacity: 0;
   transition: opacity 0.25s var(--rd-ease);
 }
@@ -749,7 +761,7 @@ body, .md-typeset {
   font-size: 1.05rem !important;
   font-weight: 700;
   letter-spacing: -0.01em;
-  background: linear-gradient(135deg, var(--rd-pink-700), var(--rd-pink-500));
+  background: linear-gradient(135deg, var(--rd-django-800), var(--rd-reflex-500));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -757,7 +769,7 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .path-card h3 {
-  background: linear-gradient(135deg, #fff 0%, var(--rd-pink-300) 100%);
+  background: linear-gradient(135deg, #fff 0%, var(--rd-reflex-300) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -792,7 +804,7 @@ body, .md-typeset {
   font-size: clamp(2.6rem, 6vw, 4rem);
   letter-spacing: -0.04em;
   line-height: 1;
-  background: linear-gradient(135deg, var(--rd-pink-700) 0%, var(--rd-pink-500) 50%, #ff6b9d 100%);
+  background: linear-gradient(135deg, var(--rd-django-800) 0%, var(--rd-reflex-500) 50%, var(--rd-reflex-300) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -801,7 +813,7 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .rd-hero__brand {
-  background: linear-gradient(135deg, #ffffff 0%, #f8bbd0 50%, #f06292 100%);
+  background: linear-gradient(135deg, #ffffff 0%, var(--rd-reflex-300) 50%, var(--rd-django-300) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -831,12 +843,12 @@ body, .md-typeset {
 /* ---------- Footer --------------------------------------------------------- */
 
 .md-footer {
-  background: linear-gradient(180deg, var(--md-primary-fg-color--dark), #6b0b3e);
+  background: linear-gradient(180deg, var(--rd-django-900), var(--rd-reflex-800));
 }
 
 [data-md-color-scheme="slate"] .md-footer {
   background: #0a0a0d;
-  border-top: 1px solid rgba(244, 143, 177, 0.10);
+  border-top: 1px solid rgba(110, 86, 207, 0.10);
 }
 
 .md-footer-meta {
@@ -861,7 +873,7 @@ body, .md-typeset {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--rd-pink-400);
+  background: var(--rd-django-400);
 }
 
 /* ---------- Search ----------------------------------------------------- */
@@ -877,23 +889,23 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .md-search__input {
-  background: rgba(244, 143, 177, 0.08);
+  background: rgba(110, 86, 207, 0.08);
 }
 
 [data-md-color-scheme="slate"] .md-search__input:hover,
 [data-md-color-scheme="slate"] .md-search__input:focus {
-  background: rgba(244, 143, 177, 0.14);
+  background: rgba(110, 86, 207, 0.14);
 }
 
 /* ---------- Selection ----------------------------------------------------- */
 
 ::selection {
-  background: rgba(248, 187, 208, 0.55);
-  color: var(--rd-pink-900);
+  background: rgba(170, 153, 236, 0.45);
+  color: var(--rd-django-900);
 }
 
 [data-md-color-scheme="slate"] ::selection {
-  background: rgba(244, 143, 177, 0.30);
+  background: rgba(110, 86, 207, 0.30);
   color: #fff;
 }
 
@@ -972,9 +984,9 @@ body, .md-typeset {
   color: var(--md-default-fg-color);
 }
 
-.rd-path-card--beginner { border-top: 3px solid var(--rd-pink-300); }
-.rd-path-card--intermediate { border-top: 3px solid var(--rd-pink-500); }
-.rd-path-card--advanced { border-top: 3px solid var(--rd-pink-700); }
+.rd-path-card--beginner { border-top: 3px solid var(--rd-django-400); }
+.rd-path-card--intermediate { border-top: 3px solid var(--rd-reflex-500); }
+.rd-path-card--advanced { border-top: 3px solid var(--rd-django-800); }
 
 /* ---------- Level badges --------------------------------------------------- */
 
@@ -990,19 +1002,19 @@ body, .md-typeset {
   vertical-align: middle;
 }
 
-.rd-level--0 { background: var(--rd-pink-100); color: var(--rd-pink-800); }
-.rd-level--1 { background: rgba(233, 30, 99, 0.12); color: var(--rd-pink-700); }
-.rd-level--2 { background: rgba(233, 30, 99, 0.18); color: var(--rd-pink-800); }
-.rd-level--3 { background: rgba(173, 20, 87, 0.15); color: var(--rd-pink-900); }
-.rd-level--4 { background: rgba(136, 14, 79, 0.12); color: var(--rd-pink-900); }
+.rd-level--0 { background: var(--rd-django-100); color: var(--rd-django-800); }
+.rd-level--1 { background: rgba(68, 183, 139, 0.14); color: var(--rd-django-700); }
+.rd-level--2 { background: rgba(110, 86, 207, 0.12); color: var(--rd-reflex-700); }
+.rd-level--3 { background: rgba(110, 86, 207, 0.18); color: var(--rd-reflex-800); }
+.rd-level--4 { background: rgba(9, 46, 32, 0.12); color: var(--rd-django-900); }
 
-[data-md-color-scheme="slate"] .rd-level--0 { background: rgba(244, 143, 177, 0.12); color: var(--rd-pink-200); }
+[data-md-color-scheme="slate"] .rd-level--0 { background: rgba(68, 183, 139, 0.14); color: var(--rd-django-300); }
 [data-md-color-scheme="slate"] .rd-level--1,
 [data-md-color-scheme="slate"] .rd-level--2,
 [data-md-color-scheme="slate"] .rd-level--3,
 [data-md-color-scheme="slate"] .rd-level--4 {
-  background: rgba(244, 143, 177, 0.14);
-  color: var(--rd-pink-200);
+  background: rgba(110, 86, 207, 0.14);
+  color: var(--rd-reflex-200);
 }
 
 /* ---------- Instructor callouts ------------------------------------------ */
@@ -1012,7 +1024,7 @@ body, .md-typeset {
   margin: 1.25rem 0;
   border-radius: var(--rd-radius-md);
   border: 1px solid var(--rd-border-soft);
-  background: linear-gradient(135deg, var(--rd-pink-50) 0%, var(--rd-surface) 100%);
+  background: linear-gradient(135deg, var(--rd-django-50) 0%, var(--rd-surface) 100%);
   font-size: var(--rd-font-size-ui-small);
   line-height: 1.65;
 }
@@ -1022,6 +1034,6 @@ body, .md-typeset {
 }
 
 [data-md-color-scheme="slate"] .rd-instructor {
-  background: linear-gradient(135deg, rgba(244, 143, 177, 0.08) 0%, var(--rd-surface) 100%);
+  background: linear-gradient(135deg, rgba(110, 86, 207, 0.08) 0%, var(--rd-surface) 100%);
   border-color: var(--rd-border-strong);
 }

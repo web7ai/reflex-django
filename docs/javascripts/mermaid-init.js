@@ -1,7 +1,7 @@
 // Mermaid initialization for Material for MkDocs.
 //
 // We render Mermaid manually so we can:
-//   1) Pick a theme that matches the pink reflex-django palette.
+//   1) Pick a theme that matches the Django green + Reflex violet palette.
 //   2) Re-render diagrams on every page navigation, including the
 //      navigation.instant feature which doesn't fully reload the page.
 //   3) Re-render on light/dark theme toggle.
@@ -20,32 +20,32 @@
       document.body.getAttribute("data-md-color-scheme") === "slate";
     if (isDark) {
       return {
-        background: "#15151a",
-        primaryColor: "#1d1f27",
-        primaryTextColor: "#f8bbd0",
-        primaryBorderColor: "#f48fb1",
-        lineColor: "#f48fb1",
-        secondaryColor: "#25272f",
-        tertiaryColor: "#1a1a20",
-        nodeBorder: "#f48fb1",
-        clusterBkg: "#1a1a20",
-        clusterBorder: "#f48fb1",
-        edgeLabelBackground: "#1d1f27",
+        background: "#141619",
+        primaryColor: "#1B1D20",
+        primaryTextColor: "#D4CAFE",
+        primaryBorderColor: "#AA99EC",
+        lineColor: "#6E56CF",
+        secondaryColor: "#22252A",
+        tertiaryColor: "#1B1D20",
+        nodeBorder: "#AA99EC",
+        clusterBkg: "#1B1D20",
+        clusterBorder: "#6E56CF",
+        edgeLabelBackground: "#22252A",
         fontFamily: "Inter, system-ui, sans-serif",
       };
     }
     return {
-      background: "#fffafc",
-      primaryColor: "#fff0f5",
-      primaryTextColor: "#880e4f",
-      primaryBorderColor: "#e91e63",
-      lineColor: "#c2185b",
-      secondaryColor: "#fce4ec",
-      tertiaryColor: "#fff5f8",
-      nodeBorder: "#e91e63",
-      clusterBkg: "#fff5f8",
-      clusterBorder: "#f06292",
-      edgeLabelBackground: "#fff0f5",
+      background: "#FBFCFE",
+      primaryColor: "#EEF7F2",
+      primaryTextColor: "#092E20",
+      primaryBorderColor: "#44B78B",
+      lineColor: "#6E56CF",
+      secondaryColor: "#F4F0FE",
+      tertiaryColor: "#FDFCFE",
+      nodeBorder: "#6E56CF",
+      clusterBkg: "#F4F0FE",
+      clusterBorder: "#44B78B",
+      edgeLabelBackground: "#EEF7F2",
       fontFamily: "Inter, system-ui, sans-serif",
     };
   }
