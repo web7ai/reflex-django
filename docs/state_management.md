@@ -1,22 +1,32 @@
-# AppState — your bridge to Django
+---
+level: beginner
+tags: [state, appstate]
+---
 
-`AppState` is the most important class in `reflex-django`. It's a regular Reflex `State` that also knows about your Django session. If you only learn one new thing from these docs, learn this.
+# AppState bridge
 
-This page explains what `AppState` gives you, how it does it, and how to choose between `AppState`, plain `rx.State`, and the higher-level `ModelState`.
+**What you'll learn:** How `AppState` connects Reflex event handlers to Django sessions, users, and middleware, and when to use plain `rx.State` or `ModelState` instead.
+
+**When you need this:**
+
+- You need `request.user` or the session inside an `@rx.event` handler.
+- You are deciding whether a page needs Django context or is pure UI state.
 
 ---
 
-## What `AppState` is
+`AppState` is the most important class in reflex-django. It is a regular Reflex `State` that also knows about your Django session. Subclass it whenever a page needs Django context in handlers.
 
-It's a `rx.State` subclass. It adds two things:
+---
 
-1. **Django context attributes on `self`** — inside any `@rx.event` handler, you can read `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token`, `self.response`. They're filled in by `reflex-django` before your handler runs, using your real Django middleware.
-2. **Reactive snapshot variables for the UI** — things like `self.is_authenticated`, `self.username`, `self.email`. These are normal Reflex variables you can bind in components.
+## What `AppState` adds
 
-You use it exactly like a regular Reflex state — just subclass `AppState` instead of `rx.State`:
+It is a `rx.State` subclass with two layers:
+
+1. **Per-event Django context on `self`**, inside any `@rx.event` handler, read `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token`, `self.response`. reflex-django fills these before your handler runs, using your real Django middleware.
+2. **Reactive snapshot variables for the UI**, `self.is_authenticated`, `self.username`, `self.email`, and similar fields you can bind in components.
 
 ```python
-from reflex_django.state import AppState
+from reflex_django.states import AppState
 
 class CartState(AppState):
     items: list[dict] = []
@@ -25,10 +35,11 @@ class CartState(AppState):
     async def add(self, product_id: int):
         if not self.request.user.is_authenticated:
             return rx.redirect("/login")
+        from shop.models import Cart
         await Cart.objects.acreate(owner=self.request.user, product_id=product_id)
 ```
 
-That's the whole API surface. The rest of this page is detail.
+That is the core API. The rest of this page is detail.
 
 ---
 
@@ -40,91 +51,84 @@ Inside any `@rx.event async def` method on an `AppState` subclass:
 
 | Attribute | What it is |
 |:---|:---|
-| `self.request` | A synthetic `HttpRequest`, fully populated by your `settings.MIDDLEWARE`. |
+| `self.request` | Synthetic `HttpRequest`, populated by `settings.MIDDLEWARE`. |
 | `self.user` | `request.user`, already resolved (no `SynchronousOnlyOperation`). |
 | `self.session` | The session, async-safe (`await self.session.aget(...)`, `asave()`). |
 | `self.messages` | Snapshot of `django.contrib.messages` (JSON-safe list). |
-| `self.csrf_token` | The CSRF token for the current request. |
-| `self.response` | The `HttpResponse` produced by middleware (200 unless a middleware short-circuited). |
+| `self.csrf_token` | CSRF token for the current request. |
+| `self.response` | `HttpResponse` from middleware (200 unless middleware short-circuited). |
 | `self.resolver_match` | `ResolverMatch` if the path resolved to a Django view. |
-| `self.django_request` | The raw `HttpRequest` (same object as `self.request`, just a different alias). |
-| `self.django_response` | The raw `HttpResponse`. |
 
-### Reactive variables (also bindable in components)
+### Reactive variables (bindable in components)
 
 | Variable | What it reflects |
 |:---|:---|
 | `self.is_authenticated` | `request.user.is_authenticated` |
 | `self.username` | `request.user.get_username()` |
 | `self.email` | `request.user.email` |
-| `self.is_staff`, `self.is_superuser` | Mirror Django user flags |
-| `self.user_id` | The user's primary key |
-| `self.group_names` | List of group names the user belongs to |
-| `self.perms` | JSON-safe list of permissions (`{app}.{codename}` strings) |
+| `self.is_staff`, `self.is_superuser` | Django user flags |
+| `self.user_id` | User primary key |
+| `self.group_names` | Group names |
+| `self.perms` | JSON-safe permission strings (`{app}.{codename}`) |
 
-You use the per-event context (`self.user`, `self.session`) inside handlers — for authorization, queries, mutations. You use the reactive variables (`self.is_authenticated`, `self.username`) in components — for `rx.cond`, text bindings, conditional rendering.
+Use per-event context (`self.user`, `self.session`) in handlers for authorization and mutations. Use reactive variables (`self.is_authenticated`, `self.username`) in components for rendering.
 
 ```python
 class DashboardState(AppState):
     @rx.event
     async def delete_account(self):
-        # Per-event context — live, authoritative, NOT sent to the browser
         if not self.user.is_authenticated:
             return rx.redirect("/login")
         if self.user.is_superuser:
-            return  # don't let admins delete themselves accidentally
+            return
         await self.user.adelete()
 
 
 def dashboard_ui():
     return rx.vstack(
         rx.cond(
-            DashboardState.is_authenticated,           # reactive — used in UI
+            DashboardState.is_authenticated,
             rx.text(f"Welcome, {DashboardState.username}"),
             rx.link("Log in", href="/login"),
         ),
     )
 ```
 
-> **The security rule:** never make authorization decisions based on the reactive snapshot variables alone. Always check `self.user` / `self.request.user` in the handler. The reactive ones are sent to the browser and can be spoofed; the per-event ones are computed server-side every time.
+!!! warning "Security rule"
+    Never make authorization decisions from reactive snapshot variables alone. They are sent to the browser and can be tampered with. Always check `self.request.user` or `self.user` in the handler.
 
 ---
 
 ## How it works (briefly)
 
-Every Reflex event is a WebSocket frame on `/_event`. By default, that doesn't go through Django's HTTP pipeline. `reflex-django` inserts a small piece called the **`DjangoEventBridge`** *before* your handler runs:
+Every Reflex event arrives on `/_event` as a WebSocket frame. By default that bypasses Django's HTTP pipeline. reflex-django inserts the **`DjangoEventBridge`** before your handler:
 
-1. The bridge reads `router_data` from the event (cookies, path, query string, headers).
-2. It builds a synthetic `HttpRequest` from that data.
-3. It runs your full `settings.MIDDLEWARE` chain on the request. `SessionMiddleware` loads the session. `AuthenticationMiddleware` resolves the user. Your custom middleware runs too.
-4. It eagerly resolves `request.user` using Django's async `aget_user` (so you don't get `SynchronousOnlyOperation` later).
-5. It binds the result onto your `AppState` instance: `self.request`, `self.user`, `self.session`, etc.
-6. *Then* your handler runs.
+1. Read `router_data` from the event (cookies, path, query string, headers).
+2. Build a synthetic `HttpRequest`.
+3. Run `settings.MIDDLEWARE` (sessions, auth, your custom middleware).
+4. Eagerly resolve `request.user` with Django's async `aget_user`.
+5. Bind the result onto your `AppState` instance.
+6. Run your handler.
 
-If any middleware short-circuits with a 3xx — e.g. `LoginRequiredMiddleware` returning a redirect — the bridge converts that into a Reflex `rx.redirect(...)` and skips your handler. You can opt out with `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False`.
+If middleware returns a 3xx (for example login required), the bridge converts it to `rx.redirect(...)` unless you set `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False`.
 
-For the full plumbing, see [The WebSocket event pipeline](websocket_event_pipeline.md).
+See [WebSocket event pipeline](websocket_event_pipeline.md) for the full plumbing.
 
 ---
 
-## When to use `AppState` vs plain `rx.State` vs `ModelState`
-
-You have three choices. They stack:
+## When to use `AppState` vs `rx.State` vs `ModelState`
 
 | Class | Inherits from | Use it when |
 |:---|:---|:---|
-| `rx.State` | (Reflex) | The page doesn't need Django context. Pure UI state — counters, filters, modals. |
-| **`AppState`** | `rx.State` + the Django bridge | The page reads `request.user` or session, or runs custom Django middleware logic. **Default choice for anything user-aware.** |
-| `ModelState` | `AppState` + CRUD machinery | The page is mostly "list, edit, save, delete" rows from one Django model. |
+| `rx.State` | (Reflex) | Pure UI state: counters, filters, modals. No Django context needed. |
+| **`AppState`** | `rx.State` + Django bridge | Page reads `request.user` or session, or runs custom middleware logic. **Default for user-aware pages.** |
+| `ModelState` | `AppState` + CRUD machinery | Page is mostly list/edit/save/delete for one Django model. |
 
 ```python
-# Pure UI state — no Django needed
 class FilterState(rx.State):
     query: str = ""
-    sort: str = "newest"
 
 
-# User-aware state — uses self.user, self.session
 class CartState(AppState):
     @rx.event
     async def add(self, product_id: int):
@@ -132,60 +136,45 @@ class CartState(AppState):
         ...
 
 
-# CRUD on a model — uses ModelState (which is itself an AppState)
 class ProductState(ModelState):
     model = Product
     fields = ["name", "price"]
-    # auto-generates load/save/delete handlers and a `data` list
 ```
 
-A page can use several states at once. Use `rx.State` for the filter bar and `AppState` for the user-specific data. Use `AppState` for one screen and `ModelState` for another. Mix and match freely.
+A page can mix several states. Use `rx.State` for a filter bar and `AppState` for user-specific data.
 
 ---
 
 ## Reading the request
 
-Three equivalent styles. They all read the same per-event request:
+Three equivalent styles inside handlers:
 
 ```python
-# Style A — self.request (on AppState / ModelState handlers)
+# Style A, self.request on AppState / ModelState
 class CatalogState(AppState):
     @rx.event
     async def search(self, q: str):
         page = self.request.GET.get("page", "1")
-        theme = self.request.COOKIES.get("theme", "light")
-        if self.request.user.is_authenticated:
-            ...
 
 
-# Style B — module-level request proxy (works in any rx.State too)
+# Style B, module-level request proxy
 from reflex_django import request
 
 class FilterState(rx.State):
     @rx.event
     async def apply(self):
         q = request.GET.get("q", "")
-        ...
 
 
-# Style C — functional helpers (explicit, no inheritance needed)
+# Style C, functional helpers
 from reflex_django import current_request, current_user
-
-class FilterState(rx.State):
-    @rx.event
-    async def apply(self):
-        req = current_request()
-        user = current_user()
-        ...
 ```
 
-All three return the same `HttpRequest` for the current event. Inside an `AppState` subclass, `self.request` is the most natural — that's what we use throughout these docs.
-
-Outside an event (at import time, in a background thread), there's no request. `self.request` will be `None` and the helpers return anonymous defaults.
+All three return the same `HttpRequest` for the current event. Outside an event (import time, background threads), there is no request and helpers return anonymous defaults.
 
 ---
 
-## Writing to the session
+## Session and flash messages
 
 ```python
 class PreferencesState(AppState):
@@ -195,28 +184,20 @@ class PreferencesState(AppState):
         await self.session.asave()
 ```
 
-Use `await self.session.asave()` to persist. The next event for the same user will see the new value.
-
----
-
-## Adding flash messages
-
 ```python
 from django.contrib import messages
 
 class CheckoutState(AppState):
     @rx.event
     async def submit(self):
-        try:
-            ...
-            messages.success(self.request, "Order placed!")
-        except Exception:
-            messages.error(self.request, "Something went wrong.")
+        messages.success(self.request, "Order placed!")
 ```
 
-Then in your UI, bind to `DjangoUserState.messages`:
+Render messages in the UI with `DjangoUserState.messages`:
 
 ```python
+from reflex_django.states import DjangoUserState
+
 rx.foreach(
     DjangoUserState.messages,
     lambda m: rx.callout(m.message, color_scheme=m.level_tag),
@@ -225,12 +206,9 @@ rx.foreach(
 
 ---
 
-## A full example — a small profile page
-
-This is what a typical `AppState` page looks like: per-event Django context for the work, reactive variables for the rendering.
+## Full example: profile page
 
 ```python
-# accounts/views.py
 import reflex as rx
 from reflex_django.pages.decorators import page
 from reflex_django.states import AppState
@@ -260,56 +238,42 @@ class ProfileState(AppState):
 def profile() -> rx.Component:
     return rx.vstack(
         rx.heading(f"Hi, {ProfileState.username}"),
-        rx.text_area(
-            value=ProfileState.bio,
-            on_change=ProfileState.set_bio,
-            placeholder="Tell us about yourself",
-        ),
+        rx.text_area(value=ProfileState.bio, on_change=ProfileState.set_bio),
         rx.button("Save", on_click=ProfileState.save),
         rx.cond(ProfileState.saved, rx.callout("Saved!", color_scheme="green")),
-        spacing="3",
     )
 ```
 
-Five things to notice:
-
-1. **`ProfileState(AppState)`** — that one swap is what gives us `self.request.user`.
-2. **`on_load` gates by login.** Returning `rx.redirect("/login")` from a handler navigates the browser.
-3. **`self.request.user.profile.bio`** — we use the real Django user object. Same auth as `/admin/`.
-4. **`await user.profile.asave()`** — async ORM for non-blocking writes.
-5. **`ProfileState.username`** in the UI — the reactive snapshot, auto-refreshed on each event.
+Five things to notice: `AppState` gives you `self.request.user`; `on_load` gates by login; async ORM with `asave()`; reactive `ProfileState.username` in the UI; no model instances stored in state fields.
 
 ---
 
-## Avoid storing model instances in state fields
+## Avoid model instances in state fields
 
-State fields are serialized to JSON and shipped to the browser. Django model instances aren't JSON-serializable. Always convert them to dicts (or use a [serializer](serializers.md)) before assigning:
+State fields serialize to JSON and ship to the browser. Convert models to dicts first:
 
 ```python
-# wrong — will crash on the JSON roundtrip
+# wrong
 self.product = product
 
-# right — primitives only
+# right
 self.product = {"id": product.id, "name": product.name, "price": str(product.price)}
 ```
 
-The same applies to `Decimal`, `datetime`, `date` objects — convert to strings first.
+Same rule for `Decimal`, `datetime`, and `date`: convert to strings.
 
 ---
 
-## Don't read `request.user` at class definition time
+## Do not read `request.user` at class definition time
 
-Class-level defaults run at import time, when Django's app registry might not be ready and there's certainly no live request. So this is wrong:
+Class-level defaults run at import time with no live request:
 
 ```python
-# wrong — runs once, at import, with no request
+# wrong
 class HomeState(AppState):
     greeting: str = f"Hi, {request.user}"
-```
 
-This is right:
-
-```python
+# right
 class HomeState(AppState):
     greeting: str = "Hi"
 
@@ -319,39 +283,33 @@ class HomeState(AppState):
             self.greeting = f"Hi, {self.request.user.get_username()}"
 ```
 
-Class defaults are values, not snapshots of the current user.
-
 ---
 
 ## A note on `DjangoUserState`
 
-`reflex-django` also ships a smaller class called `DjangoUserState`. It exposes the same reactive variables (`is_authenticated`, `username`, etc.) **without** the per-event `self.request` and `self.user`. Use it when you only need the UI snapshot — for example, a navbar that shows the username:
+`DjangoUserState` exposes reactive variables (`is_authenticated`, `username`, and so on) **without** per-event `self.request`. Use it for UI-only snapshots, like a navbar:
 
 ```python
 from reflex_django.states import DjangoUserState
 
 def navbar():
-    return rx.hstack(
-        rx.cond(
-            DjangoUserState.is_authenticated,
-            rx.text(f"Hi, {DjangoUserState.username}"),
-            rx.link("Log in", href="/login"),
-        ),
+    return rx.cond(
+        DjangoUserState.is_authenticated,
+        rx.text(f"Hi, {DjangoUserState.username}"),
+        rx.link("Log in", href="/login"),
     )
 ```
 
-If your page also needs to perform authenticated actions, use `AppState` instead — it includes everything `DjangoUserState` has plus the live request.
+For authenticated actions, use `AppState` instead.
+
+When `REFLEX_DJANGO_AUTH_AUTO_SYNC = True` (default), snapshot fields refresh on every event for `AppState` subclasses.
 
 ---
 
-## Summary
+## What just happened?
 
-- Subclass `AppState` whenever a page needs Django context inside event handlers.
-- Use `self.request`, `self.user`, `self.session` in handlers — they're real, fresh, server-side.
-- Use `AppState.is_authenticated`, `AppState.username`, etc. in components — they're reactive snapshots.
-- Never base security decisions on the reactive snapshot alone. Check the live `self.user` in the handler.
-- Avoid storing model instances in state fields. Convert to dicts or use a serializer.
+You learned that `AppState` runs Django middleware on every Reflex event, gives you real `self.request.user` in handlers, and exposes reactive snapshots for the UI. Use the live user for security, snapshots for display.
 
 ---
 
-**Next:** [Talking to the database →](database_integration.md)
+**Next up:** [Database integration](database_integration.md)

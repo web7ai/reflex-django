@@ -40,6 +40,14 @@
   --rd-shadow-lg: 0 20px 50px rgba(233, 30, 99, 0.18), 0 8px 16px rgba(0, 0, 0, 0.06);
 
   --rd-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Typography — single place to tune body and code sizes */
+  --rd-font-size-body:         0.875rem;  /* ~14px at default root */
+  --rd-font-size-code-block:   0.875rem;
+  --rd-font-size-code-inline:  0.92em;
+  --rd-font-size-code-lines:   0.82rem;
+  --rd-font-size-nav-label:    0.75rem;
+  --rd-font-size-ui-small:     0.8125rem;
 }
 
 /* Light scheme — pink everywhere */
@@ -76,7 +84,7 @@ body, .md-typeset {
 }
 
 .md-typeset {
-  font-size: 0.78rem;
+  font-size: var(--rd-font-size-body);
   line-height: 1.75;
 }
 
@@ -146,7 +154,7 @@ body, .md-typeset {
 
 .md-nav__title {
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: var(--rd-font-size-nav-label);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--md-primary-fg-color--dark);
@@ -231,7 +239,7 @@ body, .md-typeset {
 /* Inline code — soft pink chip in light mode, soft pink-tinted in dark. */
 .md-typeset code {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace;
-  font-size: 0.86em;
+  font-size: var(--rd-font-size-code-inline);
   font-weight: 500;
   padding: 1px 7px;
   border-radius: 6px;
@@ -337,7 +345,7 @@ body, .md-typeset {
   border: none !important;
   box-shadow: none !important;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace !important;
-  font-size: 0.81rem !important;
+  font-size: var(--rd-font-size-code-block) !important;
   line-height: 1.7 !important;
   font-weight: 450;
   white-space: pre;
@@ -362,7 +370,7 @@ body, .md-typeset {
 .md-typeset .highlighttable .linenodiv pre {
   color: rgba(255, 255, 255, 0.20) !important;
   padding: 0 !important;
-  font-size: 0.78rem !important;
+  font-size: var(--rd-font-size-code-lines) !important;
   text-align: right;
   user-select: none;
 }
@@ -478,7 +486,7 @@ body, .md-typeset {
   .md-typeset .highlight pre,
   .md-typeset .highlighttable pre {
     padding: 16px 14px 18px !important;
-    font-size: 0.78rem !important;
+    font-size: var(--rd-font-size-code-block) !important;
   }
 
   .md-typeset .highlight,
@@ -497,7 +505,7 @@ body, .md-typeset {
 .md-typeset .tabbed-labels {
   border-bottom: 1px solid var(--rd-border-soft);
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: var(--rd-font-size-ui-small);
 }
 
 .md-typeset .tabbed-labels > label {
@@ -915,4 +923,105 @@ body, .md-typeset {
   padding: 1px 6px;
   font-size: 0.82em;
   box-shadow: var(--rd-shadow-xs);
+}
+
+/* ---------- Learning path cards ------------------------------------------ */
+
+.rd-path-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.rd-path-card {
+  display: block;
+  padding: 1.1rem 1.2rem;
+  border-radius: var(--rd-radius-md);
+  border: 1px solid var(--rd-border-soft);
+  background: var(--rd-surface);
+  box-shadow: var(--rd-shadow-sm);
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: transform 0.2s var(--rd-ease), box-shadow 0.2s var(--rd-ease);
+}
+
+.rd-path-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--rd-shadow-md);
+  border-color: var(--rd-border-strong);
+}
+
+.rd-path-card__title {
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 0 0.35rem;
+  color: var(--md-primary-fg-color--dark);
+}
+
+.rd-path-card__meta {
+  font-size: var(--rd-font-size-nav-label);
+  color: var(--rd-text-soft);
+  margin-bottom: 0.5rem;
+}
+
+.rd-path-card__desc {
+  font-size: var(--rd-font-size-ui-small);
+  line-height: 1.55;
+  margin: 0;
+  color: var(--md-default-fg-color);
+}
+
+.rd-path-card--beginner { border-top: 3px solid var(--rd-pink-300); }
+.rd-path-card--intermediate { border-top: 3px solid var(--rd-pink-500); }
+.rd-path-card--advanced { border-top: 3px solid var(--rd-pink-700); }
+
+/* ---------- Level badges --------------------------------------------------- */
+
+.rd-level {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+  vertical-align: middle;
+}
+
+.rd-level--0 { background: var(--rd-pink-100); color: var(--rd-pink-800); }
+.rd-level--1 { background: rgba(233, 30, 99, 0.12); color: var(--rd-pink-700); }
+.rd-level--2 { background: rgba(233, 30, 99, 0.18); color: var(--rd-pink-800); }
+.rd-level--3 { background: rgba(173, 20, 87, 0.15); color: var(--rd-pink-900); }
+.rd-level--4 { background: rgba(136, 14, 79, 0.12); color: var(--rd-pink-900); }
+
+[data-md-color-scheme="slate"] .rd-level--0 { background: rgba(244, 143, 177, 0.12); color: var(--rd-pink-200); }
+[data-md-color-scheme="slate"] .rd-level--1,
+[data-md-color-scheme="slate"] .rd-level--2,
+[data-md-color-scheme="slate"] .rd-level--3,
+[data-md-color-scheme="slate"] .rd-level--4 {
+  background: rgba(244, 143, 177, 0.14);
+  color: var(--rd-pink-200);
+}
+
+/* ---------- Instructor callouts ------------------------------------------ */
+
+.rd-instructor {
+  padding: 1rem 1.1rem;
+  margin: 1.25rem 0;
+  border-radius: var(--rd-radius-md);
+  border: 1px solid var(--rd-border-soft);
+  background: linear-gradient(135deg, var(--rd-pink-50) 0%, var(--rd-surface) 100%);
+  font-size: var(--rd-font-size-ui-small);
+  line-height: 1.65;
+}
+
+.rd-instructor strong {
+  color: var(--md-primary-fg-color--dark);
+}
+
+[data-md-color-scheme="slate"] .rd-instructor {
+  background: linear-gradient(135deg, rgba(244, 143, 177, 0.08) 0%, var(--rd-surface) 100%);
+  border-color: var(--rd-border-strong);
 }

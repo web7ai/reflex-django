@@ -1,6 +1,20 @@
+---
+level: beginner
+tags: [media, uploads]
+---
+
 # Media files
 
-User-uploaded files (profile photos, attachments, product images) are **Django media files**. reflex-django routes `/media/...` to Django in development, but **does not serve the files for you** — you must configure `MEDIA_URL`, `MEDIA_ROOT`, and mount the URL pattern yourself.
+**What you'll learn:** How to configure Django user uploads so `/media/...` URLs work in dev and production alongside the Reflex SPA.
+
+**When you need this:**
+
+- Profile photos, attachments, or product images 404 under `/media/...`.
+- You are not sure what reflex-django handles versus what you must configure in Django.
+
+---
+
+User-uploaded files are **Django media files**. reflex-django routes `/media/...` to Django in development, but **does not serve the files for you**. You configure `MEDIA_URL`, `MEDIA_ROOT`, and mount the URL pattern yourself.
 
 ---
 
@@ -12,7 +26,7 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 ```
 
-Use a relative `MEDIA_URL` (no `http://` scheme) so the SPA can load images with `/media/avatars/alice.jpg` on any origin.
+Use a relative `MEDIA_URL` (no `http://` scheme) so the SPA can load `/media/avatars/alice.jpg` on any origin.
 
 ---
 
@@ -21,38 +35,41 @@ Use a relative `MEDIA_URL` (no `http://` scheme) so the SPA can load images with
 Add Django's static helper to `urls.py` when `DEBUG=True`:
 
 ```python
-from django.conf import settings
-from django.conf.urls.static import static
-
-urlpatterns = [
-    path("admin/", admin.site.urls),
-]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+--8<-- "snippets/media_urls.py"
 ```
 
 Without this mount, uploads may save to disk but **`/media/...` returns 404** in the browser.
+
+!!! warning "Routing is not serving"
+    In DEBUG, reflex-django adds your `MEDIA_URL` prefix to the django prefix list so the SPA catch-all does not swallow `/media/...`. That only ensures requests reach Django. You still need `static(MEDIA_URL, ...)` in dev or nginx/S3 in production.
 
 ---
 
 ## What reflex-django already does
 
-In DEBUG mode, `prefix_discovery` adds your `MEDIA_URL` prefix (default `/media`) to the django prefix list. The SPA catch-all does not swallow `/media/...` requests, and two-port dev can reach media on `:8000` via `env.json`.
+In DEBUG, prefix discovery includes `MEDIA_URL` (default `/media`). Two-port dev can reach media on `:8000` via the compiled SPA `env.json`.
 
-**Routing is not serving.** Prefix discovery only ensures requests reach Django; you still need `static(MEDIA_URL, ...)` in dev or nginx/S3 in production.
+reflex-django does **not** create `MEDIA_ROOT`, validate upload sizes, or serve files. That stays standard Django (or django-storages).
 
 ---
 
 ## Two-port dev
 
-Browse the SPA on **`http://localhost:3000/`**. Relative URLs like `/media/photo.jpg` are routed to **`http://localhost:8000`** by the compiled SPA config.
+Browse the SPA on **`http://localhost:3000/`**. Relative URLs like `/media/photo.jpg` proxy to **`http://localhost:8000`**.
 
-If images 404, confirm `urlpatterns += static(...)`, the file exists under `MEDIA_ROOT`, and `MEDIA_URL` is relative. See [Local development](local_development.md).
+If images 404, confirm:
+
+1. `urlpatterns += static(...)` is present when `DEBUG=True`.
+2. The file exists under `MEDIA_ROOT`.
+3. `MEDIA_URL` is relative (starts with `/`).
+
+See [Local development](local_development.md).
 
 ---
 
 ## Production
+
+Serve files from disk or object storage:
 
 ```nginx
 location /media/ {
@@ -61,7 +78,7 @@ location /media/ {
 }
 ```
 
-For object storage, set `MEDIA_URL` to your CDN URL and use `django-storages`.
+For S3 or similar, set `MEDIA_URL` to your CDN URL and use `django-storages`.
 
 In **`reflex_outer`**, the Django HTTP worker needs the same media configuration. See [Deployment](deployment.md).
 
@@ -69,12 +86,24 @@ In **`reflex_outer`**, the Django HTTP worker needs the same media configuration
 
 ## Displaying uploads in Reflex
 
-Use the model field's `.url` property after save (e.g. `/media/avatars/user_1.jpg`). For browser uploads, see [File uploads](file_uploads.md).
+Use the model field's `.url` property after save (for example `/media/avatars/user_1.jpg`). For browser uploads from the SPA, see [File uploads](file_uploads.md).
+
+```python
+@rx.event
+async def on_load(self):
+    if self.request.user.is_authenticated:
+        profile = await Profile.objects.aget(user=self.request.user)
+        self.avatar_url = profile.avatar.url if profile.avatar else ""
+```
+
+Keep URLs as strings in state fields, not `FileField` instances.
 
 ---
 
-## Related
+## What just happened?
 
-- [Configuration](configuration.md)
-- [FAQ](faq.md)
-- [Deployment](deployment.md)
+You configured Django media settings, mounted the dev URL pattern, and learned that reflex-django only reserves the `/media` prefix in DEBUG while Django (or your reverse proxy) actually serves the files.
+
+---
+
+**Next up:** [CRUD manual](crud_without_mixins.md)

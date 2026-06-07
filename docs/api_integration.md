@@ -1,29 +1,39 @@
+---
+level: intermediate
+tags: [api, http]
+---
+
 # HTTP APIs alongside Reflex
 
-Reflex events are great for the SPA your user is looking at. They're a terrible fit for everything else — mobile apps, server-to-server webhooks, CLIs, third-party integrations. Those need plain HTTP.
+**What you'll learn:** How to add plain Django HTTP endpoints beside your Reflex SPA in the same process, sharing models, sessions, and users.
 
-The good news: in `reflex-django`, both surfaces live in the same Django process, on the same port, sharing the same models and session. You add HTTP endpoints with the same `urls.py` / `views.py` you've always used. This page covers the patterns.
+**When you need this:**
+
+- A mobile app, CLI, or third party needs REST or JSON over HTTP.
+- Webhooks (Stripe, GitHub, etc.) must hit Django views, not WebSocket events.
+
+Reflex events power the SPA in the browser. Everything else still wants HTTP. In reflex-django both surfaces run in one Django process on one origin.
 
 ---
 
-## The three flavors of "API" in a `reflex-django` project
+## Three surfaces in one project
 
 | Surface | Handled by | Used by |
 |:---|:---|:---|
-| **Reflex events** on `/_event` | `@rx.event` handlers in `views.py` | Your SPA, in this browser |
-| **Django HTTP views** under `/api/` (or wherever) | Django function/class views, or DRF `ModelViewSet` | Mobile apps, third parties, scripts |
-| **Webhooks** | Django views with `@csrf_exempt` | Stripe, GitHub, etc. |
+| Reflex events on `/_event` | `@rx.event` in `views.py` | Your SPA in this browser |
+| Django HTTP under `/api/` etc. | Django or DRF views | Mobile, scripts, partners |
+| Webhooks | Django views, often `@csrf_exempt` | External servers |
 
-All three see the same database, the same models, the same auth.
+All three share the database, models, and session when called from the same origin.
 
 ---
 
-## A plain Django view
+## Plain Django JSON view
 
 ```python
 # shop/views.py
-from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 
 
 @login_required
@@ -43,23 +53,21 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/orders/", my_orders),
 ]
-# catch-all: automatic — /admin and /api inferred from routes above
+# Reflex catch-all: automatic when REFLEX_DJANGO_AUTO_MOUNT=True
 ```
 
-That's it. `GET /api/orders/` runs your Django view. The user's session is shared with the SPA on the same origin, so login state is consistent.
+`GET /api/orders/` runs your Django view. The SPA on the same origin shares the session cookie.
 
 ---
 
-## DRF works out of the box
+## Django REST Framework
 
-If your project already uses Django REST Framework, no special setup is needed. Add `rest_framework` to `INSTALLED_APPS`, drop in your `ModelViewSet`, and register the router:
+No special reflex-django setup. Add DRF to `INSTALLED_APPS`, register a viewset, include the router:
 
 ```python
 # shop/api.py
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from shop.models import Order
-from shop.serializers_drf import OrderSerializer
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -71,50 +79,33 @@ class OrderViewSet(viewsets.ModelViewSet):
 ```
 
 ```python
-# shop/api_urls.py
-from rest_framework.routers import DefaultRouter
-from shop.api import OrderViewSet
-
-router = DefaultRouter()
-router.register("orders", OrderViewSet)
-
-urlpatterns = router.urls
-```
-
-```python
 # config/urls.py
-import shop.views  # noqa: F401
-
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
 ]
-# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
-Your mobile app can call `GET /api/orders/`. Your SPA can read the same data via a Reflex event using `Order.objects.filter(customer=self.request.user)` directly — no need to round-trip through HTTP.
+Your mobile client calls `GET /api/orders/`. Your SPA can still load the same rows through a Reflex `ModelState` queryset without an HTTP round trip.
 
 ---
 
 ## When to use HTTP vs Reflex events
 
-Both can read and write the same data. Pick based on the *caller*:
-
-| The caller is… | Use |
+| Caller | Use |
 |:---|:---|
-| Your own SPA, in the same browser tab | Reflex `@rx.event` |
-| A mobile app | Django HTTP / DRF |
-| A third-party server (Stripe, Slack) | Django HTTP webhook |
-| A CLI / cron / script | Django HTTP, or a `manage.py` command |
-| A different web app | Django HTTP |
+| Your SPA in the same tab | Reflex `@rx.event` |
+| Mobile app | Django HTTP or DRF |
+| Third-party webhook | Django HTTP view |
+| Cron or CLI | `manage.py` command or HTTP |
 
-The SPA already has the `request.user` and the session over WebSocket. Going through HTTP from the SPA just adds latency.
+The SPA already has `self.request.user` over the WebSocket. HTTP from the same page only adds latency.
 
 ---
 
 ## Webhooks
 
-Webhooks are external HTTP requests, usually without a user session. Add a Django view with `@csrf_exempt` and verify the signature yourself:
+External POSTs usually have no session. Verify signatures in the view:
 
 ```python
 # shop/webhooks.py
@@ -138,109 +129,53 @@ async def stripe_webhook(request):
     return HttpResponse(status=200)
 ```
 
-```python
-# config/urls.py
-import shop.views  # noqa: F401
-
-urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/", include("shop.api_urls")),
-    path("webhooks/stripe/", stripe_webhook),
-]
-# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
-```
-
-`path("webhooks/stripe/", ...)` in `urlpatterns` is enough — auto-detection reserves `/webhooks`. List webhook routes in `urlpatterns` so Django handles them, not the SPA catch-all.
+List webhook paths in `urlpatterns` so Django handles them before the SPA catch-all.
 
 ---
 
-## Two serializer types, two purposes
+## Two serializer types
 
-`reflex-django` ships `ReflexDjangoModelSerializer` for state-side serialization. DRF ships `ModelSerializer` for HTTP-side serialization. They're not the same class, and they don't have to share definitions.
+| Class | Used for |
+|:---|:---|
+| `ReflexDjangoModelSerializer` | Reflex state (`.adata()` over WebSocket) |
+| DRF `ModelSerializer` | HTTP JSON responses |
 
-| Class | Lives in | Used by |
-|:---|:---|:---|
-| `ReflexDjangoModelSerializer` | `reflex_django.serializers` | Reflex states (`.adata()` over WebSocket) |
-| `rest_framework.serializers.ModelSerializer` | DRF | HTTP endpoints (`GET /api/orders/`) |
-
-In practice they often have the same fields and live next to each other:
-
-```python
-# shop/serializers.py — for Reflex
-from reflex_django.serializers import ReflexDjangoModelSerializer
-from shop.models import Order
-
-
-class OrderReflexSerializer(ReflexDjangoModelSerializer):
-    class Meta:
-        model = Order
-        fields = ("id", "total", "status", "placed_at")
-
-
-# shop/serializers_drf.py — for DRF
-from rest_framework import serializers
-
-
-class OrderDRFSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Order
-        fields = ("id", "total", "status", "placed_at")
-```
-
-You can keep them in one file if you prefer. Just don't try to pass a DRF serializer to a `ModelCRUDView` (the field handling isn't compatible) or vice versa.
+Keep parallel small classes with the same `fields`. Do not pass DRF serializers to `ModelCRUDView`.
 
 ---
 
-## Single origin, no CORS
-
-Because the SPA, the API, the admin, and the WebSocket all share one origin, you don't need CORS configuration. The browser sees them as the same site.
-
-If you're shipping a mobile app or letting another web app embed your API, that's a different story — add `django-cors-headers` and configure it. For the SPA's own usage, you're done.
-
----
-
-## Reading the user in HTTP vs Reflex
-
-The pattern is symmetrical:
+## Same user in HTTP and Reflex
 
 ```python
-# Django HTTP view
+# HTTP
 async def my_view(request):
     user = request.user
-    ...
 
-# Reflex event handler
+# Reflex
 @rx.event
 async def my_handler(self):
     user = self.request.user
-    ...
 ```
 
-Same user. Same `is_authenticated`. Same permissions.
+Same `is_authenticated`, same permissions, same session on one origin (no CORS for the SPA's own calls).
 
 ---
 
-## A combined example
-
-A shop that exposes both HTTP and Reflex over the same data:
+## Combined example
 
 ```python
 # shop/views.py
 import reflex as rx
-from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from reflex_django.pages.decorators import page
 from reflex_django.states import ModelState
 
-from shop.models import Order
 
-# ── Reflex side ──────────────────────────────────────
 class OrderState(ModelState):
     model = Order
     fields = ["status", "total"]
-
-    class Meta:
-        list_var = "orders"
+    list_var = "orders"
 
     def get_queryset(self):
         return Order.objects.filter(customer=self.request.user)
@@ -248,10 +183,9 @@ class OrderState(ModelState):
 
 @page(route="/orders", title="Orders", on_load=OrderState.refresh)
 def my_orders_page() -> rx.Component:
-    return rx.foreach(OrderState.orders, lambda o: rx.text(o["status"], " — ", o["total"]))
+    return rx.foreach(OrderState.orders, lambda o: rx.text(o["status"], " - ", o["total"]))
 
 
-# ── HTTP side ────────────────────────────────────────
 @login_required
 async def my_orders_json(request):
     orders = [
@@ -261,51 +195,18 @@ async def my_orders_json(request):
     return JsonResponse({"orders": orders})
 ```
 
-```python
-# config/urls.py
-import shop.views  # noqa: F401
-
-urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/orders/", my_orders_json),
-]
-# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
-```
-
-- The browser SPA sees `/orders` — calls Reflex.
-- The mobile app calls `/api/orders/` — calls Django.
-- Both read the same rows, scoped to the same `request.user`.
+Browser uses `/orders` (Reflex). Mobile uses `/api/orders/` (HTTP). Same rows, same user scope.
 
 ---
 
-## A note on async views
+## Async HTTP views
 
-Use `async def` for Django HTTP views when you'll be awaiting the ORM, calling external services, or doing anything I/O-bound. Django will run them on the ASGI server's event loop. Mixing sync and async views in the same project is fine — Django auto-adapts.
-
-If you're stuck with a sync-only library, wrap the call with `sync_to_async`:
-
-```python
-from asgiref.sync import sync_to_async
-
-async def my_view(request):
-    @sync_to_async
-    def do_work():
-        return some_sync_library.fetch()
-    result = await do_work()
-    return JsonResponse(result)
-```
+Use `async def` when you `await` the ORM or external I/O. Django runs them on the ASGI event loop. Wrap unavoidable sync libraries with `sync_to_async` from `asgiref`.
 
 ---
 
-## Summary
+## What just happened?
 
-- HTTP and Reflex share the same Django process, same models, same user.
-- Add `path(...)` lines to `urls.py` for HTTP endpoints in `urlpatterns` — prefixes are auto-detected from the first segment of each route.
-- DRF works untouched.
-- Use `ReflexDjangoModelSerializer` for state serialization, DRF `ModelSerializer` for HTTP serialization. They're different libraries with different purposes.
-- Same origin → no CORS for the SPA's own calls.
-- Prefer Reflex events for SPA actions; prefer HTTP for everyone else.
+You added HTTP endpoints next to Reflex without a second server, and you know when to call HTTP versus firing a WebSocket event.
 
----
-
-**Next:** [Custom middleware in events →](django_middleware_to_reflex.md)
+**Next up:** [Custom middleware in events →](django_middleware_to_reflex.md)

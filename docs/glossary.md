@@ -1,264 +1,203 @@
 # Glossary
 
-Definitions of every term in these docs, in one place. If you've forgotten what a name means, look here first.
+**What you will learn:** Plain definitions for terms used across these docs.
+
+**When you need this:**
+
+- You forgot what a name means mid-tutorial.
+- You are onboarding and want a single lookup page.
+
+Terms are alphabetical within each letter group.
 
 ---
+
+## A
 
 ### `add_auth_pages()`
-A helper from `reflex_django.auth` that registers the built-in `/login`, `/register`, `/password-reset`, and `/password-reset/confirm/[uid]/[key]` pages in one call.
+Helper that registers built-in `/login`, `/register`, and password-reset pages. [Authentication](authentication.md).
 
 ### `AnonymousUser`
-Django's stand-in for "no logged-in user". When a request has no valid session, `request.user` is an `AnonymousUser` instance. `is_authenticated` is `False`.
+Django's stand-in when no session is present. `is_authenticated` is `False`.
 
 ### `AppState`
-The `reflex-django` base class for Reflex states that need Django context. Subclassing it gives `self.request`, `self.user`, `self.session`, plus reactive snapshot variables. ([Details](state_management.md).)
+Base Reflex state with Django context: `self.request`, `self.user`, `self.session`, plus reactive snapshots. [State management](state_management.md).
 
 ### `ASGI`
-Asynchronous Server Gateway Interface — the modern, async-capable replacement for WSGI. The protocol that lets one Python process handle both HTTP requests and WebSocket connections. `reflex-django` runs as a single ASGI app.
-
-### `ASGIStaticFilesHandler`
-Django's helper that serves files from `STATIC_URL` during development. Wraps your ASGI app so static assets work without a separate web server.
+Asynchronous Server Gateway Interface. One Python process handles HTTP and WebSocket. reflex-django requires ASGI.
 
 ### `AsyncStreamingMiddleware`
-A small Django middleware shipped with `reflex-django` that adapts sync streaming responses to be async-safe under ASGI. Add it at the end of `MIDDLEWARE`. ([Details](async_streaming_middleware.md).)
+Django middleware for async-safe streaming responses. Put it last in `MIDDLEWARE`. [Details](async_streaming_middleware.md).
 
 ---
 
-### `BaseModelState`
-The minimum a CRUD state needs (model, Meta, dispatch). The bottom of the CRUD class hierarchy. Almost never used directly — always wrapped with mixins or extended by `ModelState`/`ModelCRUDView`.
+## B
 
 ### `begin_event_request` / `end_event_request`
-Helpers from `reflex_django.context` for setting up a synthetic event context in tests. Use them to populate `self.request.user` when calling a handler directly.
+Test helpers that bind a synthetic request for handler calls. [Testing](testing.md).
+
+---
+
+## C
 
 ### `ContextVar`
-A Python primitive (from `contextvars`) that carries per-task state through async code. `reflex-django` uses one to attach the per-event request to the current async task, so `self.request.user` works even though we're in an async event loop.
+Python primitive for per-task state in async code. The bridge uses one for the current event request.
 
 ### `CRUD`
-Create, Read, Update, Delete — the four standard operations on a database row. `ModelState` and `ModelCRUDView` are declarative CRUD helpers.
+Create, Read, Update, Delete. `ModelState` and `ModelCRUDView` automate this pattern.
 
 ### `CSRF`
-Cross-Site Request Forgery — an attack where a third-party site tricks the user's browser into submitting a form to your site with their cookies. Django's `CsrfViewMiddleware` defends against it. CSRF is skipped on Reflex WebSocket events because the attack shape doesn't apply.
+Cross-Site Request Forgery protection for HTML forms. Skipped on Reflex WebSocket events. [Authentication](authentication.md).
 
 ---
+
+## D
 
 ### `DjangoEventBridge`
-The `reflex-django` component that intercepts every Reflex event, builds a synthetic `HttpRequest`, runs `settings.MIDDLEWARE`, and binds the result to the handler. The reason `self.request.user` works. ([Details](websocket_event_pipeline.md).)
+Runs Django middleware for each Reflex event so `self.request.user` works. [WebSocket pipeline](websocket_event_pipeline.md).
 
 ### `DjangoUserState`
-A small reactive Reflex state that exposes JSON-safe user snapshot fields (`is_authenticated`, `username`, `email`, `messages`, `csrf_token`, `language`). Used in UI components. Inherited transparently by `AppState`.
+Reactive snapshot of user, messages, CSRF, and language for UI binding.
 
 ### `DjangoOuterDispatcher`
-The outer ASGI router in **`django_outer`** mode. Reserved Reflex paths go to Reflex's inner ASGI; everything else goes to Django. ([Details](routing.md).)
+Outer ASGI router in **`django_outer`** mode. [Routing](routing.md).
 
 ### `django_outer`
-Default routing mode — Django owns the public port; Reflex handles `/_event` and other reserved paths in the same process. ([Compare with `reflex_outer`](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).)
-
-### `django_led_app`
-The built-in module (`reflex_django.django_led_app`) that owns the singleton `rx.App()`. Import it as `from reflex_django import app`. Page modules are loaded at compile time via explicit `urls.py` imports, `REFLEX_DJANGO_PAGE_PACKAGES`, or deprecated auto-discover — not by magic at every server boot. Replaces the `{app}/{app}.py` file you'd write in plain Reflex.
+Default routing: Django owns the public port; Reflex handles reserved prefixes.
 
 ### `django_prefix`
-The list of URL prefixes Django owns (e.g. `/admin`, `/api`). Used by the SPA catch-all and Vite dev proxy so backend routes are not treated as SPA pages. **By default, reflex-django infers this from your `urlpatterns`** when you call `reflex_mount()` last — you only pass `django_prefix=(...)` when you need to override auto-detection (e.g. bare `re_path()` routes).
+URL prefixes Django owns (e.g. `/admin`, `/api`). Auto-detected from `urlpatterns` unless overridden.
 
 ### `Dispatch pipeline`
-The run-loop inside `ModelState`/`ModelCRUDView` that wraps a CRUD operation with permission checks, validation hooks, the ORM call, and reactive var updates. Provided by `DispatchMixin`.
+CRUD run-loop inside `ModelState`: permissions, validation, ORM, reactive updates.
+
+### `DEV_PROXY` (`REFLEX_DJANGO_DEV_PROXY`)
+When true with single-port dev, Django reverse-proxies SPA routes to Vite. Default `run_reflex` sets it false. [Settings reference](settings_reference.md).
 
 ---
+
+## E
 
 ### `Event handler`
-A method on a Reflex state, decorated with `@rx.event`. Called when the SPA fires an event. In `reflex-django`, handlers usually have access to `self.request.user`.
-
-### `EventMiddlewareHandler`
-A Django `BaseHandler` subclass that runs `settings.MIDDLEWARE` against a request without trying to dispatch to a view. Used by the bridge.
+Method decorated with `@rx.event`, called from the SPA over the WebSocket.
 
 ### `export_reflex`
-The `manage.py` command that builds the Reflex SPA bundle. Run in CI before `collectstatic`. ([CLI reference](cli.md).)
+Management command that builds the SPA for CI/production. [CLI reference](cli.md).
 
 ---
 
-### `HttpRequest`
-Django's request object. In `reflex-django`, the bridge builds a *synthetic* `HttpRequest` for each WebSocket event so Django middleware can run normally.
+## H
 
-### `HttpResponse`
-Django's response object. Available as `self.response` in handlers after the middleware chain runs.
-
----
-
-### `INSTALLED_APPS`
-The list in `settings.py` of Django apps. With deprecated auto-discover enabled, reflex-django scans each entry's `views.py` at compile time. Recommended: import page modules explicitly in `urls.py`.
+### `HttpRequest` / `HttpResponse`
+Django request/response objects. The bridge builds a synthetic `HttpRequest` per event.
 
 ---
 
-### `LANGUAGE_CODE`
-Django setting for the default language. Also a per-request value set by `LocaleMiddleware`. Available as `self.request.LANGUAGE_CODE` and reactively as `DjangoUserState.language`.
-
-### `Lifespan`
-ASGI's startup/shutdown protocol. The outer dispatcher forwards lifespan scopes to Reflex's inner ASGI for background-task setup.
-
-### `login_required`
-A decorator from `reflex_django.auth` that rejects unauthenticated handler calls. Redirects to `REFLEX_DJANGO_LOGIN_URL`.
-
----
-
-### `manage.py`
-Django's project entry point. `reflex-django` adds two commands: `run_reflex` and `export_reflex`.
-
-### `messages`
-Django's flash-message framework. Available as `self.messages` (snapshot) and via `messages.success(self.request, ...)` to write. ([Details](authentication.md#flash-messages).)
+## M
 
 ### `Middleware`
-A Django concept: a chain of classes that wrap every HTTP request. Each one can read or modify the request, short-circuit with a response, or do nothing. `reflex-django` runs this chain on every Reflex event too. ([Details](how_django_works.md#middleware--the-layered-onion).)
+Django classes that wrap each request. reflex-django runs the chain on Reflex events too.
 
-### `ModelCRUDView`
-A declarative CRUD class that uses an explicit `serializer_class` and generates named handlers (`save_post`, `delete_post`). ([Details](crud_with_mixins_and_states.md).)
-
-### `ModelListView`
-A read-only variant of `ModelState`. List + filter + paginate, no edit, no delete.
-
-### `ModelState`
-The most common declarative CRUD class. Auto-builds a serializer from `model + fields`, generates state vars and handlers. ([Details](reactive_model_state.md).)
+### `ModelState` / `ModelCRUDView` / `ModelListView`
+Declarative CRUD helpers. [Reactive model state](reactive_model_state.md).
 
 ---
 
-### `on_load`
-A page-level event handler passed to `@page(route=..., on_load=...)`. Runs when the user navigates to that route. Use it to fetch data and gate by login.
-
-### `Outer dispatcher`
-See `DjangoOuterDispatcher`.
-
----
+## O
 
 ### `@page`
-The primary decorator from `reflex_django.pages.decorators` that registers a Reflex page. You own the page's outer container.
-
-### `Page`
-A Reflex component decorated with `@page` (or `centered_template`) and assigned a URL route. The user navigates to pages; pages render components; components are bound to state.
-
-### `PermissionMixin`
-A mixin that wires DRF-style permission classes into the dispatch pipeline. Pass `Meta.permission_classes = (...)` to use it.
-
-### `Plugin (Reflex plugin)`
-A Reflex extension point. `reflex-django` registers one — `ReflexDjangoPlugin` — that installs the event bridge, the URL dispatcher, and the SPA-shell rendering pipeline.
-
-### `Preprocess middleware`
-A Reflex hook that runs before an event handler. `DjangoEventBridge.preprocess` is registered as a preprocess middleware so the bridge can populate the request context before the handler executes.
+Decorator that registers a Reflex page and route. [Pages in views](pages_in_views.md).
 
 ---
+
+## R
 
 ### `Reactive variable`
-A field on a Reflex state class that, when mutated on the server, causes the UI to re-render. `count: int = 0` on a `rx.State` is reactive.
+State field that triggers UI updates when mutated on the server.
 
 ### `Reflex`
-The framework that compiles Python states + components into a React SPA, with a server-side state engine and a WebSocket-driven update protocol. [reflex.dev](https://reflex.dev).
+Python-to-React framework with WebSocket-driven updates. [reflex.dev](https://reflex.dev).
 
 ### `app_name`
-The Reflex compile label in `REFLEX_DJANGO_RX_CONFIG`. Names build artifacts and `DECORATED_PAGES` grouping — not necessarily the Django package where pages live. ([The three knobs](mental_model.md#what-is-app_name).)
-
-### `REFLEX_DJANGO_AUTO_MOUNT`
-When `True` (default), reflex-django appends the SPA catch-all to `urlpatterns` at startup from `settings.py`. Set `False` only if you manage the catch-all yourself via `reflex_mount()`.
+Compile label in `REFLEX_DJANGO_RX_CONFIG`, not necessarily your Django app package name.
 
 ### `reflex_mount()`
-Optional helper in `reflex_django.urls` for manual SPA catch-all wiring and URL overrides (`mount_prefix`, `django_prefix`, per-mount `rx_config`). Not required when `REFLEX_DJANGO_AUTO_MOUNT=True`. ([Configuration](configuration.md).)
-
-### `ReflexDjangoPlugin`
-The built-in Reflex plugin that installs all the integration hooks. Added automatically when reflex-django prepares the app for compile.
-
-### `ReflexDjangoModelSerializer`
-The DRF-style serializer class shipped with `reflex-django` for turning Django model instances into JSON-safe dicts. ([Details](serializers.md).)
+Optional URL helper for manual catch-all wiring. [Configuration](configuration.md).
 
 ### `ReflexMountView`
-The Django view that serves the compiled SPA's `index.html` for the catch-all URL pattern. Used in **`django_outer`**; in **`reflex_outer`**, Reflex serves the SPA directly instead.
+Django view that serves compiled `index.html` for SPA routes in **`django_outer`**.
 
 ### `reflex_outer`
-Routing mode where Reflex owns the public port and proxies `/admin`, `/api`, and `/static` to a separate Django HTTP worker. Reflex events and the ORM stay in the main process. ([Full comparison](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).)
+Routing mode where Reflex owns the public port and proxies Django HTTP to a worker (default port **8001**).
 
 ### `Reserved Reflex prefixes`
-URL prefixes (`/_event`, `/_upload`, `/_health`, `/ping`, `/_all_routes`, `/auth-codespace`) that the outer dispatcher *always* sends to Reflex, regardless of `urls.py`.
-
-### `request.user`
-Django's representation of "who is making this request". Set by `AuthenticationMiddleware`. In Reflex events, available as `self.request.user` or `self.user`.
-
-### `RequestProxy`
-A module-level proxy (`from reflex_django import request`) that lets non-`AppState` states read the current request without inheritance.
+Paths like `/_event`, `/_upload`, `/_health`, `/ping` always handled by Reflex.
 
 ### `Router data`
-A dict carried by every Reflex event with the page's path, query, cookies, and headers. The bridge uses it to rebuild the synthetic `HttpRequest`.
+Path, query, cookies, and headers carried with each Reflex event.
 
-### `rx.Component`
-The Reflex base type for UI elements. Functions returning `rx.Component` are how you build pages.
-
-### `rx.State`
-Reflex's base state class. `AppState` inherits from it.
-
-### `rx.event`
-Reflex's decorator that marks a method as an event handler — callable from the SPA over the WebSocket.
-
-### `rx.redirect`
-A Reflex event return value that tells the SPA to navigate to a different URL. Middleware redirects are auto-converted to `rx.redirect(...)` by the bridge.
+### `rx.State` / `rx.event` / `rx.redirect` / `rx.Component`
+Core Reflex types: state base, handler decorator, navigation event, UI element.
 
 ### `rxconfig.py`
-A Reflex configuration file at the project root. In `reflex-django`, this file is optional and usually absent — `REFLEX_DJANGO_RX_CONFIG` in `settings.py` replaces it.
+Legacy Reflex config file. Replaced by `REFLEX_DJANGO_RX_CONFIG` in v1.0.
 
 ---
+
+## S
+
+### `SEPARATE_DEV_PORTS` (`REFLEX_DJANGO_SEPARATE_DEV_PORTS`)
+Two-port dev: Vite on frontend port, backend on ASGI port. Set by default `run_reflex`. [Settings reference](settings_reference.md).
 
 ### `Serializer`
-A class that converts a Python object (typically a Django model instance) into a JSON-safe dict. `reflex-django` ships `ReflexDjangoModelSerializer`; DRF has its own `ModelSerializer`. They're separate classes for separate purposes.
+Converts models to JSON-safe dicts. See `ReflexDjangoModelSerializer`. [Serializers](serializers.md).
 
-### `Session`
-Django's per-user persistent storage, keyed by the `sessionid` cookie. Available as `self.session` in handlers (or `self.request.session`).
-
-### `SessionMiddleware`
-Django's middleware that loads the session row from the `sessionid` cookie. Must be in `MIDDLEWARE` for `request.session` (and Reflex auth) to work.
+### `Session` / `SessionMiddleware`
+Django session storage keyed by `sessionid` cookie. Required for auth.
 
 ### `Skip list`
-The middleware classes the bridge intentionally bypasses on Reflex events. Default: `CsrfViewMiddleware` and `AsyncStreamingMiddleware`. Configurable via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+Middleware classes bypassed on WebSocket events. Default: CSRF and AsyncStreaming.
 
 ### `Socket.IO`
-The WebSocket protocol Reflex uses on `/_event`. A higher-level layer over raw WebSockets with auto-reconnect and event semantics.
+Protocol Reflex uses on `/_event`.
 
 ### `SPA`
-Single-page application. The compiled JavaScript bundle Reflex builds from your Python code. Loaded once on the first visit; in-page navigation happens client-side.
+Single-page application: compiled JS bundle from your Python pages.
 
 ### `STATIC_ROOT`
-The Django setting for where `collectstatic` puts gathered static files. `reflex-django` stages the compiled SPA into `STATIC_ROOT/_reflex/`.
-
-### `Streaming response`
-A Django `StreamingHttpResponse` — an iterator of byte chunks. `AsyncStreamingMiddleware` adapts these for ASGI.
+Where `collectstatic` puts files; SPA lives under `STATIC_ROOT/_reflex/`.
 
 ### `Synthetic request`
-A `django.http.HttpRequest` instance constructed by the bridge from a WebSocket event payload (not from an actual HTTP request). Looks and behaves like a real request to Django middleware.
+`HttpRequest` built by the bridge from a WebSocket payload, not from real HTTP.
 
 ---
 
-### `centered_template`
-An optional decorator from `reflex_django.pages.decorators.templates` for registering a Reflex page wrapped in a centered layout container. Often imported `as template`.
-
-### `UserScopedMixin`
-A mixin that auto-scopes CRUD queries to the current user. Replaces three manual hook overrides (`get_queryset`, `get_object_lookup`, `get_create_kwargs`).
-
----
+## V
 
 ### `Vite`
-The frontend build tool Reflex uses internally. `run_reflex` starts it on the frontend port (default **3000**) for HMR — **browse `:3000` for the SPA** in default dev. The backend port (default **8000**) serves admin, API, and `/_event`; in `django_outer` mode the SPA reaches those via `env.json`, not Vite proxy. Use `--env dev` for compile-only dev on `:8000`. See [Local development](local_development.md).
-
-### `DEFAULT_DEV_MIDDLEWARE`
-A tuple of dotted middleware paths in `reflex_django.django_dev_middleware` for Vite-port admin and CSRF (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`). Prepend to `MIDDLEWARE` in development settings only.
-
----
+Frontend tool Reflex uses. Default dev: browse **`:3000`**. [Local development](local_development.md).
 
 ### `views.py`
-The conventional Django filename for view functions. In `reflex-django`, also where Reflex pages and `AppState` subclasses live — they coexist with Django views in the same file.
+Django views file; in reflex-django also holds `@page` functions and state classes.
 
 ---
+
+## W
 
 ### `WebSocket`
-A protocol that keeps one TCP connection open and lets the client and server exchange messages bidirectionally. Reflex events travel over a WebSocket to `/_event`.
+Persistent connection for Reflex events at `/_event`.
 
 ### `Workers`
-ASGI server processes. Multiple workers can serve more concurrent requests. For Reflex state to be consistent across workers, enable sticky sessions on your load balancer or use a Redis state backend.
+ASGI server processes. Use sticky sessions or Redis for multi-worker state.
 
 ### `WSGI`
-The synchronous predecessor to ASGI. `reflex-django` requires ASGI; you can't run it under a WSGI-only server like classic gunicorn.
+Legacy synchronous gateway. reflex-django requires ASGI.
 
 ---
 
-**Back to:** [Home](index.md) · [FAQ](faq.md)
+## What just happened?
+
+You have a single alphabetical glossary tied to the docs that explain each concept in depth.
+
+## Next up
+
+[Home →](index.md)

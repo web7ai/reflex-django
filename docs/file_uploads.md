@@ -1,6 +1,18 @@
-# File uploads (`rx.upload`)
+---
+level: intermediate
+tags: [uploads, media]
+---
 
-Reflex file uploads use **`/_upload`** — separate from Django **`/media/`** (served files after you save them). reflex-django wires session cookies into upload handler events.
+# File uploads
+
+**What you'll learn:** How Reflex `rx.upload` sends files through `/_upload`, how reflex-django attaches session cookies, and how to save bytes with Django storage.
+
+**When you need this:**
+
+- Users pick images or documents in the browser and you store them on the server.
+- You need uploads to respect the same login session as your Reflex handlers.
+
+Reflex uploads and Django media are two different paths. Upload receives bytes; media serves stored files after you save them.
 
 ---
 
@@ -8,14 +20,17 @@ Reflex file uploads use **`/_upload`** — separate from Django **`/media/`** (s
 
 | Path | Purpose |
 |:---|:---|
-| **`/_upload`** | Reflex receives raw upload bytes (multipart POST). |
-| **`/media/...`** | Django or nginx serves stored files after your handler saves them. |
+| `/_upload` | Reflex receives multipart upload bytes. |
+| `/media/...` | Django (or your reverse proxy) serves files after your handler saves them. |
 
 ---
 
 ## How auth works
 
-reflex-django's `upload_patch.py` merges cookies from the Starlette upload request into handler events so [DjangoEventBridge](websocket_event_pipeline.md) can run session and auth middleware. Log in first; dev must trust both `:3000` and `:8000` for CSRF/session.
+reflex-django patches the upload handler so cookies from the Starlette upload request flow into the [event bridge](websocket_event_pipeline.md). Users should be logged in before uploading. In dev, trust both `:3000` and `:8000` for CSRF and session cookies (see [Local development](local_development.md)).
+
+!!! warning "Log in first"
+    Anonymous uploads will not have `self.request.user` scoped the way you expect. Gate the upload button with auth checks in the handler.
 
 ---
 
@@ -23,10 +38,10 @@ reflex-django's `upload_patch.py` merges cookies from the Starlette upload reque
 
 ```python
 import reflex as rx
-from reflex_django.pages.decorators import page
-from reflex_django.states import AppState
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 
 
 class UploadState(AppState):
@@ -34,10 +49,11 @@ class UploadState(AppState):
 
     @rx.event
     async def handle_upload(self, files: list[rx.UploadFile]):
-        if not files:
+        if not files or not self.request.user.is_authenticated:
             return
         upload = files[0]
         from shop.models import Profile
+
         profile, _ = await Profile.objects.aget_or_create(user=self.request.user)
         content = await upload.read()
         path = f"avatars/{self.request.user.id}_{upload.filename}"
@@ -51,7 +67,10 @@ class UploadState(AppState):
 def upload_demo() -> rx.Component:
     return rx.vstack(
         rx.upload(rx.button("Select image"), id="avatar_upload", max_files=1),
-        rx.button("Upload", on_click=UploadState.handle_upload(rx.upload_files("avatar_upload"))),
+        rx.button(
+            "Upload",
+            on_click=UploadState.handle_upload(rx.upload_files("avatar_upload")),
+        ),
         rx.cond(UploadState.image_url != "", rx.image(src=UploadState.image_url)),
     )
 ```
@@ -62,12 +81,12 @@ Configure [media serving](media_files.md) so `profile.avatar.url` loads in the b
 
 ## Production limits
 
-Set `client_max_body_size` on your reverse proxy (see [Deployment](deployment.md)).
+Set `client_max_body_size` on your reverse proxy. See [Deployment](deployment.md) for nginx and similar examples.
 
 ---
 
-## Related
+## What just happened?
 
-- [Media files](media_files.md)
-- [Forms & validation](forms_and_validation.md)
-- [WebSocket event pipeline](websocket_event_pipeline.md)
+You wired `rx.upload` to an `AppState` handler, saved bytes with Django storage, and exposed the public URL through your media config.
+
+**Next up:** [Model serializers →](serializers.md)

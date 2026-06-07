@@ -1,59 +1,66 @@
+---
+level: beginner
+tags: [configuration, settings]
+---
+
 # Configuration
 
-For the friendly overview (three knobs, two jobs, `app_name` FAQ), start at [The three knobs](mental_model.md). This page is the detailed reference.
+**What you'll learn:** Every place you configure reflex-django v1: settings, the shared `app` singleton, optional URL overrides, and the most common `REFLEX_DJANGO_*` tunables.
 
-Three knobs control a Django-first reflex-django project:
+**When you need this:**
+
+- You finished [Project structure](project_structure.md) and need the detailed settings reference beyond [The three knobs](mental_model.md).
+- A route, port, or compile identity is wrong and you need to know which setting fixes it.
+
+---
+
+For the friendly overview (three knobs, two jobs, `app_name` FAQ), start at [The three knobs](mental_model.md). This page is the detailed reference. The flat settings table also lives at [REFLEX_DJANGO_* settings](settings_reference.md).
+
+---
+
+## Three knobs (v1)
 
 | Knob | Where | What it controls |
 |:---|:---|:---|
 | **Settings** | `REFLEX_DJANGO_RX_CONFIG` | `app_name`, ports, `redis_url`, and other `rx.Config` fields |
-| **App** | `from reflex_django import app` | Pages: `app.add_page()` / `@page` (same as native Reflex `shop/shop.py`) |
-| **URLs** | automatic (default) or `reflex_mount()` | SPA catch-all; override prefix/plugins only when needed |
+| **App** | `from reflex_django import app` | Pages via `@page` or `app.add_page()` on the shared singleton (`reflex_django.reflex_app`) |
+| **URLs** | automatic (default) or `reflex_mount()` | SPA catch-all; override prefix or plugins only when needed |
 
-With `REFLEX_DJANGO_AUTO_MOUNT=True` (the default), you **do not** need a `reflex_mount()` line in `urls.py`. The catch-all is appended at startup after your Django routes are defined.
+With `REFLEX_DJANGO_AUTO_MOUNT=True` (the default), you do **not** need a `reflex_mount()` line in `urls.py`. The catch-all is appended at startup after your Django routes are defined.
 
-There's no `rxconfig.py`. `reflex-django` synthesizes one in memory from settings and any optional `reflex_mount()` overrides.
-
-This page is the reference for both. The settings table at the bottom is also available as a flat lookup at [REFLEX_DJANGO_* settings](settings_reference.md).
+There is no `rxconfig.py`. reflex-django synthesizes one in memory from settings and any optional `reflex_mount()` overrides.
 
 ---
 
-## Minimal `settings.py`
+## Minimal settings and URLs
 
 ```python
-REFLEX_DJANGO_RX_CONFIG = {
-    "app_name": "shop",  # Reflex compile identity; folder name with underscores
-    "frontend_port": 3000,
-    "backend_port": 8000,
-}
-# REFLEX_DJANGO_AUTO_MOUNT defaults to True
+--8<-- "snippets/minimal_settings.py"
 ```
-
-`app_name` is required internally by Reflex (`DECORATED_PAGES` bucketing, virtual `{app_name}.{app_name}:app` module). Put it in settings — not in `urls.py`.
-
----
-
-## Minimal `urls.py`
 
 ```python
-# config/urls.py
-import shop.views  # noqa: F401 — register @page decorators at import time
-
-from django.contrib import admin
-from django.urls import include, path
-
-urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("api/", include("shop.api_urls")),
-]
-# SPA catch-all appended automatically by reflex_django.apps.ReflexDjangoConfig.ready()
+--8<-- "snippets/minimal_urls.py"
 ```
+
+`app_name` is required internally by Reflex (`DECORATED_PAGES` bucketing, virtual compile module). Put it in settings, not in `urls.py`.
 
 Import every page module explicitly (or register pages with `app.add_page()`). Auto-discovery of `{app}.views` across `INSTALLED_APPS` still works but emits a deprecation warning until the next major release.
 
 ---
 
-## Optional `reflex_mount()` — URL overrides only
+## ASGI entry point
+
+Write this once and leave it alone:
+
+```python
+--8<-- "snippets/minimal_asgi.py"
+```
+
+Point `manage.py run_reflex` and your production server (uvicorn, granian, hypercorn, and so on) at this module.
+
+---
+
+## Optional `reflex_mount()` (URL overrides only)
 
 Use when you need a non-root mount prefix, an explicit `django_prefix`, or per-project plugin overrides:
 
@@ -74,20 +81,20 @@ You usually **do not** pass `django_prefix`. reflex-django reads `urlpatterns` a
 
 | Argument | Default | What it does |
 |:---|:---|:---|
-| `app_name` | **deprecated** — use `REFLEX_DJANGO_RX_CONFIG["app_name"]` | Legacy override during migration only. |
 | `mount_prefix` | `"/"` | URL prefix where the SPA catch-all lives. You almost never change this. |
 | `django_prefix` | auto-detect | Path prefixes Django owns. Omit to infer from `urlpatterns`; pass `()` for none; pass a tuple to override. |
 | `urlpatterns` | caller's list | Optional explicit pattern list for auto-detection when not using module-level `urlpatterns += [...]`. |
-| `plugins` | `()` | Extra Reflex plugins. `ReflexDjangoPlugin` is added automatically — don't pass it yourself. |
+| `plugins` | `()` | Extra Reflex plugins. The built-in Django plugin is added automatically. |
 | `rx_config` | `{}` | Optional per-mount `rx.Config` overrides (merged over `REFLEX_DJANGO_RX_CONFIG`). |
-| `django_plugin` | `{}` | Extra kwargs for the built-in `ReflexDjangoPlugin`. Merged with `REFLEX_DJANGO_PLUGIN`. |
+| `django_plugin` | `{}` | Extra kwargs for the built-in Django integration plugin. Merged with `REFLEX_DJANGO_PLUGIN`. |
 
-### What goes in `REFLEX_DJANGO_RX_CONFIG`
+### Common `REFLEX_DJANGO_RX_CONFIG` fields
 
-Prefer settings for Reflex runtime options. You can pass any standard Reflex `rx.Config` option *except* `plugins` (use `REFLEX_DJANGO_PLUGINS` or the `plugins=` argument instead). The most common ones:
+Prefer settings for Reflex runtime options. You can pass any standard Reflex `rx.Config` option *except* `plugins` (use `REFLEX_DJANGO_PLUGINS` or the `plugins=` argument instead):
 
 ```python
 REFLEX_DJANGO_RX_CONFIG = {
+    "app_name": "shop",
     "frontend_port": 3000,
     "backend_port": 8000,
     "redis_url": os.environ.get("REDIS_URL"),
@@ -99,70 +106,52 @@ REFLEX_DJANGO_RX_CONFIG = {
 }
 ```
 
-By default `show_built_with_reflex` is forced to `False`. You can flip it back with `rx_config={"show_built_with_reflex": True}` or globally with `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX = True` in settings.
+By default `show_built_with_reflex` is forced to `False`. Flip it back with `rx_config={"show_built_with_reflex": True}` or globally with `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX = True`.
 
 ### How `django_prefix` auto-detection works
 
-reflex-django needs to know which URLs belong to Django (admin, API, webhooks, …) versus the Reflex SPA. That list drives two things: the SPA catch-all regex (so `/admin` without a trailing slash doesn't get swallowed) and the Vite dev proxy (so API calls don't loop back to the frontend).
+reflex-django needs to know which URLs belong to Django (admin, API, webhooks, and so on) versus the Reflex SPA. That list drives the SPA catch-all regex and the Vite dev proxy.
 
-**The default:** put your Django routes in `urlpatterns`, then append `reflex_mount()` last. No manual prefix list required.
+**The default:** put Django routes in `urlpatterns`, then let auto-mount append the catch-all. No manual prefix list required.
 
-**What gets picked up:** the first path segment of each top-level `path()` — `path("api/", include(...))` becomes `/api`. In `DEBUG`, local `MEDIA_URL` (e.g. `/media`) is included automatically. `STATIC_URL` is handled separately by the library.
+**What gets picked up:** the first path segment of each top-level `path()`. In `DEBUG`, local `MEDIA_URL` (for example `/media`) is included automatically. `STATIC_URL` is handled separately.
 
-**When to override:** pass `django_prefix` explicitly if you use bare `re_path()` patterns without a readable first segment, or if auto-detection picks up a legacy redirect route you don't want reserved:
+**When to override:** pass `django_prefix` explicitly if you use bare `re_path()` patterns without a readable first segment, or if auto-detection picks up a legacy redirect route you do not want reserved:
 
 ```python
-urlpatterns += [
-    reflex_mount(
-        app_name="shop",
-        django_prefix=("/admin", "/api", "/webhooks"),
-    ),
-]
+urlpatterns += reflex_mount(
+    django_prefix=("/admin", "/api", "/webhooks"),
+)
 ```
 
-You only need the top-level prefix once (`"/api"` covers `/api/products/`, `/api/orders/`, and so on).
+You only need the top-level prefix once (`"/api"` covers `/api/products/` and `/api/orders/`).
 
 ---
 
-## ASGI entry point
+## `REFLEX_DJANGO_*` settings (summary)
 
-You only write this file once and you don't touch it again:
-
-```python
-# config/asgi.py
-import os
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application  # noqa: E402,F401
-```
-
-This is what `manage.py run_reflex` and your production server (uvicorn, granian, hypercorn, …) both point at.
-
----
-
-## `REFLEX_DJANGO_*` settings
-
-Optional tunables in `settings.py`. The defaults are sensible — most projects don't change any of these. Add the ones you need.
+Optional tunables in `settings.py`. Defaults are sensible. Most projects change only a few.
 
 ### Routing and serving
 
 | Setting | Default | What it does |
 |:---|:---|:---|
-| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (→ `"django_outer"`) | Routing mode. Default is Django-outer (one process). Set `"reflex_outer"` when Reflex should own the public port and Django HTTP runs in a separate worker — see [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer). Legacy: `"reflex_led"`, `"django_led"`. |
-| `REFLEX_DJANGO_SERVE_FROM_BUILD` | `False` | When `False` (default), `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to auto-build the SPA and serve it from disk. |
+| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (becomes `"django_outer"`) | Routing mode. Set `"reflex_outer"` when Reflex owns the public port. See [Routing](routing.md). Legacy aliases `"reflex_led"` and `"django_led"` still work. |
+| `REFLEX_DJANGO_SERVE_FROM_BUILD` | `False` | When `False`, `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to serve a pre-built SPA from disk. |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `()` | Extra path prefixes always routed to Reflex. |
-| `REFLEX_DJANGO_DEV_PROXY` | `True` in settings; `False` when `run_reflex` runs default Vite mode | When `True`, Django reverse-proxies SPA routes to Vite in DEBUG. Set manually with env `REFLEX_DJANGO_DEV_PROXY=1` for single-origin HMR on `:8000`. |
+| `REFLEX_DJANGO_DEV_PROXY` | `True` in settings; `False` when default Vite mode runs | When `True`, Django reverse-proxies SPA routes to Vite in DEBUG. |
 
-For the dev URL (`:8000`), CSRF trusted origins, and optional dev HTTP middleware, see **[Local development](local_development.md)**.
+For the dev URL (`:8000`), CSRF trusted origins, and optional dev HTTP middleware, see [Local development](local_development.md).
 
 ### Media files
 
-User uploads need standard Django media settings plus a dev URL mount — reflex-django only auto-routes the `/media` prefix in DEBUG; it does not serve files. See **[Media files](media_files.md)** for `MEDIA_URL`, `MEDIA_ROOT`, and `urlpatterns += static(...)`.
+User uploads need standard Django media settings plus a dev URL mount. reflex-django only auto-routes the `/media` prefix in DEBUG; it does not serve files. See [Media files](media_files.md).
 
 ### SPA shell rendering
 
 | Setting | Default | What it does |
 |:---|:---|:---|
-| `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE` | `True` | Pipe the SPA `index.html` through Django's template engine, so `{{ request.user }}` and `{% csrf_token %}` work inside the shell. |
+| `REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE` | `True` | Pipe the SPA `index.html` through Django's template engine so `{{ request.user }}` and `{% csrf_token %}` work in the shell. |
 | `REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX` | `False` | Show or hide the "Built with Reflex" footer. |
 
 ### How events run through middleware
@@ -170,13 +159,11 @@ User uploads need standard Django media settings plus a dev URL mount — reflex
 | Setting | Default | What it does |
 |:---|:---|:---|
 | `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN` | `True` | Run the full `settings.MIDDLEWARE` chain on every Reflex event. |
-| `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP` | `("django.middleware.csrf.CsrfViewMiddleware", "reflex_django.streaming_middleware.AsyncStreamingMiddleware")` | Middleware classes to skip on WebSocket events. |
+| `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP` | CSRF + `AsyncStreamingMiddleware` | Middleware classes to skip on WebSocket events. |
 | `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE` | `True` | Turn 3xx middleware responses into `rx.redirect(...)` automatically. |
 | `REFLEX_DJANGO_EVENT_POST_FROM_PAYLOAD` | `False` | Feed event handler kwargs into the synthetic `request.POST`. |
 
 ### Reactive mirrors
-
-These control whether Django's per-request data appears as reactive variables on `DjangoUserState` (so you can bind them in components).
 
 | Setting | Default | What it does |
 |:---|:---|:---|
@@ -189,16 +176,16 @@ These control whether Django's per-request data appears as reactive variables on
 | Setting | Default | What it does |
 |:---|:---|:---|
 | `REFLEX_DJANGO_PAGE_PACKAGES` | `[]` | Explicit list of page modules. If non-empty, disables auto-discovery. |
-| `REFLEX_DJANGO_AUTO_DISCOVER_PAGES` | `True` | Walk `INSTALLED_APPS` and import `{app}.views`. |
-| `REFLEX_DJANGO_PAGE_APPS` | `None` | Allowlist of app labels to scan. `None` means "all of them". |
+| `REFLEX_DJANGO_AUTO_DISCOVER_PAGES` | `True` (deprecated) | Walk `INSTALLED_APPS` and import `{app}.views` at compile time. |
+| `REFLEX_DJANGO_PAGE_APPS` | `None` | Allowlist of app labels to scan. `None` means all of them. |
 | `REFLEX_DJANGO_PAGE_MODULE` | `"views"` | Which submodule to import per app. |
 
 ### Reflex runtime (`rx.Config`)
 
 | Setting | Default | What it does |
 |:---|:---|:---|
-| `REFLEX_DJANGO_RX_CONFIG` | `{}` | Reflex runtime options: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, log level, etc. This is the right place for `redis_url` and ports — not `urls.py`. |
-| `REFLEX_DJANGO_PLUGINS` | `[]` | Reflex plugins as dotted paths or instances (e.g. Radix, Tailwind). |
+| `REFLEX_DJANGO_RX_CONFIG` | `{}` | Reflex runtime options: ports, `redis_url`, CORS, log level, **`app_name`**, and so on. |
+| `REFLEX_DJANGO_PLUGINS` | `[]` | Reflex plugins as dotted paths or instances (Radix, Tailwind, and so on). |
 
 ### Plugin and rxconfig
 
@@ -206,7 +193,7 @@ These control whether Django's per-request data appears as reactive variables on
 |:---|:---|:---|
 | `REFLEX_DJANGO_USE_RXCONFIG_FILE` | `False` | Merge an existing on-disk `rxconfig.py` into the runtime config. |
 | `REFLEX_DJANGO_MATERIALIZE_RXCONFIG` | `False` | Write a stub `rxconfig.py` to disk. |
-| `REFLEX_DJANGO_PLUGIN` | `{}` | Extra kwargs for the built-in `ReflexDjangoPlugin`. |
+| `REFLEX_DJANGO_PLUGIN` | `{}` | Extra kwargs for the built-in Django integration plugin. |
 | `REFLEX_DJANGO_AUTO_PLUGIN` | `True` | Always enabled. Kept for backwards compatibility. |
 
 ### Auth
@@ -214,38 +201,14 @@ These control whether Django's per-request data appears as reactive variables on
 | Setting | Default | What it does |
 |:---|:---|:---|
 | `REFLEX_DJANGO_LOGIN_URL` | `"/login"` | Where `@login_required` redirects to. |
-| `REFLEX_DJANGO_AUTH` | see [Login & sessions](authentication.md) | Configuration for the built-in auth pages. |
+| `REFLEX_DJANGO_AUTH` | see [Login and sessions](authentication.md) | Built-in auth pages and branding. |
 | `REFLEX_DJANGO_AUTH_AUTO_SYNC` | `True` | Refresh the `AppState` user snapshot on every event. |
-
----
-
-## The `ReflexDjangoPlugin`
-
-`reflex-django` always registers a built-in Reflex plugin called `ReflexDjangoPlugin`. You don't instantiate it. To customize, pass kwargs via `django_plugin={...}` on `reflex_mount()` or set `REFLEX_DJANGO_PLUGIN = {...}` in settings — both are merged.
-
-| Plugin argument | Default | What it does |
-|:---|:---|:---|
-| `django_prefix` | auto-detected | Inherited from `reflex_mount()` (auto or explicit). |
-| `install_event_bridge` | `True` | Wire `DjangoEventBridge` into Reflex's event pipeline. Almost always leave on. |
-| `install_auth_pages` | `False` | Auto-register the built-in login/register/reset pages. Prefer calling `add_auth_pages()` explicitly. |
-
----
-
-## How `DJANGO_SETTINGS_MODULE` is resolved
-
-In order of preference:
-
-1. The `DJANGO_SETTINGS_MODULE` environment variable, if it's set.
-2. Auto-discovery: `reflex-django` walks up looking for `manage.py` and reads its settings reference.
-3. Falls back to `reflex_django.default_settings` (dev-only — **never** rely on this in production).
-
-In production, always set `DJANGO_SETTINGS_MODULE` explicitly in your container or systemd unit.
 
 ---
 
 ## Middleware
 
-Standard Django middleware works as-is. Add one helper at the bottom:
+Standard Django middleware works as-is. Add the streaming helper at the bottom:
 
 ```python
 MIDDLEWARE = [
@@ -260,37 +223,27 @@ MIDDLEWARE = [
 ]
 ```
 
-The `AsyncStreamingMiddleware` line keeps Django's admin streaming responses ASGI-safe. ([Why](async_streaming_middleware.md).)
+The `AsyncStreamingMiddleware` line keeps Django's admin streaming responses ASGI-safe. See [AsyncStreamingMiddleware](async_streaming_middleware.md).
 
-Every middleware in this list runs on every Reflex event by default (except `CsrfViewMiddleware` and `AsyncStreamingMiddleware`, which are skipped on WebSocket events for good reasons). If you write a custom middleware that puts `request.tenant` on every request, it'll also be there on `self.request.tenant` inside your `@rx.event` handlers.
+Every middleware in this list runs on every Reflex event by default (except the skipped ones on WebSocket events). Custom middleware that sets `request.tenant` will also expose it on `self.request.tenant` inside `@rx.event` handlers.
 
 ---
 
 ## Configuration ladder
 
-### Level 0 — defaults (zero `urls.py` mount line)
+### Level 0: defaults (zero mount line)
+
+Settings and URLs from the snippets above. Catch-all appended automatically.
+
+Pages use native Reflex style on the shared app:
 
 ```python
-# settings.py
-REFLEX_DJANGO_RX_CONFIG = {"app_name": "shop", "frontend_port": 3000, "backend_port": 8000}
-```
-
-```python
-# urls.py
-import shop.views  # noqa: F401
-
-urlpatterns = [path("admin/", admin.site.urls)]
-# catch-all appended automatically when REFLEX_DJANGO_AUTO_MOUNT=True (default)
-```
-
-```python
-# pages — native Reflex style
 from reflex_django import app
 
 app.add_page(home, route="/")
 ```
 
-### Level 1 — settings overrides (no manual mount)
+### Level 1: settings overrides (no manual mount)
 
 | Setting | Override |
 |:---|:---|
@@ -298,13 +251,13 @@ app.add_page(home, route="/")
 | `REFLEX_DJANGO_MOUNT_PREFIX` | SPA mount path (default `/`) |
 | `REFLEX_DJANGO_RX_CONFIG` | Any allowed `rx.Config` field, including **`app_name`** |
 | `REFLEX_DJANGO_PLUGINS` | Reflex plugins |
-| `REFLEX_DJANGO_PLUGIN` | `ReflexDjangoPlugin` kwargs (`django_prefix`, …) |
-| `REFLEX_DJANGO_URL_ROUTING` | `django_outer` / `reflex_outer` / `django_led` / `reflex_led` |
-| `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` | Own on-disk `rxconfig.py` instead of synthesized config |
+| `REFLEX_DJANGO_PLUGIN` | Built-in plugin kwargs (`django_prefix`, and so on) |
+| `REFLEX_DJANGO_URL_ROUTING` | `django_outer` / `reflex_outer` |
+| `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` | Merge an on-disk `rxconfig.py` |
 
-### Level 2 — explicit `reflex_mount()` (URL overrides)
+### Level 2: explicit `reflex_mount()`
 
-Manual mount **wins over auto-mount** (duplicate detection). Kwargs merge over settings:
+Manual mount **wins over auto-mount**. Kwargs merge over settings:
 
 ```python
 urlpatterns += reflex_mount(
@@ -314,92 +267,69 @@ urlpatterns += reflex_mount(
 )
 ```
 
-### Level 3 — custom `rx.App`
+### Level 3: custom `rx.App`
 
 **Factory setting:**
 
 ```python
-REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"  # callable() → rx.App
+REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"  # callable() -> rx.App
 ```
 
-**Direct assignment (always supported):**
+**Direct assignment:**
 
 ```python
 import reflex as rx
-import reflex_django.django_led_app as django_led
+import reflex_django.reflex_app as reflex_app_module
 
-django_led._app = rx.App(theme=rx.theme(accent_color="blue"))
+reflex_app_module._app = rx.App(theme=rx.theme(accent_color="blue"))
 ```
 
-Import `from reflex_django import app` in page modules — same singleton object.
+Import `from reflex_django import app` in page modules. It is the same singleton object.
 
-### Level 4 — routing escape hatches
+### Level 4: routing escape hatches
 
 | Mode | When |
 |:---|:---|
-| `REFLEX_LED` | Reflex-first; auto-mount URL append skipped |
-| `REFLEX_DJANGO_AUTO_MOUNT=False` | API-only Django or custom URL layout |
+| `reflex_outer` | Reflex owns the public port; Django HTTP runs in a worker |
+| `REFLEX_DJANGO_AUTO_MOUNT=False` | API-only Django or a fully custom URL layout |
 
-`django_led_app.app` is the **public** app entry (replaces `shop/shop.py`). You are expected to import it when using `app.add_page()`.
+---
+
+## How `DJANGO_SETTINGS_MODULE` is resolved
+
+In order of preference:
+
+1. The `DJANGO_SETTINGS_MODULE` environment variable, if set.
+2. Auto-discovery: reflex-django walks up looking for `manage.py` and reads its settings reference.
+3. Falls back to `reflex_django.default_settings` (dev-only, never rely on this in production).
+
+In production, always set `DJANGO_SETTINGS_MODULE` explicitly in your container or systemd unit.
 
 ---
 
 ## Common configuration mistakes
 
 **Prefix mismatch (404 on `/api/...`)**
-Your Django route is `path("v1/", ...)` but you expected `/api` to be reserved. Auto-detection only sees the first segment of each `path()` — here that is `/v1`, not `/api`. Either rename the Django path or pass `django_prefix=("/api", "/v1", ...)` explicitly.
+Your Django route is `path("v1/", ...)` but you expected `/api` to be reserved. Auto-detection only sees the first segment. Either rename the Django path or pass `django_prefix=("/api", "/v1", ...)` explicitly.
 
 **`AppRegistryNotReady` at import time**
-You imported a model at the top of `views.py`. Move the import inside the handler function. Models are only safe to import after Django finishes its app registry.
+You imported a model at the top of `views.py`. Move the import inside the handler. Models are only safe after Django finishes its app registry.
 
 **Stale `rxconfig.py` on disk**
-If you previously experimented with plain Reflex and have a leftover `rxconfig.py`, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it, or just delete it. By default `reflex-django` ignores files on disk.
+If you have a leftover `rxconfig.py` from plain Reflex, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it, or delete it. By default reflex-django ignores files on disk.
 
 **Wrong `app_name`**
-Set `app_name` in `REFLEX_DJANGO_RX_CONFIG` — it is the Reflex compile identity (often your primary Django app label), not a Python module path like `shop.shop`. The runtime loader is always `reflex_django.django_led_app`.
+Set `app_name` in `REFLEX_DJANGO_RX_CONFIG`. It is the Reflex compile identity (often your primary Django app label), not a Python module path like `shop.shop`. The runtime loader is `reflex_django.reflex_app:app`.
+
+!!! warning "Do not pass plugins in REFLEX_DJANGO_RX_CONFIG"
+    Put plugins in `REFLEX_DJANGO_PLUGINS` or the `plugins=` argument on `reflex_mount()`. The `plugins` key inside `REFLEX_DJANGO_RX_CONFIG` is ignored.
 
 ---
 
-## Minimal checklist
+## What just happened?
 
-If you want to start from a blank-ish project, here's the smallest set of edits:
-
-```python
-# settings.py
-INSTALLED_APPS = [..., "reflex_django", "myapp"]
-ROOT_URLCONF = "config.urls"
-ASGI_APPLICATION = "config.asgi.application"
-
-REFLEX_DJANGO_RX_CONFIG = {
-    "app_name": "myapp",
-    "frontend_port": 3000,
-    "backend_port": 8000,
-}
-
-MIDDLEWARE = [
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
-]
-
-STATIC_ROOT = BASE_DIR / "staticfiles"
-```
-
-```python
-# urls.py
-import myapp.views  # noqa: F401
-
-urlpatterns = [path("admin/", admin.site.urls)]
-```
-
-```python
-# asgi.py
-import os
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application
-```
+You mapped the three configuration knobs to concrete files, saw the minimal wiring snippets, and got a tour of the `REFLEX_DJANGO_*` settings most projects touch. Page registration and the SPA catch-all are separate jobs controlled by imports/settings versus auto-mount.
 
 ---
 
-**Next:** [Pages live in views.py →](pages_in_views.md)
+**Next up:** [Pages in views.py](pages_in_views.md)

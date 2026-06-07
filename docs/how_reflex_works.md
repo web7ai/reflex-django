@@ -1,17 +1,31 @@
+---
+level: beginner
+tags: [reflex, onboarding]
+---
+
 # How Reflex works in 5 minutes
 
-If you've used Reflex before, skim this and move on. If you've only ever written Django (or your usual stack is FastAPI / Flask / something server-rendered), this page is for you. By the end you'll know enough Reflex vocabulary to read the rest of these docs without looking things up.
+**What you'll learn:** Reflex vocabulary (components, state, events, pages, compilation) so the rest of these docs make sense without opening reflex.dev for every term.
+
+**When you need this:**
+
+- You have only written Django (or other server-rendered stacks) and Reflex is new.
+- You want a short primer before reading about AppState and the event bridge.
+
+---
+
+If you have built Reflex before, skim and move on. Everyone else: welcome to UI in Python.
 
 ---
 
 ## The big idea
 
-Reflex lets you build a web UI in pure Python. You don't write React, you don't write JSX, you don't write CSS in a separate folder. You write Python functions that *return components*, and Python classes that hold *state*. Reflex compiles all of that to a real React app.
+Reflex lets you build a web UI in pure Python. You write functions that return components and classes that hold state. Reflex compiles that to a real React app.
 
-So when a user opens your site, two things are happening:
+When a user opens your site:
 
-1. The browser loads a **compiled SPA** (single-page app — a folder of HTML/JS that Reflex generated from your code).
-2. The SPA opens a **WebSocket** to your server. From then on, every click, every form change, every navigation flows over that one connection.
+1. The browser loads a **compiled SPA** (HTML/JS that Reflex generated).
+2. The SPA opens a **WebSocket** to your server. Clicks and form changes flow over that one connection.
 
 ```text
    First load           Every interaction after
@@ -22,13 +36,13 @@ So when a user opens your site, two things are happening:
    from server           clicks go up, state diffs come down
 ```
 
-A WebSocket is just one persistent connection. Instead of making a new HTTP request for every action, the browser and server keep talking on the same line.
+A WebSocket is one persistent connection instead of a new HTTP request per click.
 
 ---
 
-## Components — functions that return UI
+## Components
 
-A Reflex component is a Python function that returns an `rx.Component`:
+A Reflex component is a Python function returning `rx.Component`:
 
 ```python
 import reflex as rx
@@ -41,15 +55,13 @@ def hello() -> rx.Component:
     )
 ```
 
-`rx.vstack`, `rx.heading`, `rx.text`, `rx.button` are component builders. They look like HTML elements but they're plain Python. You compose them by passing them as arguments.
-
-That's the whole component layer. Functions in, components out.
+`rx.vstack`, `rx.heading`, `rx.text`, `rx.button` are component builders. Compose them by nesting. Functions in, components out.
 
 ---
 
-## State — Python classes that hold your app's data
+## State
 
-If components are like HTML, **state** is like the JavaScript that backs them. A state is a Python class that inherits from `rx.State`:
+**State** is like the JavaScript behind your HTML. A state class inherits from `rx.State`:
 
 ```python
 class CounterState(rx.State):
@@ -60,10 +72,8 @@ class CounterState(rx.State):
         self.count += 1
 ```
 
-Two things to notice:
-
-1. `count: int = 0` is a **reactive variable**. When you change it on the server, the UI updates automatically.
-2. `increment` is decorated with `@rx.event`. That means it's an **event handler** — a method the client can call.
+1. `count: int = 0` is a **reactive variable**. Change it on the server, the UI updates.
+2. `increment` is an **event handler** the client can call.
 
 Wire it to a component:
 
@@ -75,57 +85,50 @@ def counter_ui() -> rx.Component:
     )
 ```
 
-Click the button → the browser sends an event over the WebSocket → `increment` runs on the server → `self.count` changes → Reflex sends the new value back → the text updates. You wrote no JavaScript.
+Click the button, the browser sends an event, `increment` runs, `count` changes, the text updates. No hand-written JavaScript.
 
 ---
 
-## Pages — components that get a URL
+## Pages
 
-A page is just a component decorated with `@rx.page` (or, in `reflex-django`, `@page`):
+A page is a component with a route. In reflex-django, use `@page`:
 
 ```python
-@rx.page(route="/counter", title="Counter")
+from reflex_django.pages.decorators import page
+
+@page(route="/counter", title="Counter")
 def counter_page() -> rx.Component:
     return counter_ui()
 ```
 
-Visit `/counter` and you see the page. The client-side router handles navigation between pages without a full reload.
-
-In `reflex-django`, you put these page functions directly inside your Django app's `views.py`:
+Put page functions in your Django app's `views.py`:
 
 ```python
-# shop/views.py
-from reflex_django.pages.decorators import page
-
-@page(route="/", title="Home")
-def home() -> rx.Component:
-    return rx.heading("Hello")
+--8<-- "snippets/minimal_views.py"
 ```
 
-That's the same idea as `@rx.page`, just with a small default layout wrapper around your content.
+Same idea as `@rx.page`, with Django-friendly extras from reflex-django.
 
 ---
 
-## The event loop, end to end
-
-Here's what actually happens when a user clicks a button:
+## The event loop
 
 ```text
 1. Browser:   user clicks "Add one"
 2. Browser:   send event { handler: "CounterState.increment", args: [] } over WebSocket
-3. Server:    Reflex finds the CounterState instance for this user/tab
+3. Server:    Reflex finds the CounterState instance for this tab
 4. Server:    runs CounterState.increment() (self.count += 1)
-5. Server:    notices count changed, sends { CounterState.count: 1 } back
+5. Server:    sends { CounterState.count: 1 } back
 6. Browser:   React re-renders; "Count: 0" becomes "Count: 1"
 ```
 
-You only wrote step 4. Reflex handled the rest.
+You only wrote step 4. Reflex handles the rest.
 
 ---
 
-## Async event handlers
+## Async handlers
 
-Event handlers can be `async def`. This matters a lot for `reflex-django` because Django's async ORM methods need an async context:
+Event handlers can be `async def`. Use async when you talk to Django's async ORM:
 
 ```python
 class TaskState(rx.State):
@@ -133,56 +136,56 @@ class TaskState(rx.State):
 
     @rx.event
     async def load(self):
-        # async iteration over the database
         self.tasks = [
             {"title": t.title}
             async for t in Task.objects.all()
         ]
 ```
 
-Use `async def` whenever you talk to the database.
+In reflex-django, subclass `AppState` instead of `rx.State` when you need `self.request.user`.
 
 ---
 
-## The compiled SPA — built once, served from disk
+## The compiled SPA
 
-Reflex doesn't run your Python in the browser. Before your app can serve users, Reflex **compiles** your Python into a real React app and writes it to disk. There's an `.web/` folder where the source lives and a built bundle that gets shipped.
+Reflex does not run your Python in the browser. It **compiles** Python into a React app on disk (`.web/` and `STATIC_ROOT/_reflex/`).
 
-In `reflex-django`:
+- `python manage.py run_reflex` rebuilds and serves through Django.
+- In production, `python manage.py export_reflex` in CI, then Django serves static files.
 
-- `python manage.py run_reflex` rebuilds the bundle and serves it through Django.
-- In production, you run `python manage.py export_reflex` in CI and Django serves the static files from `STATIC_ROOT/_reflex/`.
-
-You don't have to think about this most of the time. Just know that *something is compiled*, so when you change a Python file, that compile step runs again.
+Something is always compiled. When you change Python, the compile step runs again.
 
 ---
 
-## Where Reflex stops, and where the gap lives
+## Where Reflex stops
 
-Notice what's *not* in this story:
+Plain Reflex events do not automatically include:
 
-- No `HttpRequest`. The WebSocket payload has the path, query string, and a few headers — but no real Django request object.
-- No middleware. Reflex doesn't know what `settings.MIDDLEWARE` is.
-- No `request.user`. Reflex has its own state, but it doesn't know about Django auth.
-- No `csrf_token`, no `messages`, no `request.session`.
+- A real `HttpRequest`
+- `settings.MIDDLEWARE`
+- `request.user`, `csrf_token`, `messages`, `request.session`
 
-That's why every `@rx.event` handler in plain Reflex is "blind" to your Django world. The data is right there in the cookies — but nothing inside Reflex unpacks it.
+The data is often in the cookies. Nothing inside Reflex unpacks it for you.
 
-**This is the gap `reflex-django` closes.** It rebuilds a real `HttpRequest` for each event, runs your full middleware chain, and hands the result to your handler as `self.request`, `self.user`, `self.session`, and friends.
+**reflex-django closes that gap.** It rebuilds an `HttpRequest` per event, runs middleware, and hands you `AppState` with `self.request`, `self.user`, and `self.session`.
 
 ---
 
-## You now know enough Reflex
+## You now know enough
 
-If the four bullets below feel obvious, you're ready for the rest of these docs:
+If these four bullets feel obvious, you are ready for the bridge page:
 
-- A Reflex app is a compiled SPA that talks to the server over a WebSocket.
+- A Reflex app is a compiled SPA talking over a WebSocket.
 - Components are Python functions returning `rx.Component`.
-- State is a Python class with reactive fields and `@rx.event` methods.
-- Pages are components with a `@rx.page` (or `@page`) decorator and a `route`.
+- State holds reactive fields and `@rx.event` methods.
+- Pages are components with a route (`@page` in reflex-django).
 
-The full official Reflex docs live at [reflex.dev](https://reflex.dev). For our purposes, the page above is plenty.
+Official Reflex docs: [reflex.dev](https://reflex.dev).
 
 ---
 
-**Next:** [How the two fit together →](how_they_fit.md)
+## What just happened?
+
+You learned how Reflex compiles Python to a SPA, how state and events update the UI, and where plain Reflex stops (no Django context).
+
+**Next up:** [How the two fit together →](how_they_fit.md)

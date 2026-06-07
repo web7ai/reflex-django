@@ -1,24 +1,30 @@
+---
+level: beginner
+tags: [tutorial, auth, orm]
+---
+
 # Your first app
 
-In this tutorial you'll build a tiny todo list. By the time you're done, you'll have touched every important part of `reflex-django`:
+**What you will learn:** How to build a small todo app with `@page`, `AppState`, Django auth, and the async ORM in about 15 minutes.
 
-- Pages and routes (`@page`)
-- State and event handlers (`AppState`, `@rx.event`)
-- The Django ORM from inside an event handler
-- Authentication — only logged-in users see their own todos
-- The Django admin, still working at `/admin/`
+**When you need this:**
 
-It takes about 15 minutes. We'll go slowly and explain *why* at each step.
+- You want a guided first project instead of wiring pieces from the install page alone.
+- You want to see why each step exists before you adapt the pattern to your own models.
+
+We will build a todo list at `/`, backed by Django models, scoped per user. You log in through `/admin/` like any Django site. One Python process, two dev ports by default.
 
 ---
 
-## What we're building
+## What we are building
 
-A page at `/` that lists your todos, lets you add one, and lets you tick them off. You sign in at `/admin/` (Django's normal login). Each user only sees their own todos. Everything runs in one Python process on one port.
+A page at `/` that lists todos, lets you add one, and lets you tick them off. Signed-in users see only their own rows. Django admin keeps working at `/admin/`. Everything shares session cookies.
 
 ---
 
 ## 1. Create the project
+
+**Why:** reflex-django is a Django app. You need `manage.py`, settings, and a feature app before pages or models.
 
 ```bash
 mkdir myshop && cd myshop
@@ -28,7 +34,7 @@ uv run django-admin startproject config .
 uv run python manage.py startapp shop
 ```
 
-You should now have a layout like this:
+You should now have:
 
 ```text
 myshop/
@@ -43,51 +49,33 @@ myshop/
     └── admin.py
 ```
 
-`config/` is the Django project package (settings, top-level URLs, ASGI entry). `shop/` is a Django "app" — a small feature module. Your code goes in `shop/`.
+`config/` is the Django project (settings, URLs, ASGI). `shop/` is where your feature code lives.
 
 ---
 
 ## 2. Edit `settings.py`
 
-Three things we care about: add `reflex_django` and `shop` to `INSTALLED_APPS`, make sure session and auth middleware are present (so `AppState` can see the user), and add `AsyncStreamingMiddleware` at the end.
+**Why:** reflex-django must be in `INSTALLED_APPS`. Session and auth middleware must run on every Reflex event so `AppState` can read `request.user`.
+
+Add the reflex-django bits to your existing settings (paths, `SECRET_KEY`, database, and so on):
 
 ```python
-# config/settings.py
+--8<-- "snippets/minimal_settings.py"
+```
+
+Also set the usual dev defaults:
+
+```python
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "dev-only-change-me"
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
-
-INSTALLED_APPS = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "reflex_django",
-    "shop",
-]
-
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
-]
-
 ROOT_URLCONF = "config.urls"
 ASGI_APPLICATION = "config.asgi.application"
-
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -96,52 +84,27 @@ DATABASES = {
 }
 ```
 
-Why those middlewares matter: every middleware in that list runs on every Reflex button click too. The session middleware loads the session from the cookie. The auth middleware turns that session into `request.user`. Without them, your Reflex handlers couldn't tell who the user is.
+Every middleware in that list runs when you click a Reflex button, not only on normal HTTP. Session middleware loads the cookie. Auth middleware turns it into `request.user`.
 
 ---
 
-## 3. Wire `urls.py` and settings
+## 3. Wire `urls.py` and ASGI
+
+**Why:** `@page` routes register when Python imports your views module. ASGI must boot through reflex-django so Django and Reflex share one process.
 
 ```python
-# config/urls.py
-import shop.views  # noqa: F401 — registers @page routes at import time
-
-from django.contrib import admin
-from django.urls import path
-
-urlpatterns = [
-    path("admin/", admin.site.urls),
-]
-# SPA catch-all is appended automatically (REFLEX_DJANGO_AUTO_MOUNT=True by default).
+--8<-- "snippets/minimal_urls.py"
 ```
 
-Put `app_name`, ports, and other Reflex runtime options in `settings.py`:
-
 ```python
-REFLEX_DJANGO_RX_CONFIG = {
-    "app_name": "shop",
-    "frontend_port": 3000,
-    "backend_port": 8000,
-}
+--8<-- "snippets/minimal_asgi.py"
 ```
 
 ---
 
-## 4. Point ASGI at `reflex_django`
+## 4. Define a `Todo` model
 
-```python
-# config/asgi.py
-import os
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application  # noqa: E402,F401
-```
-
-This is the single entry point both the dev server and your future production server will use.
-
----
-
-## 5. Define a `Todo` model
+**Why:** This tutorial uses the real Django ORM, not an in-memory list. `owner` scopes rows per user.
 
 ```python
 # shop/models.py
@@ -150,10 +113,10 @@ from django.db import models
 
 
 class Todo(models.Model):
-    title       = models.CharField(max_length=200)
-    done        = models.BooleanField(default=False)
-    owner       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    created_at  = models.DateTimeField(auto_now_add=True)
+    title = models.CharField(max_length=200)
+    done = models.BooleanField(default=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -162,9 +125,7 @@ class Todo(models.Model):
         return self.title
 ```
 
-Standard Django. `owner` ties each todo to a user so each person only sees their own.
-
-Register it with the admin (optional, but useful while we're here):
+Register it with admin (handy while testing):
 
 ```python
 # shop/admin.py
@@ -174,7 +135,7 @@ from shop.models import Todo
 admin.site.register(Todo)
 ```
 
-Now run migrations and create yourself a user:
+Run migrations and create a superuser:
 
 ```bash
 python manage.py makemigrations
@@ -184,9 +145,9 @@ python manage.py createsuperuser
 
 ---
 
-## 6. Write the page and the state
+## 5. Write the page and state
 
-This is the part that's unique to `reflex-django`. We'll build it in three layers: state, page function, then wire them together.
+**Why:** Reflex UI lives in Python components. `AppState` (not plain `rx.State`) gives you `self.request.user` inside handlers.
 
 ```python
 # shop/views.py
@@ -233,20 +194,7 @@ class TodoState(AppState):
         todo.done = not todo.done
         await todo.asave()
         await self.on_load()
-```
 
-Three things to notice:
-
-**`TodoState` inherits from `AppState`**, not plain `rx.State`. That's what gives us `self.request.user` inside the handlers. `AppState` is the bridge between Reflex events and Django. ([More on AppState](state_management.md).)
-
-**Handlers are `async def`** and use Django's async ORM (`acreate`, `aget`, `asave`, async iteration). If you used the blocking versions (`create`, `get`, `save`), you'd freeze the event loop for every other user.
-
-**We re-query in `on_load` and re-call it after mutations**, so the UI always shows the current truth. This is simple and correct. Once you have lots of rows, you can move to the [`ModelState` helper](reactive_model_state.md) which does this for you.
-
-Now the UI:
-
-```python
-# shop/views.py — continued
 
 def todo_row(todo: dict) -> rx.Component:
     return rx.hstack(
@@ -289,104 +237,47 @@ def index() -> rx.Component:
     )
 ```
 
-A few small things:
+Three things to notice:
 
-- `@page(route="/", on_load=...)` registers the page and tells Reflex to run `TodoState.on_load` whenever the user visits this URL.
-- `TodoState.is_authenticated` is a reactive variable that `AppState` exposes for free — it mirrors `request.user.is_authenticated`.
-- `rx.foreach` iterates over the `todos` list and renders one `todo_row` per item.
-- `TodoState.set_new_title` is auto-generated by Reflex for the `new_title: str` field. You didn't write it.
+- **`TodoState` extends `AppState`** so handlers get `self.request.user`. See [AppState](state_management.md).
+- **Handlers are `async def`** and use the async ORM (`acreate`, `aget`, `asave`). Blocking calls would freeze the event loop for other users.
+- **`on_load` runs on every visit** and after mutations, so the list always matches the database.
 
 ---
 
-## 7. Run it
+## 6. Run it
 
-```bash
-python manage.py run_reflex
-```
+**Why:** `run_reflex` is the supported dev entry. It compiles the SPA, starts Vite, and boots the ASGI backend. Plain `runserver` will not give you HMR or the proxy layout.
 
-The first time, this will:
-
-1. Build the Reflex SPA (a one-time compile step).
-2. Start `uvicorn` on port 8000 (the backend) and the Vite dev server on port 3000 (the frontend, with hot reload).
-3. Watch your Python files for changes and hot-reload the frontend on edit.
-
-Open it:
-
-- `http://localhost:3000/` — the todo page (SPA + hot reload).
-- `http://localhost:8000/admin/` — the Django admin (log in with the superuser you created).
-
-(`run_reflex` starts both servers. Prefer one URL? Use `python manage.py run_reflex --env dev` and browse `:8000`.)
+--8<-- "snippets/run_reflex_command.md"
 
 Try this flow:
 
-1. Visit `/` without logging in. You see "Please log in at /admin/".
-2. Visit `/admin/`, log in.
-3. Go back to `/`. You see the input box.
-4. Type "Buy milk", hit Add. The row appears.
-5. Click the checkbox. The text goes line-through.
+1. Visit `/` without logging in. You see the login prompt.
+2. Open `/admin/`, sign in with your superuser.
+3. Return to `/`. Add "Buy milk", then tick the checkbox.
 
-That's a full reactive CRUD page in about 80 lines of Python, with real Django auth, in one process (two dev ports by default; one port in production).
-
----
-
-## What just happened?
-
-When you clicked "Add", here's the actual sequence inside the server:
-
-1. The browser sent a WebSocket event: *"call `TodoState.add_todo`"*.
-2. `reflex-django` saw the event, built a synthetic `HttpRequest` from the cookies, and ran `settings.MIDDLEWARE` over it.
-3. `SessionMiddleware` loaded your session row. `AuthenticationMiddleware` resolved `request.user`.
-4. `reflex-django` bound `self.request` and `self.user` onto your `TodoState` instance.
-5. Your handler ran. `self.request.user` was the real you, so `Todo.objects.acreate(owner=self.request.user, ...)` worked.
-6. Reflex shipped the updated `todos` list back over the WebSocket.
-7. The browser re-rendered the list.
-
-Most of that you didn't write. That's the whole point of `reflex-django`.
-
----
-
-## Faster reloads
-
-When you only changed `models.py` or `admin.py`, you don't need to rebuild the Reflex SPA. Skip it:
-
-```bash
-python manage.py run_reflex --skip-rebuild
-```
-
-If you want the classic Reflex hot-reload experience (a Vite dev server proxied through Django), use:
-
-```bash
-python manage.py run_reflex --with-vite
-```
-
-More flags in the [CLI reference](cli.md).
-
----
-
-## What to read next
-
-You now have a working app. From here:
-
-- **[AppState — your bridge to Django](state_management.md)** — what `self.request`, `self.user`, `self.session` actually are, and how to use them well.
-- **[Talking to the database](database_integration.md)** — the async ORM patterns to remember (and the blocking ones to avoid).
-- **[CRUD with ModelState](reactive_model_state.md)** — the same todo app, but with `ModelState` generating most of the handlers for you.
-- **[Login & sessions](authentication.md)** — built-in login/register pages, decorators, and the live-vs-snapshot rules.
+!!! tip "Faster reloads"
+    Python-only edits? Pass `--skip-rebuild`. Want compile-only dev on one port? Use `python manage.py run_reflex --env dev` and browse `:8000`. See [Local development](local_development.md).
 
 ---
 
 ## Quick troubleshooting
 
-| Symptom | Likely cause and fix |
+| Symptom | Likely fix |
 |:---|:---|
-| `/` returns 404 on first run | The SPA wasn't built. Run `python manage.py run_reflex` once and wait for the export to finish; it stages the bundle into `STATIC_ROOT/_reflex/`. |
-| You see "Please log in" even after logging into `/admin/` | `SessionMiddleware` or `AuthenticationMiddleware` missing from `MIDDLEWARE`. Check step 2. |
-| `AppRegistryNotReady` at startup | You're touching a Django model at class definition time. Move model access into your `@rx.event` handlers. |
-| `ModuleNotFoundError: shop.shop` | A leftover `rxconfig.py` is referencing the old layout. Delete `rxconfig.py` and set `app_name` in `REFLEX_DJANGO_RX_CONFIG`. |
-| Admin complains about streaming | Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the **end** of `MIDDLEWARE`. |
-| Admin **403 CSRF** on `:3000` | See [Local development](local_development.md) — `CSRF_TRUSTED_ORIGINS`, `USE_X_FORWARDED_HOST`, `DEFAULT_DEV_MIDDLEWARE`. |
-| `useContext is not a function` in the browser | Restart `run_reflex` after compile; see [Local development](local_development.md#troubleshooting). |
-| Slow reload after every Python edit | Use `--skip-rebuild` for pure Python changes, or `--with-vite` for hot-reload on Reflex pages. |
+| `/` returns 404 on first run | Wait for the first compile to finish, or run `run_reflex` again. |
+| Still "Please log in" after admin | Check `SessionMiddleware` and `AuthenticationMiddleware` in `MIDDLEWARE`. |
+| `AppRegistryNotReady` | Move model imports inside handlers. |
+| `ModuleNotFoundError: shop.shop` | Delete stale `rxconfig.py`; set `app_name` in `REFLEX_DJANGO_RX_CONFIG`. |
+| Admin 403 CSRF on `:3000` | Add both `:3000` and `:8000` to `CSRF_TRUSTED_ORIGINS`. See [Local development](local_development.md). |
 
 ---
 
-**Next:** [AppState — your bridge to Django →](state_management.md) · [Or: add to an existing Django project →](existing_django_project.md)
+## What just happened?
+
+When you clicked **Add**, the browser sent a WebSocket event. reflex-django built a synthetic `HttpRequest`, ran your full `MIDDLEWARE` chain, bound `self.request` on `TodoState`, and ran `add_todo`. Django wrote a row. Reflex pushed the updated list back over the socket. You did not write that plumbing. That is the point.
+
+---
+
+**Next up:** [AppState and Django context](state_management.md)

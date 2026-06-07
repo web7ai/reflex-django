@@ -13,20 +13,18 @@
 
 ## What is it?
 
-You love Django — the ORM, the admin, migrations, the way it just *works*. You also want a modern, reactive UI written in Python, not React.
+You love Django. You also want a modern, reactive UI in Python, not a separate React repo.
 
-`reflex-django` runs Django and [Reflex](https://reflex.dev) as **one ASGI app on one port**. Reflex config lives in `settings.py`. Pages live in `views.py`. The SPA catch-all is automatic. The Django session you got from `/admin/login/` is the same session your Reflex button handlers see.
+`reflex-django` runs Django and [Reflex](https://reflex.dev) together. Reflex config lives in `settings.py`. Pages live in `views.py`. The SPA catch-all mounts automatically. The session from `/admin/login/` is the same session your Reflex handlers see.
 
-- **One process** — production on one port; dev runs Vite (`:3000`) + backend (`:8000`) via `run_reflex`. No CORS, no token bridge.
-- **Same cookies** — log in once at `/admin/`, every Reflex event sees `self.request.user`.
-- **Same middleware** — your full `settings.MIDDLEWARE` chain runs on every Reflex event.
-- **One command** — `python manage.py run_reflex`.
+- **One command** — `python manage.py run_reflex`
+- **Same cookies** — `self.request.user` inside every `@rx.event`
+- **Same middleware** — your full `settings.MIDDLEWARE` chain on events
+- **Two dev ports** — Vite on `:3000`, backend on `:8000` (proxies wire admin/API for you)
 
 ---
 
 ## Minimal setup
-
-Install:
 
 ```bash
 uv add django reflex reflex-django
@@ -67,20 +65,21 @@ REFLEX_DJANGO_RX_CONFIG = {
 `config/urls.py`:
 
 ```python
-import shop.views  # noqa: F401 — register @page decorators at import time
+import shop.views  # noqa: F401
 
 from django.contrib import admin
 from django.urls import path
 
 urlpatterns = [path("admin/", admin.site.urls)]
-# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
 ```
 
 `config/asgi.py`:
 
 ```python
 import os
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
 from reflex_django.asgi_entry import application  # noqa: E402,F401
 ```
 
@@ -118,37 +117,25 @@ python manage.py migrate
 python manage.py run_reflex
 ```
 
-`run_reflex` starts **two** dev servers: Vite on **:3000** (SPA + hot reload) and Django/Reflex on **:8000** (admin, API, `/_event`).
-
-Open <http://localhost:3000/> for your Reflex UI. Admin at <http://localhost:8000/admin/>.
-
-Optional: `python manage.py run_reflex --env dev` to browse only <http://localhost:8000/>.
-
-That's it.
+Open **http://localhost:3000/** for the Reflex UI. Admin at **http://localhost:8000/admin/** (or via `:3000` when Vite proxies are active).
 
 ---
 
-## Why it exists
+## Read the docs
 
-Reflex sends UI events over a **WebSocket** on `/_event`. Django middleware doesn't run on WebSockets. So `request.user`, sessions, messages, and CSRF aren't available inside `@rx.event` handlers by default — and the SPA usually wants its own port, which breaks cookie sharing.
+Start here on the docs site:
 
-`reflex-django` builds a synthetic `HttpRequest` for every event, runs your full `settings.MIDDLEWARE` chain on it, and binds `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` onto your `AppState` handler. One process. One port. Same auth as your admin.
+1. **[Learning path](https://web7ai.github.io/reflex-django/learning_path/)** — pick your route from zero to shipping
+2. **[Your first app](https://web7ai.github.io/reflex-django/quickstart/)** — 15-minute todo tutorial
+3. **[Troubleshooting](https://web7ai.github.io/reflex-django/troubleshooting/)** — when ports, proxies, or CSRF fight back
 
-Full explanation: [Why reflex-django exists](https://web7ai.github.io/reflex-django/why_reflex_django/).
+More essentials:
 
----
+- [The three knobs](https://web7ai.github.io/reflex-django/mental_model/) — settings, app, URLs
+- [Local development](https://web7ai.github.io/reflex-django/local_development/) — `:3000` vs `:8000` vs `:8001`
+- [Add to an existing Django project](https://web7ai.github.io/reflex-django/existing_django_project/)
 
-## Three knobs
-
-| Knob | Where | What you configure |
-|:---|:---|:---|
-| **Settings** | `settings.py` | `INSTALLED_APPS`, `MIDDLEWARE`, `REFLEX_DJANGO_RX_CONFIG` (`app_name`, ports, `redis_url`, …) |
-| **App** | `{app}/views.py` | `@page` pages and `AppState` subclasses (`from reflex_django import app` for `add_page`) |
-| **URLs** | `urls.py` | Django routes + `import shop.views` to register pages; catch-all is automatic |
-
-No `rxconfig.py`. No `{app}/{app}.py`. No required `reflex_mount()` line. Call `reflex_mount()` only for URL overrides (`mount_prefix`, explicit `django_prefix`).
-
-Full map: [The three knobs](https://web7ai.github.io/reflex-django/mental_model/).
+Full site: **https://web7ai.github.io/reflex-django/**
 
 ---
 
@@ -158,33 +145,16 @@ Full map: [The three knobs](https://web7ai.github.io/reflex-django/mental_model/
 |:---|:---|
 | Python | 3.12+ |
 | Django | 6.0+ |
-| Reflex | 0.9.2+ |
-
----
-
-## Documentation
-
-The full docs walk you through the *why*, the *how*, and every knob:
-
-- **[The three knobs (start here)](https://web7ai.github.io/reflex-django/mental_model/)** — settings, app, URLs; page registration vs catch-all
-- **[Why reflex-django exists](https://web7ai.github.io/reflex-django/why_reflex_django/)** — the one-page story
-- **[How Django works in 5 minutes](https://web7ai.github.io/reflex-django/how_django_works/)**
-- **[How Reflex works in 5 minutes](https://web7ai.github.io/reflex-django/how_reflex_works/)**
-- **[How the two fit together](https://web7ai.github.io/reflex-django/how_they_fit/)**
-- **[Your first app — a 15-minute todo list](https://web7ai.github.io/reflex-django/quickstart/)**
-- **[Local development (Vite, admin CSRF, frontend patches)](https://web7ai.github.io/reflex-django/local_development/)**
-- **[Add to an existing Django project](https://web7ai.github.io/reflex-django/existing_django_project/)**
-
-Site: <https://web7ai.github.io/reflex-django/>
+| Reflex | 0.9.4+ |
 
 ---
 
 ## Common commands
 
 ```bash
-python manage.py run_reflex            # dev server (auto-rebuild + watch)
-python manage.py run_reflex --skip-rebuild   # faster reloads for pure Python edits
-python manage.py export_reflex         # build the SPA bundle (for CI / deploy)
+python manage.py run_reflex
+python manage.py run_reflex --env dev      # single-port compile dev
+python manage.py export_reflex             # build SPA for deploy
 python manage.py migrate
 python manage.py createsuperuser
 ```

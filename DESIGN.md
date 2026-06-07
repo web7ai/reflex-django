@@ -117,6 +117,8 @@ components:
 
 # Design System
 
+> **UI authors:** For branded login/register pages and `REFLEX_DJANGO_AUTH` in real projects, see [Login and sessions](https://web7ai.github.io/reflex-django/authentication/) (section **Make it yours**). This file is internal Radix/Tailwind tokens only.
+
 ## Overview
 
 **Reflex-Django Toolkit** is the default visual language for apps built with [reflex-django](https://pypi.org/project/reflex-django/). It targets developers building full-stack Python apps: clean surfaces, an indigo accent, medium corner radius, and layouts that balance **information-dense CRUD** with **calm, centered auth**.

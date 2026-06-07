@@ -1,51 +1,75 @@
+---
+level: intermediate
+tags: [middleware, asgi, django]
+---
+
 # AsyncStreamingMiddleware explained
 
-This is the small Django middleware you added at the bottom of `MIDDLEWARE`:
+**What you'll learn:** Why reflex-django adds a small middleware at the bottom of `MIDDLEWARE`, what it fixes under ASGI, and why it is skipped on WebSocket events.
+
+**When you need this:**
+
+- You see streaming warnings from uvicorn or granian when opening Django admin.
+- You are reviewing `settings.py` and wonder why `AsyncStreamingMiddleware` must be last.
+
+---
+
+This is the small Django middleware you add at the bottom of `MIDDLEWARE`:
 
 ```python
-MIDDLEWARE = [
-    ...,
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
-]
+--8<-- "snippets/minimal_settings.py"
 ```
 
-This page explains what it does, why it's there, and when you'd actually need to think about it. Short answer: leave it on, place it last, and never think about it again.
+Short answer: leave it on, place it last, and forget about it until a streaming warning appears.
 
 ---
 
 ## What problem it solves
 
-When Django serves a `StreamingHttpResponse` — for example, the admin's static file streaming, large file downloads, or some third-party views — it gives you an *iterator* of byte chunks.
+When Django serves a `StreamingHttpResponse` (admin static streaming, large downloads, some third-party views), it gives you an **iterator** of byte chunks.
 
-Under WSGI (the old sync server), Django expects this iterator to be a regular Python iterator. The WSGI server walks it synchronously and writes each chunk to the socket. Easy.
+Under WSGI, the server walks that iterator synchronously. Under ASGI, the response is consumed with `async for`. If the iterator is sync, the ASGI server calls `__next__()` from the event loop and **blocks the loop** for every chunk. Django emits warnings. In some setups the response hangs.
 
-Under ASGI (the modern async server), the response is consumed by an `async for`. If the iterator is sync, the ASGI server has to call `__next__()` from the event loop — which blocks the loop for every chunk. Django emits warnings, and in some setups, the response just hangs.
+`AsyncStreamingMiddleware` wraps sync streaming responses so they become async-iterable. Admin streams happily under ASGI. Warnings go away.
 
-`AsyncStreamingMiddleware` wraps sync streaming responses so they become async-iterable. The admin happily streams under ASGI; you don't see warnings; nothing hangs.
+<div class="rd-instructor">
+
+Think of it like adding a subtitle track to a video file the player already knows how to play. The content is the same; the wrapper format changed so the async player does not stall.
+
+</div>
 
 ---
 
 ## What it actually does
 
-Inside `process_response` (the part of a Django middleware that runs on the way out):
+Inside `process_response` (on the way out):
 
-1. Look at the response. Is it a `StreamingHttpResponse`?
-2. If yes, is the underlying iterator sync (a regular generator)?
-3. If yes, wrap it in an async-iterable adapter that runs each chunk through `sync_to_async`.
-4. Otherwise, do nothing.
-
-That's it. About 30 lines of code.
+1. Is this an ASGI request? (Check `request.scope`. WSGI requests pass through unchanged.)
+2. Is the response a streaming response?
+3. Is the underlying iterator still sync?
+4. If yes, wrap chunks with `sync_to_async` and mark the response async.
 
 ```python
-# Simplified
+# Simplified from reflex_django/streaming_middleware.py
 def process_response(self, request, response):
-    if not isinstance(response, StreamingHttpResponse):
+    if not _is_asgi_request(request):
         return response
-    if isinstance(response.streaming_content, AsyncIterable):
+    if not getattr(response, "streaming", False):
         return response
-    response.streaming_content = sync_iter_to_async(response.streaming_content)
+    if getattr(response, "is_async", False):
+        return response
+
+    sync_iter = response.streaming_content
+
+    async def async_iter():
+        for part in await sync_to_async(list)(sync_iter):
+            yield part
+
+    response.streaming_content = async_iter()
     return response
 ```
+
+About 40 lines total. No settings knobs.
 
 ---
 
@@ -55,21 +79,21 @@ You need it if any of these are true:
 
 - You serve the Django admin.
 - You have views that return `StreamingHttpResponse` directly.
-- You use any third-party library that streams responses (whitenoise, sendfile, etc.).
+- You use a library that streams responses (some static-file or sendfile helpers).
 
-In other words: pretty much every project. That's why it's listed in every example `settings.py` in these docs.
+That covers most reflex-django projects. Every example `settings.py` in these docs includes it.
 
 ---
 
-## When you don't need it
+## When you do not need it
 
-You don't need it if:
+You can skip it only if:
 
-- You only serve plain `HttpResponse` and `JsonResponse`.
-- You're running under WSGI (then the middleware is a no-op anyway).
-- You don't use the admin.
+- Every view returns plain `HttpResponse` or `JsonResponse`, **and**
+- You never use the admin or streaming third-party views, **and**
+- You run under WSGI only.
 
-It's still safe to leave on — the middleware does nothing on non-streaming responses or under WSGI. The cost is one `isinstance()` check per response.
+It is still safe to leave on. Non-streaming responses cost one `isinstance()` check.
 
 ---
 
@@ -86,21 +110,24 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",   # ← last
+    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",  # last
 ]
 ```
 
-Why last? Middleware on the way out runs in *reverse* order from how it's listed. The last entry is the first to see the response on the way back. Putting `AsyncStreamingMiddleware` last means it sees and adapts the response **before** any other middleware tries to read or modify it. By the time anything else runs, the iterator is already async.
+Middleware on the way **out** runs in reverse order from the list. The last entry is the first to see the response on the way back. Putting `AsyncStreamingMiddleware` last means it adapts the response **before** any other middleware tries to read or modify the body.
 
-If you place it earlier, other middleware might already have consumed (or tried to consume) the sync iterator.
+If you place it earlier, another middleware might consume the sync iterator first.
+
+!!! warning "Keep it last"
+    Moving this middleware up the list is the most common misconfiguration. Symptoms look like truncated downloads or admin pages that never finish loading.
 
 ---
 
-## Why it's skipped on Reflex events
+## Why it is skipped on Reflex events
 
-The bridge skips `AsyncStreamingMiddleware` on WebSocket events (alongside `CsrfViewMiddleware`). WebSocket events never produce a `StreamingHttpResponse` — the response is an in-memory diff, not a streaming download. Running the middleware would be a no-op anyway, and skipping it is one less function call per event.
+`DjangoEventBridge` skips `AsyncStreamingMiddleware` on WebSocket events (alongside `CsrfViewMiddleware`). Events never produce a `StreamingHttpResponse`. The synthetic middleware response is an in-memory empty 200. Skipping saves one no-op call per click.
 
-The skip list:
+Default skip list:
 
 ```python
 REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
@@ -109,77 +136,67 @@ REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
 )
 ```
 
-Override if you need to.
+Override only if you have a unusual reason to run it on events.
+
+See [The WebSocket event pipeline](websocket_event_pipeline.md) and [Custom middleware in events](django_middleware_to_reflex.md).
 
 ---
 
 ## Warning signs
 
-You'll hear about this middleware in one of two ways:
+### Streaming warning in the dev server
 
-### Warning in the dev server
-
-Without this middleware, you might see warnings in `manage.py run_reflex` like:
+Without this middleware you might see:
 
 ```text
 StreamingHttpResponse must consume its content asynchronously
 or the content will be consumed synchronously, blocking the event loop.
 ```
 
-Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE`. Warning goes away.
+Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE`. Restart the server.
 
-### Admin hangs or returns truncated content
+### Admin hangs or truncated content
 
-Without the middleware, some admin endpoints (large change-list pages, big media downloads) might hang under ASGI. Adding the middleware fixes it.
+Some admin endpoints (large changelist exports, big media downloads) may hang under ASGI without the middleware. Adding it fixes the symptom.
 
 ---
 
-## How it interacts with whitenoise / static-file serving
+## How it interacts with WhiteNoise / static-file middleware
 
-`AsyncStreamingMiddleware` is *response-side* — it adapts responses on their way out. Static-file serving middleware (whitenoise, etc.) usually returns sync streaming responses, which this middleware then adapts. They coexist fine.
-
-The order:
+`AsyncStreamingMiddleware` is **response-side**. Static-file middleware (WhiteNoise, etc.) often returns sync streaming responses. This middleware adapts them on the way out. They coexist fine.
 
 ```python
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",   # if you use it
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # if you use it
     "django.contrib.sessions.middleware.SessionMiddleware",
-    ...,
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",   # last
+    # ...
+    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",  # last
 ]
 ```
 
-WhiteNoise creates the streaming response. `AsyncStreamingMiddleware` adapts it on the way back. Both happy.
+WhiteNoise creates the streaming response. `AsyncStreamingMiddleware` adapts it before the ASGI handler sends bytes to the client.
 
 ---
 
 ## Source
 
-The whole file is small. If you want to read it:
+The whole implementation lives in:
 
-```
+```text
 src/reflex_django/streaming_middleware.py
 ```
 
-It's roughly:
+- Old-style `MiddlewareMixin` (`sync_capable` and `async_capable`).
+- `sync_to_async` per chunk for sync iterators.
+- Early returns for WSGI, non-streaming, and already-async responses.
 
-- An old-style `def process_response` middleware (so it has full control over the response on the way out).
-- A `sync_iter_to_async` helper that wraps a sync iterator with `sync_to_async` per chunk.
-- Some `isinstance` checks to skip non-streaming responses and already-async iterators.
-
-No special configuration, no environment variables, no settings — it just works.
+No environment variables. No extra settings beyond placement in `MIDDLEWARE`.
 
 ---
 
-## Summary
+## What just happened?
 
-- Add `"reflex_django.streaming_middleware.AsyncStreamingMiddleware"` at the bottom of `MIDDLEWARE`.
-- It adapts sync streaming responses (admin, downloads) for ASGI.
-- It's a no-op on non-streaming responses and under WSGI.
-- It's skipped on Reflex WebSocket events (where streaming responses don't exist).
-- That's the entire story.
+You learned why `AsyncStreamingMiddleware` belongs at the end of `MIDDLEWARE`, how it adapts sync streams for ASGI, and why the event bridge skips it on `/_event`.
 
----
-
-**Next:** [CLI reference →](cli.md)
+**Next up:** [CLI reference →](cli.md)

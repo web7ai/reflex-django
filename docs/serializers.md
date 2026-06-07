@@ -1,12 +1,24 @@
+---
+level: intermediate
+tags: [serializers, crud]
+---
+
 # Model serializers
 
-A serializer turns a Django model instance into a plain dict — strings, numbers, booleans, lists, dicts. That matters because Reflex state fields get JSON-encoded and shipped to the browser. Model instances, `Decimal`, and `datetime` objects don't survive JSON. Serializers handle the conversion.
+**What you'll learn:** How `ReflexDjangoModelSerializer` turns Django model rows into JSON-safe dicts for Reflex state, and how that ties into `ModelState` and `ModelCRUDView`.
 
-`reflex-django` ships `ReflexDjangoModelSerializer`, a small DRF-style class with no DRF dependency. If you've used DRF, it'll feel familiar. If you haven't, it's only about three concepts.
+**When you need this:**
+
+- You load model data into reactive list vars or form fields.
+- You use `ModelCRUDView` and need an explicit `serializer_class`.
+
+Reflex state fields are JSON-encoded before they reach the browser. Model instances, `Decimal`, and `datetime` do not survive that trip unchanged. Serializers handle the conversion.
+
+`ReflexDjangoModelSerializer` is a small DRF-style helper with no DRF dependency.
 
 ---
 
-## The shape
+## Basic shape
 
 ```python
 # shop/serializers.py
@@ -21,165 +33,121 @@ class ProductSerializer(ReflexDjangoModelSerializer):
         read_only_fields = ("id", "created_at")
 ```
 
-Three things:
-
-- **`model`** — which Django model.
-- **`fields`** — tuple of field names to include in the output.
-- **`read_only_fields`** — fields that appear in the output but can't be set from input.
-
-That's it. No `serializer_method_field`, no nested writable serializers — just a fast way to project a model onto a JSON-safe dict.
+- **`model`**: which Django model.
+- **`fields`**: names included in output.
+- **`read_only_fields`**: appear in output but are not writable from state.
 
 ---
 
-## Using a serializer
+## Using a serializer in handlers
 
-### Async (in event handlers)
-
-This is the one you'll use most:
+### Async (typical in `@rx.event`)
 
 ```python
 qs = Product.objects.filter(is_active=True)
 self.products = await ProductSerializer(qs, many=True).adata()
 ```
 
-`adata()` runs the queryset and returns a list of dicts, asynchronously. Single-instance version:
+Single instance:
 
 ```python
 product = await Product.objects.aget(pk=42)
 self.product = await ProductSerializer(product).adata()
 ```
 
-### Sync (in scripts, tests, management commands)
+### Sync (scripts, tests, management commands)
 
 ```python
 products = list(Product.objects.filter(is_active=True))
 data = ProductSerializer(products, many=True).data
 ```
 
-`.data` is the sync version. Use it outside async contexts.
+Use `.data` outside async contexts. Use `.adata()` inside event handlers.
 
 ---
 
-## What gets converted automatically
+## Automatic type conversion
 
-| Field type | Goes to JSON as |
+| Field type | JSON output |
 |:---|:---|
-| `CharField`, `TextField`, `SlugField`, `EmailField` | `str` |
-| `IntegerField`, `BigIntegerField`, `SmallIntegerField` | `int` |
+| `CharField`, `TextField`, `SlugField` | `str` |
+| `IntegerField` | `int` |
 | `FloatField` | `float` |
 | `DecimalField` | `str` (preserves precision) |
 | `BooleanField` | `bool` |
-| `DateField` | `str` (ISO 8601, e.g. `"2026-01-15"`) |
-| `DateTimeField` | `str` (ISO 8601 with timezone) |
-| `TimeField` | `str` |
+| `DateField` / `DateTimeField` | ISO 8601 `str` |
 | `UUIDField` | `str` |
-| `JSONField` | the underlying dict/list as-is |
-| `ForeignKey` | the related `id` (you opt in to full nested rendering via `select_related` + custom logic) |
-
-You almost never have to write conversion code yourself.
+| `JSONField` | dict or list as-is |
+| `ForeignKey` | related `id` by default |
 
 ---
 
-## Customizing date and decimal formats
+## Custom formats and fields
 
 ```python
 class OrderSerializer(ReflexDjangoModelSerializer):
     class Meta:
         model = Order
         fields = ("id", "total", "placed_at")
-        datetime_format = "%Y-%m-%d %H:%M"   # default is ISO 8601
-        date_format = "%d %b %Y"
-```
-
-For per-instance formatting that needs runtime logic, override the serializer:
-
-```python
-class OrderSerializer(ReflexDjangoModelSerializer):
-    class Meta:
-        model = Order
-        fields = ("id", "placed_at_pretty")
+        datetime_format = "%Y-%m-%d %H:%M"
 
     def serialize_placed_at_pretty(self, instance):
         return instance.placed_at.strftime("%A, %B %d")
 ```
 
-Any method named `serialize_<field>` overrides the auto-generated value for that field.
+Methods named `serialize_<field>` override auto serialization for that field.
 
 ---
 
-## Excluding fields at runtime
-
-Sometimes you want different shapes in different contexts (a public list vs. an admin detail view). Pass `exclude_fields`:
+## Hide fields at runtime
 
 ```python
-self.public_view = await ProductSerializer(qs, many=True, exclude_fields={"cost", "supplier"}).adata()
-self.admin_view  = await ProductSerializer(qs, many=True).adata()
+self.public_rows = await ProductSerializer(
+    qs, many=True, exclude_fields={"cost", "supplier"}
+).adata()
 ```
 
-The serializer drops those fields before returning. Useful for hiding internal data from non-staff users without writing a second serializer class.
+Useful when staff and public views share one serializer class.
 
 ---
 
-## Integration with `ModelCRUDView`
+## Integration with declarative CRUD
 
-When you pass a `serializer_class` to a `ModelCRUDView`:
+**`ModelCRUDView`**: pass `serializer_class`. The stack uses it for list rows, edit population, and writable field detection.
 
-```python
-class ProductState(AppState, ModelCRUDView):
-    model = Product
-    serializer_class = ProductSerializer
-```
+**`ModelState`**: omit `serializer_class` and set `fields = [...]`. A serializer is auto-built at class definition time.
 
-The CRUD machinery uses it for:
-
-- The list view (calls `.adata()` per page).
-- The detail view (when entering edit mode).
-- Knowing which fields are writable vs read-only (via `read_only_fields`).
-
-You don't have to manually serialize anywhere. The class wires it up.
-
-For `ModelState`, the serializer is auto-built from `fields = [...]` — usually that's enough and you don't need a separate `*Serializer` class.
+You rarely call `.adata()` by hand on declarative CRUD states; the mixins do it on refresh and edit.
 
 ---
 
 ## Performance tips
 
-### Only fetch what you serialize
-
-If your serializer has 4 fields but your model has 20, narrow the SQL:
+Narrow SQL to serialized columns:
 
 ```python
 qs = Product.objects.only("id", "name", "price", "is_active")
-data = await ProductSerializer(qs, many=True).adata()
 ```
 
-`only(...)` tells Django to fetch only those columns. For wide tables, this can dramatically cut query time.
-
-### Avoid N+1 on related rows
-
-If your serializer indirectly accesses related rows (via a `serialize_<field>` method, or a denormalized field), use `select_related` / `prefetch_related`:
+Avoid N+1 when custom `serialize_<field>` touches relations:
 
 ```python
 qs = Product.objects.select_related("category").prefetch_related("tags")
 ```
 
-For `ModelCRUDView`, set these in `Meta`:
+On `ModelCRUDView` / `ModelState`, set:
 
 ```python
-class Meta:
-    queryset_select_related = ("category",)
-    queryset_prefetch = ("tags",)
+queryset_select_related = ("category",)
+queryset_prefetch = ("tags",)
 ```
 
-### Don't ship enormous payloads to the browser
-
-`AppState` fields go to every connected client. A 10MB list is a 10MB upload + 10MB JSON parse on every page transition. Paginate, narrow fields, and prefer many small responses over one huge one.
+!!! tip "Paginate large lists"
+    State vars ship to the browser. Prefer paginated list vars over one giant payload.
 
 ---
 
-## The low-level helper: `serialize_model_row`
-
-If you only need to convert one or two rows and don't want a class, use the module-level helper:
+## Low-level helper
 
 ```python
 from reflex_django.serialization import serialize_model_row
@@ -187,31 +155,23 @@ from reflex_django.serialization import serialize_model_row
 row = serialize_model_row(product, fields=("id", "name", "price"))
 ```
 
-Returns a single dict. There's no `adata()` equivalent — for async, prefer the class.
+For async handlers, prefer the serializer class and `.adata()`.
 
 ---
 
-## Sharing with DRF (if you have it)
+## Sharing with DRF
 
-If your project already has DRF and you've written `BlogPostSerializer(ModelSerializer)`, you have two reasonable options:
+If you also run Django REST Framework, keep two small classes:
 
-**Option A** — use both. DRF's `ModelSerializer` for HTTP endpoints, `ReflexDjangoModelSerializer` for Reflex states. They're compatible — both can target the same model with the same field list. You write two classes, but they're tiny.
+- `ReflexDjangoModelSerializer` for Reflex state (WebSocket path)
+- DRF `ModelSerializer` for HTTP `/api/` endpoints
 
-**Option B** — write a thin adapter. `ReflexDjangoModelSerializer` doesn't depend on DRF, so an adapter that calls DRF's `.data` from your Reflex state works fine. The trade-off is dragging DRF into your event handler path.
-
-For new projects, option A is simpler. For projects where DRF is already deep in the codebase, option B avoids duplication.
-
----
-
-## Summary
-
-- A serializer converts a model instance to a JSON-safe dict.
-- Use `await Serializer(qs, many=True).adata()` in event handlers.
-- Use `.data` (sync) in management commands and tests.
-- Customize per-field with `serialize_<field>` methods.
-- Hide fields at runtime with `exclude_fields=`.
-- Always pair with `only()` / `select_related()` / `prefetch_related()` for performance.
+Same `fields` tuple, two libraries. Do not pass a DRF serializer to `ModelCRUDView`.
 
 ---
 
-**Next:** [i18n & translations →](i18n.md)
+## What just happened?
+
+You learned how serializers make model rows JSON-safe, when to call `.adata()`, and how declarative CRUD classes wire serialization for you.
+
+**Next up:** [i18n and translations →](i18n.md)

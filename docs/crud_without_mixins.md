@@ -1,24 +1,40 @@
+---
+level: intermediate
+tags: [crud, database]
+---
+
 # CRUD the manual way
 
-`reflex-django` ships a declarative CRUD helper (`ModelState`) that generates list/save/delete handlers for you. But sometimes you want every step in front of you — for an unusual workflow, for clearer reading, or just because you like writing the code yourself.
+**What you'll learn:** How to build a full list, create, edit, and delete page with plain `AppState` and the async ORM, so every query and check is visible in your code.
 
-This page walks through a complete user-scoped product inventory page using plain `AppState` and the async ORM. By the end you'll have list + search + pagination + create + edit + delete in one file you wrote line by line.
+**When you need this:**
 
-If you want the same thing in a third as much code, jump to [CRUD with ModelState](reactive_model_state.md) when you're done here.
+- The workflow is unusual (multi-step, conditional fields, or rules that do not fit declarative CRUD).
+- You want to read every database call line by line before reaching for helpers.
+
+<div class="rd-instructor" markdown>
+
+Think of this page as writing Django views by hand, except the "view" is a Reflex state class and the browser updates reactively when you change state fields.
+
+</div>
+
+`reflex-django` ships declarative helpers (`ModelState`, `ModelCRUDView`) that generate most CRUD wiring for you. This page walks through the same product inventory feature without them. When you are done, you will know exactly what those helpers automate.
+
+!!! tip "Prefer less code later?"
+    After this page, [CRUD with ModelState](reactive_model_state.md) covers the same feature in a fraction of the lines.
 
 ---
 
-## What we're building
+## What we are building
 
-A page at `/inventory` that lets a logged-in user manage their own products. Each user only sees their own rows. Features:
+A page at `/inventory` where a logged-in user manages their own products. Each user only sees their own rows.
 
 - List with pagination
-- Search by name / SKU / category
-- Create new product
-- Edit existing product (form switches to "edit mode")
-- Delete with ownership check
+- Search by name, SKU, or category
+- Create and edit (one form, edit mode toggled by `editing_id`)
+- Delete with an ownership check on every read and write
 
-Every database call uses the async ORM (`acreate`, `aget`, `asave`, `adelete`, `async for`).
+Every database call uses the async ORM (`acreate`, `aget`, `asave`, `adelete`, `async for`, `acount`).
 
 ---
 
@@ -31,17 +47,17 @@ from django.db import models
 
 
 class Product(models.Model):
-    owner       = models.ForeignKey(
+    owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="inventory_products",
     )
-    name        = models.CharField(max_length=128)
-    sku         = models.CharField(max_length=64, unique=True)
-    price       = models.DecimalField(max_digits=10, decimal_places=2)
-    category    = models.CharField(max_length=64, blank=True)
-    is_active   = models.BooleanField(default=True)
-    created_at  = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(max_length=128)
+    sku = models.CharField(max_length=64, unique=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    category = models.CharField(max_length=64, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -50,9 +66,7 @@ class Product(models.Model):
         return f"{self.name} ({self.sku})"
 ```
 
-Standard Django. `owner` is the per-user scope; everything else is regular fields.
-
-Run the migration:
+Run migrations:
 
 ```bash
 python manage.py makemigrations inventory
@@ -63,7 +77,7 @@ python manage.py migrate
 
 ## 2. The serializer
 
-Reflex state fields get JSON-encoded before they're shipped to the browser. Decimal and datetime aren't JSON-friendly, so we convert. A serializer is the easiest way:
+Reflex state fields are JSON-encoded before they reach the browser. `Decimal` and `datetime` need conversion. A serializer is the easiest path:
 
 ```python
 # inventory/serializers.py
@@ -78,52 +92,47 @@ class ProductSerializer(ReflexDjangoModelSerializer):
         read_only_fields = ("id", "created_at")
 ```
 
-`await ProductSerializer(qs, many=True).adata()` turns a queryset into a JSON-safe list of dicts. More on serializers in [Model serializers](serializers.md).
+`await ProductSerializer(qs, many=True).adata()` turns a queryset into a JSON-safe list of dicts. More detail in [Model serializers](serializers.md).
 
 ---
 
 ## 3. The state shell
 
-We'll fill in the methods step by step. Here's the skeleton:
-
 ```python
 # inventory/views.py
 import reflex as rx
 from django.db.models import Q
-from reflex_django.state import AppState
+from reflex_django.pages.decorators import page
+from reflex_django.states import AppState
 from inventory.models import Product
 from inventory.serializers import ProductSerializer
 
 
 class InventoryState(AppState):
-    # what the UI renders
     products: list[dict] = []
     error: str = ""
 
-    # form bindings
     name: str = ""
     sku: str = ""
     price: str = ""
     category: str = ""
     is_active: bool = True
 
-    # which row are we editing? -1 = creating new
     editing_id: int = -1
 
-    # search and pagination
     search_query: str = ""
     page: int = 1
     page_size: int = 8
     total_pages: int = 1
 ```
 
-`InventoryState(AppState)` is what gives us `self.request.user` later. The fields are reactive — assigning to them on the server updates the browser automatically.
+`InventoryState(AppState)` gives you `self.request.user` inside handlers. The fields above are reactive: assigning to them on the server updates the browser.
 
 ---
 
-## 4. Build the queryset (scoped, searched, paginated)
+## 4. Scoped queryset helper
 
-This helper centralizes the "scope to current user + apply search" logic. Every other method calls it, so we only get the scope right once:
+Centralize "current user plus search" once. Every other method calls this helper:
 
 ```python
     def _filtered_qs(self):
@@ -141,7 +150,7 @@ This helper centralizes the "scope to current user + apply search" logic. Every 
         return qs.order_by("-created_at")
 ```
 
-`filter(owner=user)` is the security boundary. As long as every read/write goes through this queryset, a user can't touch another user's rows even by forging IDs.
+`filter(owner=user)` is the security boundary. As long as every read and write goes through this queryset (or repeats the same `owner=` filter), users cannot touch each other's rows by forging IDs.
 
 ---
 
@@ -163,17 +172,8 @@ This helper centralizes the "scope to current user + apply search" logic. Every 
             self.error = str(e)
             self.products = []
         except Exception as e:
-            self.error = f"Couldn't load: {e}"
-```
+            self.error = f"Could not load: {e}"
 
-Two small details:
-
-- `await qs.acount()` is the async row count. Never call `qs.count()` in an async handler.
-- The slice `qs[start : start + page_size]` becomes a `LIMIT/OFFSET` in SQL. It doesn't materialize the whole table.
-
-Wire up search and page navigation:
-
-```python
     @rx.event
     async def set_search(self, value: str):
         self.search_query = value
@@ -193,9 +193,12 @@ Wire up search and page navigation:
             await self.load()
 ```
 
+!!! warning "Stay async in handlers"
+    Use `await qs.acount()`, not `qs.count()`. Blocking ORM calls inside `async def` handlers stall the event loop for every connected user.
+
 ---
 
-## 6. Create / update — one handler for both
+## 6. Create and update
 
 ```python
     def _validation_error(self) -> str | None:
@@ -232,14 +235,12 @@ Wire up search and page navigation:
 
         try:
             if self.editing_id >= 0:
-                # update — fetch with owner scope so users can't edit foreign rows
                 product = await Product.objects.aget(pk=self.editing_id, owner=user)
                 for k, v in data.items():
                     setattr(product, k, v)
                 await product.asave()
                 yield rx.toast.success(f"Updated '{product.name}'.")
             else:
-                # create — owner is always the current user
                 new = await Product.objects.acreate(owner=user, **data)
                 yield rx.toast.success(f"Added '{new.name}'.")
 
@@ -259,7 +260,7 @@ Wire up search and page navigation:
         self.error = ""
 ```
 
-The important bit: when we update, we fetch with `aget(pk=..., owner=user)`. If the user passes an ID they don't own, `aget` raises `DoesNotExist` and the row stays safe. Same on the create path — the owner is `user`, period; we never trust the client to tell us who owns the row.
+On update, `aget(pk=..., owner=user)` ensures foreign IDs cannot be edited. On create, `owner=user` is always set server-side.
 
 ---
 
@@ -291,11 +292,11 @@ The important bit: when we update, we fetch with `aget(pk=..., owner=user)`. If 
             return rx.toast.error("Not found.")
 ```
 
-Same ownership check pattern as before. Notice that `self.price = str(p.price)` — the form field is a string, but the DB value is `Decimal`. Convert at the boundary.
+The form binds `price` as a string while the database stores `Decimal`. Convert at the boundary (`str(p.price)` when loading, string in `data` when saving).
 
 ---
 
-## 8. The UI
+## 8. The UI and page registration
 
 ```python
 def inventory_page() -> rx.Component:
@@ -305,120 +306,37 @@ def inventory_page() -> rx.Component:
             InventoryState.error != "",
             rx.callout(InventoryState.error, color_scheme="red"),
         ),
-        rx.grid(
-            form_card(),
-            list_card(),
-            columns="2",
-            spacing="6",
-        ),
+        rx.grid(form_card(), list_card(), columns="2", spacing="6"),
         padding="2rem",
     )
 
-
-def form_card() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            rx.heading(
-                rx.cond(InventoryState.editing_id >= 0, "Edit product", "Add product"),
-                size="4",
-            ),
-            rx.input(placeholder="Name",     value=InventoryState.name,     on_change=InventoryState.set_name),
-            rx.input(placeholder="SKU",      value=InventoryState.sku,      on_change=InventoryState.set_sku),
-            rx.input(placeholder="Price",    value=InventoryState.price,    on_change=InventoryState.set_price),
-            rx.input(placeholder="Category", value=InventoryState.category, on_change=InventoryState.set_category),
-            rx.hstack(
-                rx.text("Active"),
-                rx.switch(checked=InventoryState.is_active, on_change=InventoryState.set_is_active),
-            ),
-            rx.hstack(
-                rx.button("Save", on_click=InventoryState.save),
-                rx.cond(
-                    InventoryState.editing_id >= 0,
-                    rx.button("Cancel", on_click=InventoryState.reset_form, variant="ghost"),
-                ),
-            ),
-            spacing="3",
-        ),
-        padding="1.5rem",
-    )
-
-
-def list_card() -> rx.Component:
-    return rx.vstack(
-        rx.input(
-            placeholder="Search by name, SKU, or category…",
-            value=InventoryState.search_query,
-            on_change=InventoryState.set_search,
-        ),
-        rx.foreach(InventoryState.products, product_row),
-        rx.hstack(
-            rx.button("Previous", on_click=InventoryState.prev_page, disabled=InventoryState.page == 1),
-            rx.text(f"Page {InventoryState.page} of {InventoryState.total_pages}"),
-            rx.button("Next", on_click=InventoryState.next_page, disabled=InventoryState.page == InventoryState.total_pages),
-            justify="between",
-        ),
-        spacing="3",
-    )
-
-
-def product_row(row: dict) -> rx.Component:
-    return rx.hstack(
-        rx.vstack(
-            rx.text(row["name"], weight="bold"),
-            rx.hstack(rx.badge(row["sku"]), rx.text(f"${row['price']}")),
-            align_items="start",
-        ),
-        rx.spacer(),
-        rx.button("Edit",   on_click=InventoryState.start_editing(row["id"]), variant="surface"),
-        rx.button("Delete", on_click=InventoryState.delete(row["id"]),         color_scheme="red", variant="ghost"),
-        padding="0.75rem",
-        border_bottom="1px solid rgba(0,0,0,0.08)",
-    )
-```
-
-Register the page with `@page`:
-
-```python
-from reflex_django.pages.decorators import page
 
 @page(route="/inventory", title="Inventory", on_load=InventoryState.load)
 def index() -> rx.Component:
     return inventory_page()
 ```
 
-That's the whole feature — list, search, paginate, create, edit, delete — in a single `views.py` file.
+Wire inputs with `value=` and `on_change=` to your state fields, and hook buttons to `InventoryState.save`, `start_editing`, and `delete`. That is the whole feature in one `views.py`.
 
 ---
 
-## Why you might prefer this style
+## Manual vs declarative (preview)
 
-- **Total visibility.** Every query, every check, every error path is right there. No hooks to override.
-- **Custom workflows.** Multi-step forms, conditional fields, weird business rules — they all fit naturally.
-- **Easy to learn.** It's just async Python and the Django ORM. Anyone who's seen Django can read it.
-
-## And why you might prefer `ModelState`
-
-- **Far less code.** The same feature can be ~25 lines instead of ~150.
-- **Less to maintain.** Sensible defaults handle pagination, validation, scoping.
-- **Consistent UX.** All your CRUD pages behave the same way.
-
-Both styles work in the same project. Use the manual style when the page is unusual, and `ModelState` when it's standard. See [CRUD with ModelState](reactive_model_state.md) for the declarative version.
-
----
-
-## Manual vs declarative cheat sheet
-
-| You write | Manual | `ModelState` |
+| You write | Manual `AppState` | `ModelState` |
 |:---|:---|:---|
-| The `load` handler | Yes | Generated |
-| The `save` handler | Yes | Generated |
-| The `delete` handler | Yes | Generated |
-| Per-field state vars | Yes | Generated from `fields = [...]` |
-| Pagination | Yes | `paginate_by = X` in `Meta` |
-| Owner scoping | Yes (`_filtered_qs`) | `UserScopedMixin` or override `get_queryset` |
-| Custom validation | Yes | `clean_<field>` or `validate_state` |
+| `load` handler | Yes | Generated |
+| `save` / `delete` | Yes | Generated |
+| Per-field state vars | Yes | Generated from `fields` |
+| Pagination | Yes | `paginate_by = N` |
+| Owner scoping | Yes (`_filtered_qs`) | `scope_field` or hooks |
 | The UI components | Yes | Yes (still your job) |
 
+Both styles can live in the same project. Use manual code when the page is unusual; use `ModelState` when it is standard CRUD.
+
 ---
 
-**Next:** [CRUD with ModelState →](reactive_model_state.md)
+## What just happened?
+
+You built list, search, pagination, create, edit, and delete with explicit async ORM calls and per-user scoping. Every security check and validation path is in your file, which is the baseline the declarative CRUD helpers automate next.
+
+**Next up:** [CRUD with ModelState →](reactive_model_state.md)

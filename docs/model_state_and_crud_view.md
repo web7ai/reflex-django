@@ -1,182 +1,173 @@
+---
+level: intermediate
+tags: [crud, comparison]
+---
+
 # Choosing ModelState vs ModelCRUDView
 
-You've seen both in the previous two pages. They do the same thing — declarative CRUD over a Django model — but with different defaults. This page is the one-place comparison so you can decide.
+**What you'll learn:** Which declarative CRUD class to pick for a new page, and how small a refactor is if you switch later.
 
-**TL;DR:**
+**When you need this:**
 
-- Use **`ModelState`** for new pages. Short, generic, one inheritance.
-- Use **`ModelCRUDView`** when you need explicit serializers or named handlers (`save_post`, `posts`) instead of generic ones.
+- You have seen both `ModelState` and `ModelCRUDView` and want one decision page.
+- You are planning several CRUD screens and want consistent naming across the project.
 
-Both classes use the exact same dispatch pipeline, validation hooks, and Meta options. Switching between them later is a small refactor, not a rewrite.
+Both classes run the same dispatch pipeline, validation hooks, and `Meta` options. Switching later is a small rename refactor, not a rewrite.
 
 ---
 
 ## Side by side
 
 ```python
-# ModelState — recommended for most cases
+# ModelState (recommended for most new pages)
+from reflex_django.states import ModelState
+
+
 class ProductState(ModelState):
     model = Product
     fields = ["name", "price", "sku"]
-
-    class Meta:
-        list_var = "products"
+    list_var = "products"
 ```
 
 ```python
-# ModelCRUDView — when you want an explicit serializer + named handlers
+# ModelCRUDView (explicit serializer + named handlers)
+from reflex_django.states import AppState
+from reflex_django.state import ModelCRUDView
+
+
 class ProductState(AppState, ModelCRUDView):
     model = Product
     serializer_class = ProductSerializer
-
-    class Meta:
-        list_var = "products"
-        save_event = "save_product"
-        delete_event = "delete_product"
+    list_var = "products"
+    save_event = "save_product"
+    delete_event = "delete_product"
 ```
-
-Both produce a working CRUD state. The differences are visible in how you call them:
 
 | | `ModelState` | `ModelCRUDView` |
 |:---|:---|:---|
-| Inheritance | `class X(ModelState)` (one parent) | `class X(AppState, ModelCRUDView)` (you compose) |
-| Serializer | Auto-built from `fields` | Provided explicitly via `serializer_class` |
-| List variable | `state.data` (default) or via `Meta.list_var` | Plural model name or via `Meta.list_var` |
-| Save handler | `state.save()` | `state.save_product()` (or `state.save()` if you don't set `save_event`) |
-| Delete handler | `state.delete(pk)` | `state.delete_product(pk)` (or `state.delete(pk)`) |
-| What you give up | A bit of explicitness | A line of code (no serializer file) |
+| Inheritance | One parent: `ModelState` | Compose: `AppState, ModelCRUDView` |
+| Serializer | Auto-built from `fields` | You provide `serializer_class` |
+| Default list var | `data` | plural model name (e.g. `products`) |
+| Default save | `save()` | `save_product` (model-dependent) |
+| Default delete | `delete(pk)` | `delete_product(pk)` |
+| Trade-off | Less explicit, fewer files | More explicit API surface |
 
 ---
 
 ## Feature parity
 
-These all work identically on both classes:
+These work the same on both classes:
 
-- All `Meta` options (`list_var`, `ordering`, `paginate_by`, `search_fields`, `reset_after_save`, …)
-- All hooks (`get_queryset`, `filter_queryset`, `get_object_lookup`, `get_create_kwargs`, `clean_<field>`, `validate_state`, `before_save`, `after_save`, …)
-- All mixins from [`reflex_django.mixins`](reflex_django_mixins.md)
-- Pagination, search, structured errors, form reset
+- Pagination (`paginate_by`), search (`search_fields`), structured errors
+- Hooks: `get_queryset`, `filter_queryset`, `get_object_lookup`, `get_create_kwargs`
+- Validation: `clean_<field>`, `validate_state`, `clean_state`, `run_model_validation`
+- Lifecycle: `before_save`, `after_save`, `before_delete`, `after_delete`
+- Mixins from `reflex_django.state.mixins` (see [Mixins](reflex_django_mixins.md))
 
-Nothing is "only available on one of them".
+Nothing is exclusive to one class.
 
 ---
 
-## When `ModelState` is the better choice
+## When ModelState is the better choice
 
-- You don't already have a serializer for this model.
-- The page is a one-off — you don't need to reuse the schema elsewhere.
-- You want the smallest possible amount of code.
-- You're prototyping.
+- No serializer exists yet for this model.
+- The page is a one-off prototype.
+- Generic handler names (`save`, `delete`) are fine.
 
 ```python
 class TaskState(ModelState):
     model = Task
     fields = ["title", "done"]
-
-    class Meta:
-        list_var = "tasks"
-
-# 5 lines. Done.
+    list_var = "tasks"
 ```
+
+Five lines of declaration, then your UI.
 
 ---
 
-## When `ModelCRUDView` is the better choice
+## When ModelCRUDView is the better choice
 
-- You already have a serializer (typically from DRF) and you want to reuse it.
-- You have many CRUD pages and want their state APIs to read like a small admin DSL — `state.save_order()` is clearer than `state.save()` when six similar states live in the same module.
-- You want to compose explicit mixins (e.g. "list + create only, no edit, no delete") instead of subclassing the all-in-one `ModelState`. See [Mixins](reflex_django_mixins.md).
-- You want to surface the same schema to both Reflex (via this state) and an HTTP endpoint (via DRF) without duplicating field definitions.
+- You already maintain a `ReflexDjangoModelSerializer` (or want one file per model schema).
+- Many CRUD states share a module and verb-noun names reduce confusion (`save_order` vs six different `save` methods).
+- You want to compose a subset of CRUD mixins (list + create only, for example).
+- The same field list also backs an HTTP API and you want one serializer definition for Reflex.
 
 ```python
 class OrderState(AppState, ModelCRUDView):
     model = Order
-    serializer_class = OrderSerializer   # shared with /api/orders/
-
-    class Meta:
-        list_var = "orders"
-        save_event = "save_order"
-        delete_event = "delete_order"
-        permission_classes = (StaffOnly,)
+    serializer_class = OrderSerializer
+    list_var = "orders"
+    save_event = "save_order"
+    delete_event = "delete_order"
 ```
 
 ---
 
 ## Read-only lists
 
-If you only need a list — no editing, no deletes — both classes have a read-only sibling: `ModelListView`. It strips the writable fields and `save`/`delete` handlers, leaving just `refresh`, `filter`, `paginate`.
+Both stacks support read-only list states via `ModelListView`:
 
 ```python
+from reflex_django.states import AppState
 from reflex_django.state import ModelListView
 
-class CatalogState(ModelListView):
+
+class CatalogState(AppState, ModelListView):
     model = Product
     fields = ["name", "price"]
     search_fields = ("name",)
-
-    class Meta:
-        list_var = "products"
-        paginate_by = 20
+    paginate_by = 20
+    list_var = "products"
 ```
 
-Good for public-facing product catalogs, search results, audit logs.
+No form fields, no save or delete handlers. Good for public catalogs and audit views.
 
 ---
 
-## A decision tree
+## Decision tree
 
 ```text
 Need a CRUD page?
-│
-├── Mostly standard (list/edit/save/delete)?
-│   │
-│   ├── Yes, simple naming is fine               → ModelState
-│   │
-│   ├── Already have a DRF serializer?           → ModelCRUDView
-│   │
-│   └── Want plural / verb-noun handler names?   → ModelCRUDView
-│
-├── Read-only list?                              → ModelListView
-│
-├── Weird workflow (wizard, multi-model form,
-│   computed list, etc.)?                        → Plain AppState + manual handlers
-│                                                  (see "CRUD the manual way")
-│
-└── Need to compose only some CRUD operations
-    (e.g. list + create, no delete)?             → ModelCRUDView + explicit mixins
+|
++-- Standard list / edit / save / delete?
+|   +-- No serializer yet, generic names OK     -> ModelState
+|   +-- Explicit serializer or named handlers     -> ModelCRUDView
+|
++-- Read-only list?                               -> ModelListView
+|
++-- Wizard, multi-model, or unusual workflow?     -> AppState + manual handlers
+|                                                  (see CRUD the manual way)
+|
++-- Only some CRUD actions (e.g. list + create)?  -> ModelCRUDView + mixins
 ```
 
 ---
 
 ## Switching between them
 
-If you start with `ModelState` and later realize you want explicit serializers:
-
 ```python
 # Before
 class TaskState(ModelState):
     model = Task
     fields = ["title", "done"]
-
-    class Meta:
-        list_var = "tasks"
+    list_var = "tasks"
 
 
 # After
-from blog.serializers import TaskSerializer
-
 class TaskState(AppState, ModelCRUDView):
     model = Task
     serializer_class = TaskSerializer
-
-    class Meta:
-        list_var = "tasks"
-        save_event = "save_task"
-        delete_event = "delete_task"
+    list_var = "tasks"
+    save_event = "save_task"
+    delete_event = "delete_task"
 ```
 
-You'll need to update the UI call sites: `TaskState.save()` becomes `TaskState.save_task()`, etc. Everything else (hooks, Meta options, validation) stays the same.
+Update UI call sites (`TaskState.save()` becomes `TaskState.save_task()` if you use named events). Hooks and `Meta` options stay the same.
 
 ---
 
-**Next:** [Mixins — compose your own state →](reflex_django_mixins.md)
+## What just happened?
+
+You compared the two declarative CRUD classes on naming, serializers, and composition. For most new pages, start with `ModelState`; reach for `ModelCRUDView` when explicit schemas or handler names matter.
+
+**Next up:** [Mixins: compose your own state →](reflex_django_mixins.md)

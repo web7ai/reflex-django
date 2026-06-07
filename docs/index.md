@@ -12,135 +12,93 @@
   </p>
 </div>
 
+**What you'll learn:** How reflex-django lets you keep Django and add a reactive Reflex UI without a separate frontend repo.
+
+**When you need this:**
+
+- You love Django (ORM, admin, migrations) but want a modern SPA without writing React by hand.
+- You want one origin in production, shared session cookies, and `request.user` inside button handlers.
+
 ---
 
-## Hi, welcome.
+## Welcome
 
-You're probably here because you love Django — the ORM, the admin, the migrations, the way it just works — but you also want a modern, reactive frontend without writing React, Vue, or shipping a separate Node app.
+You are probably here because Django already runs your backend, and you want a reactive UI in Python instead of spinning up Node, CORS, and a token bridge. reflex-django is the glue that makes that feel normal.
 
-That's exactly what **reflex-django** is for.
+You keep writing Django. You write UI in [Reflex](https://reflex.dev). In production they run as **one program** on one port. In dev, `run_reflex` starts Vite on `:3000` and the backend on `:8000`, with `env.json` keeping admin, API, and `/_event` on the same cookies.
 
-You keep writing Django. You write your UI in Python using [Reflex](https://reflex.dev). They run as **one program** — one port in production; in dev, `run_reflex` starts Vite (`:3000`) and the backend (`:8000`) together. Your Django session is the same session your buttons see. No CORS, no token gymnastics.
+!!! tip "Start with the map"
+    New here? Open the [Learning path](learning_path.md) for a guided tour with time estimates, or jump to [The three knobs](mental_model.md) if you like a diagram first.
 
 ---
 
 ## What you'll actually write
 
-Three places. That's the whole shape of a `reflex-django` project. See [The three knobs (start here)](mental_model.md) for the full map.
+Three places shape almost every project. Settings hold Reflex config. `urls.py` imports your page modules. `views.py` holds your `@page` functions and state classes.
 
 ```python
-# config/settings.py — Reflex config + Django apps
-INSTALLED_APPS = [..., "reflex_django", "shop"]
-
-REFLEX_DJANGO_RX_CONFIG = {
-    "app_name": "shop",
-    "frontend_port": 3000,
-    "backend_port": 8000,
-}
+--8<-- "snippets/minimal_settings.py"
 ```
 
 ```python
-# config/urls.py — Django routes + import pages (catch-all is automatic)
-import shop.views  # noqa: F401
-
-urlpatterns = [path("admin/", admin.site.urls)]
+--8<-- "snippets/minimal_urls.py"
 ```
 
 ```python
-# shop/views.py — your pages live here, next to your models
-import reflex as rx
-from reflex_django.pages.decorators import page
-from reflex_django.states import AppState
-
-class HomeState(AppState):
-    @rx.event
-    async def on_load(self):
-        if self.request.user.is_authenticated:
-            self.greeting = f"Hi, {self.request.user.get_username()}!"
-
-@page(route="/", title="Home")
-def index() -> rx.Component:
-    return rx.heading(HomeState.greeting)
+--8<-- "snippets/minimal_views.py"
 ```
 
-Then:
+Then run:
 
-```bash
-python manage.py run_reflex
-```
+--8<-- "snippets/run_reflex_command.md"
 
-One command starts **two dev servers**:
+One command starts **two** dev servers: Vite on `:3000` for the SPA and hot reload, Django plus the Reflex backend on `:8000` for admin, API, and the `/_event` WebSocket. Prefer one URL in the address bar? Use `python manage.py run_reflex --env dev` and browse `:8000`. See [Local development](local_development.md).
 
-- **Vite on `:3000`** — open this for your Reflex UI and hot reload (`http://localhost:3000/`)
-- **Django + Reflex backend on `:8000`** — admin, API, and the `/_event` WebSocket
-
-The SPA's `env.json` points `/admin`, `/api`, and `/_event` at `:8000`, so cookies and session still line up on `localhost`. Edit a page in `views.py`, save, and the browser updates in place. Most other Python changes restart the backend automatically.
-
-Prefer one URL in the address bar? Use `python manage.py run_reflex --env dev` and browse `:8000` instead. See [Local development](local_development.md).
-
-> In production there's no Vite: you build the SPA and serve everything from your ASGI server on a single port. See [Deployment](deployment.md).
+In production there is no Vite. You export the SPA and serve everything from your ASGI server on a single port. See [Deployment](deployment.md).
 
 ---
 
 ## Pick a path
 
-<div class="path-grid">
-  <a href="integration_guides/" class="path-card">
-    <h3>Brownfield integration</h3>
-    <p>Already have Django or Reflex? Pick the guide that matches your codebase.</p>
-  </a>
-  <a href="why_reflex_django/" class="path-card">
-    <h3>I want to understand first</h3>
-    <p>Read why reflex-django exists, how Django and Reflex actually work, and where they meet. ~10 minutes, no code.</p>
-  </a>
-  <a href="quickstart/" class="path-card">
-    <h3>Just show me the code</h3>
-    <p>Build a small todo app from scratch in about 15 minutes. You'll touch pages, state, auth, and the database.</p>
-  </a>
-  <a href="existing_django_project/" class="path-card">
-    <h3>I have a Django app already</h3>
-    <p>Add Reflex pages to a brownfield Django project — keep your models, admin, and API.</p>
-  </a>
-  <a href="existing_reflex_project/" class="path-card">
-    <h3>I have a Reflex app already</h3>
-    <p>Wrap your Reflex project in Django — ORM, admin, and sessions without rewriting your UI.</p>
-  </a>
+<div class="rd-path-grid" markdown="0">
+<a href="learning_path/" class="rd-path-card rd-path-card--beginner">
+<p class="rd-path-card__title">Guided learning path</p>
+<p class="rd-path-card__meta">~45 minutes</p>
+<p class="rd-path-card__desc">A checkbox tour from mental model to your first running app.</p>
+</a>
+<a href="quickstart/" class="rd-path-card rd-path-card--beginner">
+<p class="rd-path-card__title">Just show me the code</p>
+<p class="rd-path-card__meta">~15 minutes</p>
+<p class="rd-path-card__desc">Build a small todo app. Pages, state, auth, and the database.</p>
+</a>
+<a href="existing_django_project/" class="rd-path-card rd-path-card--intermediate">
+<p class="rd-path-card__title">I have Django already</p>
+<p class="rd-path-card__meta">~20 minutes</p>
+<p class="rd-path-card__desc">Add Reflex pages to a brownfield project. Keep models, admin, and API.</p>
+</a>
+<a href="existing_reflex_project/" class="rd-path-card rd-path-card--intermediate">
+<p class="rd-path-card__title">I have Reflex already</p>
+<p class="rd-path-card__meta">~20 minutes</p>
+<p class="rd-path-card__desc">Wrap your Reflex app in Django for ORM, admin, and sessions.</p>
+</a>
 </div>
 
 ---
 
-## A suggested reading order
+## Quick lookup
 
-If you're new and you'd like a guided tour, this is the path most people find easiest:
-
-1. **[The three knobs (start here)](mental_model.md)** — settings, app, URLs; page registration vs catch-all
-2. **[Why reflex-django exists](why_reflex_django.md)** — the one-page story
-3. **[How Django works in 5 minutes](how_django_works.md)** — skip this if Django is your day job
-4. **[How Reflex works in 5 minutes](how_reflex_works.md)** — skip this if Reflex is your day job
-5. **[How the two fit together](how_they_fit.md)** — the bridge, in plain English
-6. **[Install](installation.md)** and **[Your first app](quickstart.md)**
-7. **[Configuration](configuration.md)** — pages, state, the database, auth
-
-Then drop into the build guides when you actually need them — CRUD pages, forms, i18n, deployment.
-
----
-
-## Looking for something specific?
-
-| I want to… | Read |
+| I want to... | Read |
 |:---|:---|
 | Add Reflex to my Django project | [Existing Django project](existing_django_project.md) |
-| Add Django to my Reflex project | [Existing Reflex project](existing_reflex_project.md) |
-| Configure ports, app name, prefixes | [Configuration](configuration.md) |
-| Dev on `:8000`, ports, admin CSRF, `useContext` errors | [Local development](local_development.md) |
-| Put pages next to my Django models | [Pages live in views.py](pages_in_views.md) |
-| Read `request.user` inside a button handler | [AppState: your bridge to Django](state_management.md) |
-| Build a list/edit/delete page fast | [CRUD with ModelState](reactive_model_state.md) |
-| Understand the WebSocket plumbing | [The WebSocket event pipeline](websocket_event_pipeline.md) |
+| Configure ports, app name, routing mode | [Configuration](configuration.md) |
+| Read `request.user` in a button handler | [AppState bridge](state_management.md) |
 | Deploy to one container | [Deployment](deployment.md) |
 | Look up a `REFLEX_DJANGO_*` setting | [Settings reference](settings_reference.md) |
-| See every public symbol | [Public API at a glance](public_api.md) |
 
 ---
 
-**Next:** [Why reflex-django exists →](why_reflex_django.md)
+## What just happened?
+
+You saw the three-file shape of a reflex-django project (settings, urls, views), how dev uses two ports by default, and where to go next depending on whether you want a tour or working code.
+
+**Next up:** [Learning path (start here) →](learning_path.md)

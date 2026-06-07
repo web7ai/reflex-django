@@ -1,14 +1,47 @@
+---
+level: beginner
+tags: [architecture, onboarding]
+---
+
 # How the two fit together
 
-You've seen the [why](why_reflex_django.md), and you have a working picture of [Django](how_django_works.md) and [Reflex](how_reflex_works.md). Now let's stitch them together. This page names the actual pieces — what they're called, what they do, and how a request becomes a UI update.
+**What you'll learn:** How Django and Reflex share one process, how `django_outer` and `reflex_outer` differ, and what happens from HTTP request to UI update.
 
-You'll meet a handful of names: `REFLEX_DJANGO_RX_CONFIG`, `AppState`, `DjangoEventBridge`, `DjangoOuterDispatcher`, `django_led_app`. Don't worry about memorizing them. We introduce each one once, in context. For the short map, read [The three knobs](mental_model.md) first.
+**When you need this:**
+
+- You read the primers and want the bridge with real piece names (AppState, dispatcher, event bridge).
+- You are about to install or integrate and want the runtime picture before touching `settings.py`.
 
 ---
 
-## The runtime picture
+You have seen [why reflex-django exists](why_reflex_django.md) and the [Django](how_django_works.md) and [Reflex](how_reflex_works.md) primers. Now we stitch them together with the actual pieces.
 
-Everything lives in **one Python process**, listening on **one port** (default `8000`). There are two flavors of traffic:
+For the short map, read [The three knobs](mental_model.md) first. You will meet `REFLEX_DJANGO_RX_CONFIG`, `AppState`, `DjangoEventBridge`, and `DjangoOuterDispatcher`. No need to memorize them yet.
+
+---
+
+## Routing modes (v1)
+
+reflex-django v1 supports two modes. Both serve SPA, admin, and API on **one public port** (usually `:8000`). Both keep the ORM and event bridge in the same interpreter as Reflex.
+
+| Mode | Outer app | Django HTTP | Reflex events |
+|:---|:---|:---|:---|
+| **`django_outer`** (default) | Django | Same process | Same process |
+| **`reflex_outer`** | Reflex | Separate worker (proxied) | Main process |
+
+**`django_outer`:** Django is the front door. Almost all HTTP (`/`, `/admin`, `/api`) goes through Django. Reflex gets reserved paths (`/_event`, `/_upload`, ...).
+
+**`reflex_outer`:** Reflex is the front door. Django admin and API run in a dedicated HTTP worker that Reflex proxies to. Handlers and ORM still run in the main process.
+
+```python
+--8<-- "snippets/reflex_outer_settings.py"
+```
+
+See [Routing](routing.md) for production notes. Legacy modes (`reflex_led`, `django_led`) are removed in v1.
+
+---
+
+## The runtime picture (`django_outer`)
 
 ```text
                         Port 8000
@@ -18,7 +51,7 @@ Everything lives in **one Python process**, listening on **one port** (default `
    HTTP  ─────► │   Django (outer)      │ ─► /admin, /api, /static, /
                 └───────────────────────┘
                             │
-                            ▼ catch-all for unknown paths
+                            ▼ catch-all for SPA routes
                 ┌───────────────────────┐
                 │   Reflex SPA shell    │ (served from disk)
                 └───────────────────────┘
@@ -27,7 +60,7 @@ Everything lives in **one Python process**, listening on **one port** (default `
                             │
                             ▼
                 ┌───────────────────────┐
-   WebSocket ─► │   Django dispatcher   │ ─► /_event ─► Reflex
+   WebSocket ─► │   DjangoOuterDispatcher │ ─► /_event ─► Reflex
                 └───────────────────────┘                   │
                                                             ▼
                                               build synthetic HttpRequest
@@ -36,152 +69,106 @@ Everything lives in **one Python process**, listening on **one port** (default `
                                               call your @rx.event handler
 ```
 
-Django is the **outer** app — every byte that hits port 8000 lands on Django first. A small piece of code called the **outer dispatcher** then decides: does this look like a Reflex-internal path (`/_event`, `/_upload`, `/_health`)? If yes, send it inward to Reflex. Otherwise, let Django handle it normally.
-
-That's the whole layout.
+Django is the **outer** app. The **outer dispatcher** decides: is this a Reflex-internal path? If yes, forward inward. Otherwise, normal Django.
 
 ---
 
 ## The four pieces you'll touch
 
-Most of the time, you only interact with four things:
-
 | Piece | What it is | Where you see it |
 |:---|:---|:---|
-| **`REFLEX_DJANGO_RX_CONFIG`** | Reflex ports, `app_name`, redis — replaces `rxconfig.py` | `config/settings.py` |
-| **`import shop.views`** | Loads `@page` decorators at import time | `config/urls.py` |
-| **`AppState`** | Base class for Reflex states that need Django context | `{app}/views.py` |
-| **`@page`** | Decorator that registers a Reflex page with a URL | `{app}/views.py` |
-| **`asgi_entry.application`** | The ASGI callable that boots everything | `config/asgi.py` |
+| **`REFLEX_DJANGO_RX_CONFIG`** | Reflex ports, `app_name`, redis | `config/settings.py` |
+| **`import shop.views`** | Loads `@page` at import time | `config/urls.py` |
+| **`AppState`** | Base state with Django context | `{app}/views.py` |
+| **`@page`** | Registers a Reflex page with a URL | `{app}/views.py` |
+| **`asgi_entry.application`** | ASGI callable that boots everything | `config/asgi.py` |
 
-The SPA catch-all is appended automatically (`REFLEX_DJANGO_AUTO_MOUNT=True`). You only call `reflex_mount()` for URL prefix overrides.
+The SPA catch-all is appended automatically when `REFLEX_DJANGO_AUTO_MOUNT=True`. Call `reflex_mount()` only for URL prefix overrides.
 
-Here they are in their natural habitat:
+In their natural habitat:
 
 ```python
-# config/settings.py
-REFLEX_DJANGO_RX_CONFIG = {"app_name": "shop", "frontend_port": 3000, "backend_port": 8000}
-
-# config/urls.py
-import shop.views  # noqa: F401
-
-urlpatterns = [path("admin/", admin.site.urls)]
+--8<-- "snippets/minimal_settings.py"
 ```
 
 ```python
-# config/asgi.py
-import os
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application
+--8<-- "snippets/minimal_urls.py"
 ```
 
 ```python
-# shop/views.py
-import reflex as rx
-from reflex_django.pages.decorators import page
-from reflex_django.states import AppState
-
-class HomeState(AppState):
-    @rx.event
-    async def on_load(self):
-        self.greeting = f"Hi, {self.request.user.get_username() or 'guest'}"
-
-@page(route="/", title="Home")
-def home() -> rx.Component:
-    return rx.heading(HomeState.greeting)
+--8<-- "snippets/minimal_asgi.py"
 ```
-
-That's a complete (if minimal) `reflex-django` app.
-
----
-
-## The five-second life of an HTTP request
-
-When the browser asks for `GET /admin/login/`, here's the sequence:
-
-1. The request hits Django on port 8000.
-2. The outer dispatcher looks at the path. It's not `/_event` or another Reflex-internal path. Forward to normal Django.
-3. Django runs `settings.MIDDLEWARE` over the request.
-4. Django's URL resolver finds the admin login view and returns the rendered HTML.
-5. The browser receives the response.
-
-You wrote nothing. This is just Django doing its thing.
-
-Now `GET /`:
-
-1. Request hits Django, not a Reflex-internal path.
-2. Django runs middleware, then the URL resolver.
-3. The URL resolver hits the SPA catch-all (auto-mounted or from `reflex_mount()`), which points at `ReflexMountView`.
-4. `ReflexMountView` serves the compiled SPA's `index.html` from `STATIC_ROOT/_reflex/`.
-5. The browser loads the SPA. The SPA opens a WebSocket to `/_event`.
-
-Same Django. Same middleware. Same cookies. The SPA is just another response Django served.
-
----
-
-## The five-second life of a Reflex event
-
-This is the part that makes `reflex-django` interesting. Suppose the user clicks "Add to cart":
-
-1. The SPA sends an event over the WebSocket: `{handler: "CartState.add_item", args: [42]}`.
-2. The WebSocket frame goes to `/_event`. The outer dispatcher sees a reserved Reflex path and forwards to Reflex's inner ASGI.
-3. Before Reflex calls your handler, the **`DjangoEventBridge`** intercepts the event.
-4. The bridge builds a **synthetic `HttpRequest`** using the cookies, headers, path, and query string from the event's `router_data`.
-5. The bridge runs your **full `settings.MIDDLEWARE` chain** on that request. `SessionMiddleware` loads the session. `AuthenticationMiddleware` resolves the user. Your custom middleware runs too.
-6. The bridge binds the result onto your `AppState` instance: `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token`, `self.response`.
-7. Your `@rx.event async def add_item(self, product_id)` runs. `self.user` is the real Django user.
-8. State changes are sent back over the WebSocket. The UI updates.
-
-Most of this is invisible. You write step 7 — the handler. The bridge does the rest.
-
----
-
-## "Wait, where did `rxconfig.py` go?"
-
-In a normal Reflex project, there's a `rxconfig.py` file at the root that configures ports, app name, plugins, and so on. In `reflex-django`, you don't write that file. Instead, put config in **`settings.py`**:
-
-- **`REFLEX_DJANGO_RX_CONFIG`** — `app_name`, ports, `redis_url`, and other `rx.Config` fields
-- **`REFLEX_DJANGO_PLUGINS`** and **`REFLEX_DJANGO_PLUGIN`** — Reflex and Django-bridge plugins
-
-Optional per-mount overrides via `reflex_mount(rx_config=...)` merge on top. `manage.py run_reflex`, your production ASGI server, and CI all read the same in-memory config.
-
-If you have an existing `rxconfig.py` and want to keep it, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` and `reflex-django` will merge it in.
-
----
-
-## "And `shop/shop.py`?"
-
-In a normal Reflex project, you'd have `shop/shop.py` containing `app = rx.App()`. In `reflex-django`, use the built-in singleton instead:
 
 ```python
-from reflex_django import app  # same as reflex_django.django_led_app.app
+--8<-- "snippets/minimal_views.py"
 ```
 
-Pages live in `{app}/views.py` with `@page`, or you call `app.add_page()` directly. At compile time, reflex-django imports your page modules (explicit `urls.py` import, `REFLEX_DJANGO_PAGE_PACKAGES`, or deprecated auto-discover), merges decorated pages onto that app, and applies plugins.
+That is a complete (minimal) reflex-django app.
 
-You rarely import `django_led_app` yourself — but it is the public app entry, not a hidden implementation detail. See [The three knobs](mental_model.md).
+!!! tip "The shared app object"
+    `from reflex_django import app` is the `rx.App()` singleton in `reflex_django.reflex_app`. Use `app.add_page()` for native Reflex-style registration.
+
+---
+
+## Life of an HTTP request
+
+`GET /admin/login/`:
+
+1. Request hits Django on port 8000.
+2. Outer dispatcher: not a reserved Reflex path. Forward to Django.
+3. Django runs `settings.MIDDLEWARE`.
+4. URL resolver finds the admin login view. HTML returns.
+
+`GET /`:
+
+1. Request hits Django.
+2. Middleware runs. URL resolver hits the SPA catch-all (`ReflexMountView`).
+3. `ReflexMountView` serves `index.html` from `STATIC_ROOT/_reflex/`.
+4. Browser loads the SPA and opens a WebSocket to `/_event`.
+
+Same Django. Same middleware. Same cookies.
+
+---
+
+## Life of a Reflex event
+
+User clicks "Add to cart":
+
+1. SPA sends `{handler: "CartState.add_item", args: [42]}` over the WebSocket.
+2. Frame goes to `/_event`. Dispatcher forwards to Reflex's inner ASGI.
+3. **`DjangoEventBridge`** intercepts before your handler runs.
+4. Bridge builds a **synthetic `HttpRequest`** from cookies, headers, path, and query string.
+5. Bridge runs **full `settings.MIDDLEWARE`**. Session and auth middleware populate the user.
+6. Bridge binds `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` on `AppState`.
+7. Your `@rx.event` handler runs. `self.user` is the real Django user.
+8. State diffs go back over the WebSocket. UI updates.
+
+You write step 7. The bridge does the rest.
+
+---
+
+## Config and app entry (v1)
+
+In plain Reflex you might keep a root config file and `shop/shop.py` with `app = rx.App()`. In reflex-django v1:
+
+- Put config in **`REFLEX_DJANGO_RX_CONFIG`**, **`REFLEX_DJANGO_PLUGINS`**, and **`REFLEX_DJANGO_PLUGIN`** in `settings.py`.
+- Use **`from reflex_django import app`** (backed by `reflex_django.reflex_app`) instead of a local `shop.py` app module.
+- Put pages in `{app}/views.py` with `@page`, or call `app.add_page()` directly.
+
+At compile time, reflex-django imports your page modules, merges decorated pages onto `app`, and applies plugins. See [The three knobs](mental_model.md).
 
 ---
 
 ## The mental model, one more time
 
-If you remember nothing else, remember this paragraph:
-
-> Django is the outer app on one port. Reflex is mounted inside Django for its internal WebSocket and upload endpoints. When a Reflex event arrives, a small bridge builds a real `HttpRequest`, runs all your Django middleware on it, and hands you a fully-populated `AppState` — same `request.user`, same session, same everything — before your handler runs.
+> Django is the outer app in `django_outer` mode. Reflex mounts inside Django for WebSocket and upload endpoints. When a Reflex event arrives, the event bridge builds a real `HttpRequest`, runs all your Django middleware, and hands you a fully-populated `AppState` before your handler runs.
 
 Everything else is detail.
 
 ---
 
-## Where to go next
+## What just happened?
 
-You now have the full conceptual picture. From here, most people pick one of these:
+You named the v1 routing modes, traced HTTP and WebSocket traffic through the outer dispatcher, and saw how AppState gets Django context on every event.
 
-- **[Install](installation.md)** and **[Your first app](quickstart.md)** — if you want to write code now.
-- **[Adding reflex-django to an existing Django project](existing_django_project.md)** — if you already have a Django app.
-- **[Configuration](configuration.md)** — if you want to know every knob.
-- **[Architecture](architecture.md)** — if you want the full plumbing details (dispatcher, lifespan, bootstrap order, state pickling).
-
----
-
-**Next:** [Install →](installation.md)
+**Next up:** [Install →](installation.md)

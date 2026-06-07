@@ -1,6 +1,6 @@
 site_name: reflex-django
 site_url: https://web7ai.github.io/reflex-django/
-site_description: Run a Django backend (Django ORM, Django Admin) alongside a Reflex app in one process.
+site_description: Run Django and Reflex together. One process, shared sessions, Python UI.
 site_author: Mohannad Irshedat
 repo_url: https://github.com/web7ai/reflex-django
 repo_name: web7ai/reflex-django
@@ -38,6 +38,7 @@ theme:
     - navigation.instant
     - navigation.instant.progress
     - navigation.footer
+    - navigation.path
     - search.suggest
     - search.highlight
     - search.share
@@ -45,6 +46,14 @@ theme:
     - content.code.annotate
     - content.tabs.link
     - toc.follow
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/web7ai/reflex-django
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/reflex-django/
 
 markdown_extensions:
   - markdown.extensions.admonition
@@ -79,6 +88,7 @@ markdown_extensions:
   - pymdownx.smartsymbols
   - pymdownx.snippets:
       check_paths: true
+      base_path: docs
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -97,55 +107,64 @@ extra_javascript:
   - https://unpkg.com/mermaid@11/dist/mermaid.min.js
   - javascripts/mermaid-init.js
 
+exclude_docs: |
+  STYLE.md
+  snippets/
+  auth_branding.md
+  migration_django_outer.md
+  migration/v0-to-v1.md
+
 nav:
-  - Welcome:
+  - Level 0 · Welcome:
     - Home: index.md
-    - The three knobs (start here): mental_model.md
+    - Learning path (start here): learning_path.md
+    - The three knobs: mental_model.md
     - Why reflex-django exists: why_reflex_django.md
-    - How Django works in 5 minutes: how_django_works.md
-    - How Reflex works in 5 minutes: how_reflex_works.md
-    - How the two fit together: how_they_fit.md
-  - Get Started:
+    - How Django works (5 min): how_django_works.md
+    - How Reflex works (5 min): how_reflex_works.md
+    - How they fit together: how_they_fit.md
+  - Level 1 · Get running:
     - Install: installation.md
     - Your first app: quickstart.md
+    - Local development: local_development.md
+    - Troubleshooting: troubleshooting.md
     - Integration guides: integration_guides.md
-    - Add to an existing Django project: existing_django_project.md
-    - Add to an existing Reflex project: existing_reflex_project.md
-    - Local development (Vite, admin, CSRF): local_development.md
-  - The Essentials:
+    - Existing Django project: existing_django_project.md
+    - Existing Reflex project: existing_reflex_project.md
+  - Level 2 · Build features:
     - Project structure: project_structure.md
     - Configuration: configuration.md
-    - Pages live in views.py: pages_in_views.md
-    - AppState — your bridge to Django: state_management.md
-    - Talking to the database: database_integration.md
-    - Login & sessions: authentication.md
-    - Auth page branding: auth_branding.md
+    - Pages in views.py: pages_in_views.md
+    - AppState bridge: state_management.md
+    - Database: database_integration.md
+    - Login and sessions: authentication.md
     - Media files: media_files.md
-  - Build Real Things:
-    - CRUD the manual way: crud_without_mixins.md
+    - CRUD manual: crud_without_mixins.md
     - CRUD with ModelState: reactive_model_state.md
-    - ModelCRUDView with serializers: crud_with_mixins_and_states.md
-    - Choosing ModelState vs ModelCRUDView: model_state_and_crud_view.md
-    - Mixins — compose your own state: reflex_django_mixins.md
-    - Forms & validation: forms_and_validation.md
-    - File uploads (rx.upload): file_uploads.md
-    - Model serializers: serializers.md
-    - i18n & translations: i18n.md
+    - ModelCRUDView: crud_with_mixins_and_states.md
+    - ModelState vs ModelCRUDView: model_state_and_crud_view.md
+    - Mixins: reflex_django_mixins.md
+    - Forms and validation: forms_and_validation.md
+    - File uploads: file_uploads.md
+    - Serializers: serializers.md
+    - i18n: i18n.md
     - HTTP APIs alongside Reflex: api_integration.md
     - Custom middleware in events: django_middleware_to_reflex.md
-  - Under the Hood:
-    - Architecture overview: architecture.md
-    - Routing & URL dispatching: routing.md
-    - The WebSocket event pipeline: websocket_event_pipeline.md
-    - AsyncStreamingMiddleware explained: async_streaming_middleware.md
-  - Ship It:
-    - CLI reference: cli.md
+    - Cookbook: cookbook.md
+  - Level 3 · Under the hood:
+    - Architecture: architecture.md
+    - Routing: routing.md
+    - WebSocket event pipeline: websocket_event_pipeline.md
+    - AsyncStreamingMiddleware: async_streaming_middleware.md
+  - Level 4 · Ship it:
+    - CLI: cli.md
     - Testing: testing.md
     - Deployment: deployment.md
     - Best practices: best_practices.md
-    - Migrating from older versions: migration_django_outer.md
+    - Upgrade to v1: migration/v1_migration.md
   - Reference:
-    - REFLEX_DJANGO_* settings: settings_reference.md
-    - Public API at a glance: public_api.md
+    - What's new: whats_new.md
+    - Settings: settings_reference.md
+    - Public API: public_api.md
     - FAQ: faq.md
     - Glossary: glossary.md

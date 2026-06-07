@@ -1,22 +1,22 @@
-# Add reflex-django to an existing Reflex project
-
-You already have a working Reflex app -- pages, state classes, maybe a custom theme -- and you want Django in the mix: the ORM, migrations, admin, sessions, and your existing middleware stack.
-
-This guide walks you through wrapping your Reflex project in Django **without throwing away your UI code**. Most of your components and event handlers stay as they are. You mainly change *where config lives*, *how the app boots*, and (optionally) swap `rx.State` for `AppState` when you need `request.user`.
-
-Not sure which guide? See [Integration guides](integration_guides.md).
-
-Looking for the other direction? See [Add to an existing Django project](existing_django_project.md).
-
+---
+level: intermediate
+tags: [integration, reflex]
 ---
 
-## Pick your starting point
+# Add reflex-django to an existing Reflex project
 
-| You have... | You want... | This guide |
-|:---|:---|:---|
-| A plain Reflex repo (`rxconfig.py`, `reflex run`) | Django ORM + admin + auth on the same origin | **You are in the right place** |
-| No Django at all yet | A full Django project around your Reflex UI | Start with [Step 1](#1-add-django-around-your-reflex-app) below |
-| Already tried `ReflexDjangoPlugin` in `rxconfig.py` | The current `django_outer` layout | Follow this guide -- plugin-in-rxconfig was the old bootstrap |
+**What you will learn:** How to wrap a plain Reflex app in Django without throwing away your components and event handlers.
+
+**When you need this:**
+
+- You have `rxconfig.py`, `reflex run`, and pages you want to keep.
+- You want Django ORM, migrations, admin, and `request.user` on the same origin.
+
+Most UI code stays as-is. You mainly change where config lives, how the app boots, and (when needed) swap `rx.State` for `AppState`.
+
+**Not sure which guide?** See [Integration guides](integration_guides.md).
+
+**The other direction:** [Add to an existing Django project](existing_django_project.md).
 
 ---
 
@@ -24,11 +24,11 @@ Looking for the other direction? See [Add to an existing Django project](existin
 
 | You keep | You change |
 |:---|:---|
-| Page components | Config: `rxconfig.py` -> `settings.py` |
-| Most `@rx.event` handler logic | Dev: `reflex run` -> `python manage.py run_reflex` |
-| `.web/` build output | App entry: `app = rx.App()` -> `from reflex_django import app` |
+| Page components | Config: `rxconfig.py` → `settings.py` |
+| Most `@rx.event` handler logic | Dev: `reflex run` → `python manage.py run_reflex` |
+| `.web/` build output | App entry: `app = rx.App()` → `from reflex_django import app` |
 | Custom Reflex plugins | Move plugins to `REFLEX_DJANGO_PLUGINS` |
-| Your `pages/` package | Optional: `rx.State` -> `AppState` for Django context |
+| Your `pages/` package | Optional: `rx.State` → `AppState` for Django context |
 
 You **add** a Django project shell (`manage.py`, `config/`, `INSTALLED_APPS`, `urls.py`) around what you already have.
 
@@ -44,76 +44,72 @@ You **add** a Django project shell (`manage.py`, `config/`, `INSTALLED_APPS`, `u
 
 ## 1. Add Django around your Reflex app
 
-``bash
+```bash
 uv add django reflex-django
 uv run django-admin startproject config .
 uv run python manage.py startapp myshop
-``
+```
 
-In `config/settings.py`: add `reflex_django` and your app to `INSTALLED_APPS`, append `AsyncStreamingMiddleware` last in `MIDDLEWARE`, and set:
+Register reflex-django and your app:
 
-``python
+```python
+--8<-- "snippets/minimal_settings.py"
+```
+
+Copy port and plugin values from your old `rxconfig.py`. See [Configuration](configuration.md).
+
+---
+
+## 2. Move config off `rxconfig.py`
+
+```python
 REFLEX_DJANGO_RX_CONFIG = {
     "app_name": "myshop",
-    "frontend_port": 3000,
     "backend_port": 8000,
+    "frontend_port": 3000,
 }
-``
-
-Copy values from your old `rxconfig.py`. See [Configuration](configuration.md).
-
----
-
-## 2. Move config off rxconfig.py
-
-``python
-REFLEX_DJANGO_RX_CONFIG = {"app_name": "myshop", "backend_port": 8000, "frontend_port": 3000}
 REFLEX_DJANGO_PLUGINS = ["reflex.plugins.RadixThemesPlugin"]
-``
+```
 
-Delete `rxconfig.py`, or set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` if CI still needs it.
+Delete `rxconfig.py`, or set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` only if CI still needs the file temporarily.
+
+!!! warning "Remove stale entry modules"
+    Delete `{app}/{app}.py` if it only existed for plain Reflex. v1.0 pages live in `views.py` with `@page`, or you call `app.add_page()` after `from reflex_django import app`.
 
 ---
 
-## 3. Replace your app entry module
+## 3. Replace your app entry
 
-**Option A -- `@page` in `views.py` (recommended):**
+**Option A: `@page` in `views.py` (recommended)**
 
-``python
-import reflex as rx
-from reflex_django.pages.decorators import page
+```python
+--8<-- "snippets/minimal_views.py"
+```
 
-@page(route="/", title="Home")
-def home() -> rx.Component:
-    return rx.heading("Home")
-``
+**Option B: keep `app.add_page()`**
 
-**Option B -- keep `app.add_page()`:**
-
-``python
+```python
 from reflex_django import app
 from myshop.pages.home import home
+
 app.add_page(home, route="/", title="Home")
-``
+```
 
-Wire imports in `config/urls.py`:
+Wire imports in `urls.py`:
 
-``python
-import myshop.views  # noqa: F401
-urlpatterns = [path("admin/", admin.site.urls)]
-``
+```python
+--8<-- "snippets/minimal_urls.py"
+```
 
-For a `pages/` package: `REFLEX_DJANGO_PAGE_PACKAGES` or import submodules from `views.py`.
+For a `pages/` package, set `REFLEX_DJANGO_PAGE_PACKAGES` or import submodules from `views.py`. See [Pages in views.py](pages_in_views.md).
 
 ---
 
 ## 4. Point ASGI at reflex-django
 
-``python
-import os
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-from reflex_django.asgi_entry import application  # noqa: E402,F401
-``
+```python
+--8<-- "snippets/minimal_asgi.py"
+```
 
 ---
 
@@ -125,21 +121,24 @@ Use `AppState` instead of `rx.State` when you need `self.request.user`, sessions
 
 ## 6. Run
 
-``bash
-python manage.py migrate
-python manage.py run_reflex
-``
+--8<-- "snippets/run_reflex_command.md"
 
 | URL | What you get |
 |:---|:---|
-| `http://localhost:3000/` | Reflex UI (HMR) |
+| `http://localhost:3000/` | Reflex UI (HMR; Vite proxies backend paths) |
 | `http://localhost:8000/admin/` | Django admin |
+
+Create a superuser after your first `migrate`:
+
+```bash
+python manage.py createsuperuser
+```
 
 ---
 
 ## Routing mode
 
-Default: **`django_outer`**. Optional: **`reflex_outer`**. See [comparison](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+Default: **`django_outer`**. Optional: **`reflex_outer`** when Django HTTP should run in a sidecar worker. See [comparison](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
 
 ---
 
@@ -156,30 +155,29 @@ Default: **`django_outer`**. Optional: **`reflex_outer`**. See [comparison](rout
 
 ## Common bumps
 
-- **`ModuleNotFoundError: myshop.myshop`** -- delete stale `rxconfig.py`
-- **Pages missing** -- `import myshop.views` in `urls.py`
-- **`AppRegistryNotReady`** -- import models inside handlers
-- **Plugins missing** -- `REFLEX_DJANGO_PLUGINS` in settings
+- **`ModuleNotFoundError: myshop.myshop`**: delete stale `rxconfig.py` and `{app}/{app}.py`; set `app_name` in settings.
+- **Pages missing**: add `import myshop.views` in `urls.py`.
+- **`AppRegistryNotReady`**: import models inside handlers.
+- **Plugins missing**: move them to `REFLEX_DJANGO_PLUGINS` in settings.
 
 ---
 
 ## Production
 
-``bash
+```bash
 python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
 python manage.py collectstatic --noinput
 uvicorn config.asgi:application --host 0.0.0.0 --port 8000
-``
+```
 
 See [Deployment](deployment.md).
 
 ---
 
-## What's next
+## What just happened?
 
-- [AppState](state_management.md) | [Pages in views.py](pages_in_views.md) | [Database](database_integration.md)
-- [Existing Django project](existing_django_project.md) | [Configuration](configuration.md)
+You moved Reflex config into Django settings, deleted the standalone bootstrap path, and pointed ASGI at reflex-django. Your pages still compile to the same `.web/` tree, but auth, ORM, and admin now live in the same process (or the v1.0 `reflex_outer` sidecar layout) instead of a separate backend you wire by hand.
 
 ---
 
-**Next:** [Add to an existing Django project](existing_django_project.md)
+**Next up:** [Add to an existing Django project](existing_django_project.md)

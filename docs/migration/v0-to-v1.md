@@ -1,33 +1,24 @@
 # Migrating from reflex-django 0.x to 1.0
 
-## Routing modes
+**What you will learn:** Where to find the full v1.0 migration guide.
 
-Only two modes are supported:
+**When you need this:**
 
-| Mode | Setting |
-|------|---------|
-| django_outer (default) | REFLEX_DJANGO_URL_ROUTING = django_outer |
-| reflex_outer | REFLEX_DJANGO_URL_ROUTING = reflex_outer |
+- Release notes or code warnings linked you to this path.
+- You are upgrading from 0.x and need the step-by-step checklist.
 
-Removed: reflex_led, django_led, and aliases reflex, djangoled.
+This page moved. Read the complete guide here:
 
-## ReflexDjangoPlugin / rxconfig.py
+**[Migrating to v1.0 →](v1_migration.md)**
 
-Removed: ReflexDjangoPlugin and rxconfig-first setup.
+Topics covered there: supported routing modes (`django_outer`, `reflex_outer`), Django-first config, removed APIs, proxy/port changes, and verification steps.
 
-Use Django-first configuration:
+---
 
-1. Add REFLEX_DJANGO_RX_CONFIG to settings.py
-2. Import views.py in urls.py for @page registration
-3. Set config/asgi.py to from reflex_django.asgi_entry import application
-4. Run python manage.py run_reflex
+## What just happened?
 
-## App module path
+You were redirected to the canonical v1.0 migration doc.
 
-reflex_django.django_led_app is deprecated. Use reflex_django.reflex_app.
+## Next up
 
-## make_dispatcher
-
-Removed: reflex_django.asgi.make_dispatcher.
-
-Use reflex_django.asgi_entry.build_django_outer_application for production ASGI.
+[Migrating to v1.0 →](v1_migration.md)

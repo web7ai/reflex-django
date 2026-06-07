@@ -1,8 +1,22 @@
+---
+level: beginner
+tags: [architecture, onboarding]
+---
+
 # Why reflex-django exists
 
-Let's start with the honest version of the story. Django and Reflex are both wonderful frameworks. They just don't naturally talk to each other. `reflex-django` is the small layer that makes them talk.
+**What you'll learn:** The gap between Django's HTTP world and Reflex's WebSocket world, and the three concrete things reflex-django does to close it.
 
-This page is the *one place* where we explain the gap and how we close it. Everything else in the docs builds on this. If you read nothing else, read this.
+**When you need this:**
+
+- You want the one-page story before installing anything or reading API reference.
+- Someone asked "why not just run Reflex and Django side by side?" and you need a clear answer.
+
+---
+
+Let's start with the honest version. Django and Reflex are both wonderful frameworks. They just do not naturally talk to each other. reflex-django is the small layer that makes them talk.
+
+This page is the *one place* where we explain the gap and how we close it. Everything else in the docs builds on this.
 
 ---
 
@@ -11,35 +25,33 @@ This page is the *one place* where we explain the gap and how we close it. Every
 Django is a battle-tested Python web framework. The mental model is:
 
 1. A browser sends an **HTTP request** to your server.
-2. Django runs that request through a list of **middleware** — security, sessions, authentication, messages, CSRF, your custom logic.
+2. Django runs that request through **middleware** (security, sessions, authentication, messages, CSRF, your custom logic).
 3. Middleware fills the request with useful things: `request.user`, `request.session`, `request.COOKIES`, a CSRF token, the user's language.
-4. Django picks a **view** (a Python function) based on `urls.py`, calls it, and returns an HTML response.
+4. Django picks a **view** based on `urls.py`, calls it, and returns a response.
 
-The pieces you love — the **ORM**, the **admin**, **migrations**, **`request.user`** — all sit comfortably inside that HTTP request/response cycle.
+The pieces you love (the **ORM**, the **admin**, **migrations**, **`request.user`**) all sit inside that HTTP request/response cycle.
 
 > One sentence: Django turns an HTTP request into an HTTP response, with `request.user` and friends handed to you for free.
 
-If you'd like a slightly longer refresher, see [How Django works in 5 minutes](how_django_works.md).
+For a longer refresher, see [How Django works in 5 minutes](how_django_works.md).
 
 ---
 
 ## Reflex, briefly
 
-Reflex is a way to build web UIs in pure Python. You write a Python class (a **state**), declare some methods as **event handlers**, and Reflex compiles a React app out of your code.
+Reflex is a way to build web UIs in pure Python. You write a Python class (a **state**), declare methods as **event handlers**, and Reflex compiles a React app from your code.
 
 The mental model is:
 
-1. The browser loads a small **single-page app** (SPA) — JavaScript that Reflex generated from your Python.
-2. The SPA opens a **WebSocket** to the server. (A WebSocket is one connection that stays open, instead of a new HTTP request for every click.)
-3. When the user clicks a button, the SPA sends an event over that WebSocket: *"please run `add_task()` on the server"*.
-4. Your `@rx.event` handler runs on the server, changes some state, and Reflex ships the diff back over the same WebSocket.
+1. The browser loads a **single-page app** (SPA). JavaScript that Reflex generated from your Python.
+2. The SPA opens a **WebSocket** to the server.
+3. When the user clicks a button, the SPA sends an event: *"please run `add_task()` on the server"*.
+4. Your `@rx.event` handler runs, changes state, and Reflex ships the diff back over the WebSocket.
 5. The SPA updates the screen.
-
-The pieces you love — **pure Python**, **reactive vars**, **no JavaScript** — all sit inside that WebSocket event cycle.
 
 > One sentence: Reflex turns a button click into a Python function call over a WebSocket, then reflects the new state into the UI.
 
-If you'd like a slightly longer refresher, see [How Reflex works in 5 minutes](how_reflex_works.md).
+For a longer refresher, see [How Reflex works in 5 minutes](how_reflex_works.md).
 
 ---
 
@@ -47,76 +59,77 @@ If you'd like a slightly longer refresher, see [How Reflex works in 5 minutes](h
 
 Look closely at those two sentences. Django speaks **HTTP**. Reflex speaks **WebSocket**. That difference is the entire problem.
 
-When Reflex fires an event, it doesn't go through Django's HTTP pipeline. By default, that means:
+When Reflex fires an event, it does not go through Django's HTTP pipeline by default. That means:
 
-- There's no `HttpRequest`. So no `request.user`, no `request.session`, no `request.COOKIES`.
-- **No middleware runs.** None of it. Not the session middleware, not the auth middleware, not your custom multi-tenant or rate-limit middleware.
-- Reflex doesn't know that the user logged into `/admin/` two seconds ago, because it never saw the session cookie.
-- Reflex wants its own dev server on its own port. **reflex-django** embraces that: `run_reflex` starts Vite on `:3000` and the Django/Reflex backend on `:8000`. You browse `:3000` for the SPA; `env.json` routes admin, API, and `/_event` to `:8000` so cookies still line up. Use `--env dev` if you want compile-only dev on one URL.
+- There is no `HttpRequest`. No `request.user`, no `request.session`, no `request.COOKIES`.
+- **No middleware runs.** Not session, not auth, not your custom multi-tenant or rate-limit middleware.
+- Reflex does not know that the user logged into `/admin/` two seconds ago.
+- Reflex wants its own dev server on its own port. reflex-django embraces that: `run_reflex` starts Vite on `:3000` and the backend on `:8000`, with `env.json` keeping cookies aligned.
 
-So even though both frameworks are written in Python and could happily live in the same process, in practice they sit on opposite sides of a glass wall. You end up writing a token bridge, configuring CORS, running two terminals, and re-implementing auth twice.
+So even though both frameworks are Python and could live in the same process, in practice they sit on opposite sides of a glass wall. You end up writing a token bridge, configuring CORS, running two terminals, and re-implementing auth twice.
 
-That's the gap. It's not glamorous. It's just *plumbing*.
+That is the gap. It is not glamorous. It is just plumbing. (The kind of plumbing you are glad someone else already installed.)
 
 ---
 
-## What `reflex-django` actually does
+## What reflex-django actually does
 
-`reflex-django` is the plumbing. It does three concrete things:
+reflex-django is the plumbing. It does three concrete things:
 
-### 1. One process — one port in production, two in default dev
+### 1. One process (one port in production, two in default dev)
 
-Django becomes the outer ASGI app. Reflex's internal endpoints — `/_event` (the WebSocket), `/_upload` (file uploads), `/_health` (health probes) — are mounted *inside* Django.
+In **`django_outer`** (the default), Django is the outer ASGI app. Reflex's internal endpoints (`/_event`, `/_upload`, `/_health`) mount inside Django.
 
 **Production** (and `--env dev` compile dev): everything on one port:
 
 ```text
   Browser  →  port 8000  →  Django  →  /admin/   → Django admin
-                                    →  /api/     → your DRF views
+                                    →  /api/     → your API views
                                     →  /         → Reflex SPA shell
                                     →  /_event   → Reflex WebSocket
 ```
 
-**Default two-port dev:** `run_reflex` starts Vite on `:3000` (SPA + HMR) and the backend on `:8000`. You browse `:3000`; the SPA calls admin, API, and `/_event` on `:8000` via `env.json`.
+**Default two-port dev:** `run_reflex` starts Vite on `:3000` and the backend on `:8000`. You browse `:3000`; the SPA calls admin, API, and `/_event` on `:8000` via `env.json`.
 
-One process. Shared cookies. No CORS.
+In **`reflex_outer`**, Reflex owns the public port and proxies Django HTTP (admin, API) to a dedicated worker. Events and the ORM still run in the main process. See [Routing](routing.md).
+
+One process for events. Shared cookies. No CORS.
 
 ### 2. Full middleware chain on every Reflex event
 
-This is the important one. When a button fires a Reflex event, `reflex-django` quietly builds a **synthetic `HttpRequest`** from the WebSocket payload (cookies, headers, path, query string, the lot) and runs your **full `settings.MIDDLEWARE` chain** on it.
+When a button fires a Reflex event, reflex-django builds a **synthetic `HttpRequest`** from the WebSocket payload and runs your **full `settings.MIDDLEWARE` chain** on it.
 
 Then it binds the result onto your handler:
 
 ```python
+import reflex as rx
+from reflex_django.states import AppState
+
 class CartState(AppState):
     @rx.event
     async def add_item(self, product_id: int):
-        # All of these just work, exactly like in a Django view:
-        user      = self.request.user          # real Django user
-        session   = self.request.session       # real session
-        messages  = self.messages              # django.contrib.messages
-        csrf      = self.csrf_token            # CSRF token
-        lang      = self.request.LANGUAGE_CODE # locale
+        user     = self.request.user          # real Django user
+        session  = self.request.session       # real session
+        messages = self.messages              # django.contrib.messages
+        csrf     = self.csrf_token            # CSRF token
+        lang     = self.request.LANGUAGE_CODE # locale
 ```
 
-If a middleware in the chain decides to redirect — for example, `LoginRequiredMiddleware` returning a 302 to `/login` — `reflex-django` turns that into a Reflex `rx.redirect("/login")` automatically. Your custom middleware applies to Reflex events too, for free.
+If middleware returns a redirect (for example, login required), reflex-django turns that into `rx.redirect("/login")` automatically.
 
 ### 3. Django-shaped project layout
 
-Configuration lives in **`settings.py`** (`REFLEX_DJANGO_RX_CONFIG`), not in a separate `rxconfig.py`. Pages live in your Django app's **`views.py`**, not in some new `{app}/{app}.py` file:
+Configuration lives in **`settings.py`** (`REFLEX_DJANGO_RX_CONFIG`), not a separate config file at the project root. Pages live in your Django app's **`views.py`**:
 
 ```python
-# config/settings.py
-REFLEX_DJANGO_RX_CONFIG = {"app_name": "shop", "frontend_port": 3000, "backend_port": 8000}
-
-# config/urls.py
-import shop.views  # noqa: F401
-
-urlpatterns = [path("admin/", admin.site.urls)]
-# catch-all: automatic (REFLEX_DJANGO_AUTO_MOUNT=True)
+--8<-- "snippets/minimal_settings.py"
 ```
 
-You configure Reflex like a Django app, because in your project, it kind of is one. See [The three knobs](mental_model.md).
+```python
+--8<-- "snippets/minimal_urls.py"
+```
+
+You configure Reflex like a Django app, because in your project, it is one. See [The three knobs](mental_model.md).
 
 ---
 
@@ -124,12 +137,12 @@ You configure Reflex like a Django app, because in your project, it kind of is o
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
-│                  One Python process — port 8000                  │
+│                  One Python process, port 8000                   │
 │                                                                  │
 │   HTTP request                                                   │
 │        │                                                         │
 │        ▼                                                         │
-│   Django (outer)                                                 │
+│   Django (outer, django_outer mode)                              │
 │        ├── /admin, /api, /static  →  your Django views           │
 │        └── /, /about, ...         →  serve the Reflex SPA shell  │
 │                                                                  │
@@ -143,51 +156,41 @@ You configure Reflex like a Django app, because in your project, it kind of is o
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-That's the entire idea. The rest of the docs are details.
+That is the entire idea. The rest of the docs are details.
 
 ---
 
-## What you keep, what you don't have to think about
+## What you keep, what you skip
 
-| You keep | You don't have to think about |
+| You keep | You do not have to think about |
 |:---|:---|
-| Django ORM, models, migrations | A separate frontend dev server |
+| Django ORM, models, migrations | A separate frontend repo |
 | Django admin | CORS configuration |
 | `settings.MIDDLEWARE` (custom middleware too) | Token-based auth bridges |
 | `request.user`, sessions, messages, CSRF | Re-implementing login for the SPA |
-| `python manage.py ...` commands | `rxconfig.py` (it's optional now) |
-| Your existing `/api/` and templates | Two ports, two origins, two cookie jars |
+| `python manage.py ...` commands | Maintaining a standalone Reflex config file |
+| Your existing `/api/` and templates | Two origins and two cookie jars in production |
 
 ---
 
-## When `reflex-django` is a good fit
+## Good fit vs maybe not
 
-- You have (or want) a Django backend, and you want a reactive UI in Python.
+**Good fit:**
+
+- You have (or want) a Django backend and a reactive UI in Python.
 - You want **one container, one process, one origin** in production.
-- You want server-side checks — auth, permissions, multi-tenancy, audit logs — to apply uniformly to both HTTP requests and Reflex events.
-- You're tired of running two dev servers and copying tokens around.
+- You want server-side checks (auth, permissions, multi-tenancy) on both HTTP and Reflex events.
 
-## When it might not be the right fit
+**Maybe not:**
 
-- You only need server-rendered Django templates. There's nothing to reactify.
-- You explicitly want Reflex and Django on different hosts behind a token-only API. That's fine — just don't add this library.
-- You need Django Channels for arbitrary WebSocket protocols. `reflex-django` doesn't use Channels; Reflex owns the WebSocket on `/_event`.
-
----
-
-## Where to go next
-
-If this clicked, you can jump straight into building:
-
-- **[Install](installation.md)** — `uv add django reflex reflex-django`, then register one app.
-- **[Your first app](quickstart.md)** — a 15-minute todo list that exercises pages, state, auth, and the database.
-
-Or, if you want to firm up your mental model first:
-
-- **[How Django works in 5 minutes](how_django_works.md)** — short refresher for non-Django folks.
-- **[How Reflex works in 5 minutes](how_reflex_works.md)** — short refresher for Reflex newcomers.
-- **[How the two fit together](how_they_fit.md)** — the bridge in plain English, with the exact pieces named.
+- You only need server-rendered Django templates.
+- You explicitly want Reflex and Django on different hosts behind a token-only API.
+- You need Django Channels for arbitrary WebSocket protocols. Reflex owns `/_event`.
 
 ---
 
-**Next:** [How Django works in 5 minutes →](how_django_works.md)
+## What just happened?
+
+You saw why HTTP and WebSocket do not mix by default, and how reflex-django unifies them with one ASGI entry, middleware on every event, and Django-shaped configuration.
+
+**Next up:** [How Django works in 5 minutes →](how_django_works.md)

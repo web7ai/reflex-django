@@ -1,36 +1,47 @@
+---
+level: advanced
+tags: [middleware, events]
+---
+
 # Custom middleware in events
 
-> **Development HTTP middleware** (Vite port, admin CSRF, synthetic request bodies) is separate from the event bridge. See [Local development](local_development.md) for `reflex_django.django_dev_middleware`.
+**What you'll learn:** How reflex-django runs your `settings.MIDDLEWARE` chain on every Reflex event, what is skipped by default, and how to customize that behavior.
 
-You've probably written a custom Django middleware at some point — for multi-tenancy, rate limiting, request logging, audit trails, or "if `request.user.is_banned` then return 403". In a normal Django project, those middlewares only run on HTTP requests.
+**When you need this:**
 
-In `reflex-django`, **your middleware also runs on every Reflex event**, with no extra wiring on your side. This page explains how that works, what's skipped on purpose, and how to control which middleware runs where.
+- You wrote Django middleware (tenant, audit, feature flags) and need it inside `@rx.event` handlers.
+- A middleware redirect or error should behave correctly for SPA navigation, not only HTTP.
 
----
-
-## The default behavior
-
-`reflex-django` ships a small piece called the `DjangoEventBridge`. On every Reflex event, it:
-
-1. Builds a synthetic `HttpRequest` from the WebSocket payload.
-2. Walks your full `settings.MIDDLEWARE` list, in order.
-3. Each middleware's `__call__` (or `process_request`/`process_response`) runs, just like for an HTTP request.
-4. The resulting `request` and `response` are bound to your `AppState` handler.
-
-So if you wrote `MultiTenantMiddleware` that sets `request.tenant`, then inside your `@rx.event` handler, `self.request.tenant` is set. No changes to your middleware.
+> Development HTTP middleware (Vite port, admin CSRF, synthetic bodies) is separate. See [Local development](local_development.md) for `reflex_django.django_dev_middleware`.
 
 ---
 
-## What's intentionally skipped
+## Default behavior
 
-A few middlewares don't make sense on WebSocket events. The bridge skips them by default:
+The `DjangoEventBridge` runs on every Reflex event. It:
 
-| Middleware | Why it's skipped |
+1. Builds a synthetic `HttpRequest` from WebSocket router data (cookies, path, headers).
+2. Walks `settings.MIDDLEWARE` in order.
+3. Binds the resulting `request` (and `response`) to your `AppState` handler.
+
+If `TenantMiddleware` sets `request.tenant_id` on HTTP, `self.request.tenant_id` is set in handlers too. No extra wiring.
+
+```python
+--8<-- "snippets/minimal_settings.py"
+```
+
+Your middleware list in settings is the same list that runs on events (minus the skip list below).
+
+---
+
+## What is skipped by default
+
+| Middleware | Why skipped on events |
 |:---|:---|
-| `django.middleware.csrf.CsrfViewMiddleware` | CSRF protects HTML form submissions from third-party origins. Reflex events come from the SPA on the same origin and can't be triggered cross-site. |
-| `reflex_django.streaming_middleware.AsyncStreamingMiddleware` | It only adjusts streaming HTTP responses. WebSocket events don't produce one. |
+| `CsrfViewMiddleware` | Reflex events come from your SPA on the same origin, not cross-site form posts. |
+| `AsyncStreamingMiddleware` | Adjusts streaming HTTP responses; events do not produce one. |
 
-The skip list is configurable:
+Override the skip list:
 
 ```python
 REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
@@ -40,16 +51,17 @@ REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
 )
 ```
 
-To get the absolute-default skip list back, omit the setting.
+Import defaults from `reflex_django.event_handler.DEFAULT_EVENT_MIDDLEWARE_SKIP` if you want to extend rather than replace.
 
 ---
 
-## A worked example — multi-tenant scoping
-
-Suppose every user has a `tenant_id` and you want every query — HTTP, admin, Reflex — to be scoped to it.
+## Example: multi-tenant scoping
 
 ```python
 # common/middleware.py
+from asgiref.sync import sync_to_async
+
+
 class TenantMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -64,23 +76,20 @@ class TenantMiddleware:
 ```
 
 ```python
-# settings.py
+# settings.py (excerpt)
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    # ...
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "common.middleware.TenantMiddleware",          # <-- your middleware
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "common.middleware.TenantMiddleware",
+    # ...
     "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
 ]
 ```
 
-Now inside any Reflex handler:
-
 ```python
+from reflex_django.states import AppState
+
+
 class OrderState(AppState):
     @rx.event
     async def list_orders(self):
@@ -91,147 +100,101 @@ class OrderState(AppState):
         ]
 ```
 
-Same `request.tenant_id` your admin sees. Zero extra wiring.
-
 ---
 
-## Middleware that redirects → `rx.redirect(...)`
+## Middleware redirects become `rx.redirect`
 
-A Django middleware that short-circuits with a 3xx normally returns an `HttpResponseRedirect`. On a Reflex event, that doesn't make sense — there's no response to send. The bridge converts it for you.
+A middleware that returns `HttpResponseRedirect` on an event does not leave the SPA stuck. The bridge converts it to `rx.redirect(url)` so the client navigates.
 
-```python
-class LoginRequiredEverywhereMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    async def __call__(self, request):
-        public_paths = ("/login", "/register", "/about")
-        if not request.user.is_authenticated and request.path not in public_paths:
-            return HttpResponseRedirect("/login")
-        return await self.get_response(request)
-```
-
-When this middleware fires on a Reflex event, the bridge sees the redirect response, doesn't call your handler, and instead returns `rx.redirect("/login")` — which the SPA respects and navigates. Same behavior as Django.
-
-You can disable that auto-translation:
+Disable that translation:
 
 ```python
 REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False
 ```
 
-Then redirects from middleware become `self.response` on the handler instead of an auto-navigation. Rarely useful, but available.
+---
+
+## Middleware exceptions skip the handler
+
+If middleware raises, the bridge catches it, skips your handler, and (by default) surfaces an error in the UI. Useful for banned-user or hard-stop patterns.
 
 ---
 
-## Middleware that raises → handler doesn't run
+## Optional: POST from event payload
 
-If a middleware raises, the bridge catches it, skips your handler, and (by default) toasts an error to the user. Useful for "if user is banned, raise an exception in middleware" patterns:
-
-```python
-class BannedUserMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    async def __call__(self, request):
-        if request.user.is_authenticated and request.user.banned:
-            raise PermissionDenied("Account suspended.")
-        return await self.get_response(request)
-```
-
-The handler doesn't run. The user sees an error in the UI.
-
----
-
-## What about middleware that touches `request.body`?
-
-Reflex events don't have an HTTP body. The synthetic request's `body` is empty by default. If your middleware reads `request.POST`, you can opt in to feeding the event payload into it:
+Reflex events have no HTTP body by default. Opt in to stuffing handler kwargs into `request.POST`:
 
 ```python
 REFLEX_DJANGO_EVENT_POST_FROM_PAYLOAD = True
 ```
 
-This stuffs the event's handler kwargs into `request.POST`. Useful for middleware that audits "what was the user trying to do" — though for most projects, reading the action from the handler itself is cleaner.
+Most projects read action data from the handler instead.
 
 ---
 
-## What about `process_view` / `process_response` / `process_exception`?
+## `process_view` is not called
 
-The bridge runs the middleware chain by calling each middleware's `__call__` (or `process_request`/`process_response` for the old-style middleware API). That includes:
-
-- `process_request` — runs before `get_response`.
-- `process_response` — runs after `get_response` (with the response in hand).
-- `process_exception` — runs if `get_response` raises.
-
-`process_view` is **not** called on Reflex events, because there's no Django view being dispatched.
+The chain runs `process_request`, `get_response`, `process_response`, and `process_exception`. `process_view` is skipped because no Django view is dispatched for events.
 
 ---
 
-## Turning it off entirely
-
-If you want to skip the middleware chain on events (and just have anonymous `request.user`):
+## Disable the chain entirely
 
 ```python
 REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False
 ```
 
-This is uncommon — most of the value of `reflex-django` is *because* the chain runs. But for high-throughput backend states that don't need auth or context, it's a perf knob.
+Uncommon. You lose session, auth, and custom middleware context on events. Occasionally useful for high-frequency telemetry states.
 
 ---
 
-## What `self.request` ends up being
+## What lands on `self`
 
-After the middleware chain runs, the bridge binds:
+After the chain:
 
-- `self.request` — the populated `HttpRequest` (with everything your middleware added).
-- `self.response` — the `HttpResponse` produced (200 if no short-circuit).
-- `self.user` — `request.user`, eagerly resolved (no `SynchronousOnlyOperation`).
-- `self.session`, `self.messages`, `self.csrf_token` — convenience shortcuts.
+| Attribute | Contents |
+|:---|:---|
+| `self.request` | Populated `HttpRequest` (plus anything your middleware added) |
+| `self.user` | Resolved `request.user` |
+| `self.session` | Async-safe session |
+| `self.messages` | Message framework snapshot |
+| `self.csrf_token` | CSRF token for the synthetic request |
+| `self.response` | `HttpResponse` from the chain |
 
-Anything you stuck on `request` from custom middleware (`request.tenant`, `request.feature_flags`, …) is on `self.request.tenant`, `self.request.feature_flags`, etc.
-
----
-
-## Performance considerations
-
-Running the full middleware chain on every event isn't free. For high-frequency states (telemetry, live cursor updates), you can:
-
-1. Move the state to a `rx.State` subclass (skip `AppState` and its refresh).
-2. Skip specific middleware via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
-3. As a last resort, set `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
-
-For normal apps, the per-event overhead is small (a few microseconds for session and auth lookups, milliseconds if your custom middleware does I/O).
+Custom attributes (`request.tenant`, `request.feature_flags`, ...) appear on `self.request` the same way.
 
 ---
 
-## Reading the request from a plain `rx.State`
-
-If your state doesn't inherit from `AppState`, you can still reach the bridged request:
+## Access without AppState
 
 ```python
-from reflex_django import request, current_user
+from reflex_django import current_user, request
+
 
 class FilterState(rx.State):
     @rx.event
     async def apply(self):
         q = request.GET.get("q", "")
         if request.user.is_authenticated:
-            ...
-        user = current_user()    # same thing, functional style
+            user = current_user()
 ```
 
 The proxy delegates to the same per-event request the bridge built.
 
 ---
 
-## Summary
+## Performance
 
-- Your `settings.MIDDLEWARE` runs on every Reflex event by default.
-- Two middleware are skipped on events (CSRF, async streaming) — configurable.
-- 3xx redirects from middleware become `rx.redirect(...)` automatically.
-- Exceptions from middleware skip the handler and toast an error.
-- Disable globally with `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
-- Anything you put on `request.*` in custom middleware shows up on `self.request.*` in handlers.
+The full chain on every event is usually cheap (session + auth). For very high-frequency states:
+
+1. Skip heavy middleware via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+2. Use plain `rx.State` when you do not need Django context.
+3. Last resort: `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
 
 ---
 
-**Next:** [Architecture overview →](architecture.md)
+## What just happened?
+
+You learned that Reflex events reuse Django middleware by default, which middleware is skipped, and which settings tune redirects, POST payload, and performance.
+
+**Next up:** [Architecture overview →](architecture.md)
