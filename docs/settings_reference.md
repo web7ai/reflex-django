@@ -147,7 +147,7 @@ Pin when you hit bundler regressions (e.g. `TypeError: t is not a function`). Ty
 Extend the skip list:
 
 ```python
-from reflex_django.event_handler import DEFAULT_EVENT_MIDDLEWARE_SKIP
+from reflex_django.bridge.event_handler import DEFAULT_EVENT_MIDDLEWARE_SKIP
 
 REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
     *DEFAULT_EVENT_MIDDLEWARE_SKIP,

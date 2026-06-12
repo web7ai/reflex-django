@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
@@ -14,7 +14,7 @@ from reflex_django.auth.mixins.registration import (  # noqa: E402
     RegistrationConfig,
     registration_mixin,
 )
-from reflex_django.auth_state import DjangoUserState  # noqa: E402
+from reflex_django.states.auth import DjangoUserState  # noqa: E402
 
 
 class _Base(DjangoUserState):

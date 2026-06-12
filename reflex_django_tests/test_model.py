@@ -1,13 +1,13 @@
-"""Tests for reflex_django.model: the Reflex serializer for Django models."""
+"""Tests for reflex_django.django.model: the Reflex serializer for Django models."""
 
 from __future__ import annotations
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.db import models  # noqa: E402
-from reflex_django.model import Model, serialize_django_model  # noqa: E402
+from reflex_django.django.model import Model, serialize_django_model  # noqa: E402
 
 
 class _Post(Model):

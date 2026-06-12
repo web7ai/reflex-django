@@ -7,13 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-12
+
+### Removed (breaking)
+
+- All v1 root-level module paths (no compatibility shims). See `docs/migration/v2_module_paths.md`.
+- `reflex_django.django_led_app` — use `reflex_django.runtime.reflex_app` or `from reflex_django import app`.
+
+### Changed (breaking)
+
+- Package restructure: 53 root modules moved into domain subpackages (`asgi/`, `runtime/`, `mount/`, `bridge/`, `dev/`, `setup/`, `django/`, `cli/`, `states/`, `serializers/`).
+- Default `ROOT_URLCONF` is now `reflex_django.django.urls`.
+- Default `INSTALLED_APPS` entry is now `reflex_django.django.apps.ReflexDjangoConfig`.
+- Default streaming middleware path is now `reflex_django.bridge.streaming.AsyncStreamingMiddleware`.
+- ASGI deployment entry: `reflex_django.asgi.entry:application` (was `reflex_django.asgi_entry`).
+
+### Added
+
+- `docs/migration/v2_module_paths.md` — full old-to-new import map.
+- `reflex_django.auth_state` kept as the canonical module for `DjangoUserState` so existing compiled frontends keep matching event handler keys (`reflex_django.states.auth` remains a re-export alias).
+
 ## [1.0.0] - 2026-06-07
 
 ### Removed (breaking)
 
 - Legacy routing modes `reflex_led` and `django_led` — use `django_outer` (default) or `reflex_outer`.
 - `ReflexDjangoPlugin` and rxconfig-first setup — use Django-first configuration (see `docs/migration/v0-to-v1.md`).
-- `reflex_django.asgi.make_dispatcher` — use `reflex_django.asgi_entry.build_django_outer_application`.
+- `reflex_django.asgi.make_dispatcher` — use `reflex_django.asgi.entry.build_django_outer_application`.
 
 ### Added
 
@@ -22,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `reflex_django.dev` — dev orchestration helpers (`run_plan`, `process_utils`, `asgi_runners`).
 - `reflex_django.bootstrap` — app setup and patch registry.
 - `reflex_django.bridge` — event bridge package layout.
-- `reflex_django.errors` — typed configuration exceptions.
+- `reflex_django.setup.errors` — typed configuration exceptions.
 - `docs/migration/v0-to-v1.md` and pytest CI workflow.
 
 ### Changed
@@ -46,14 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Settings-driven auto-mount** — `REFLEX_DJANGO_AUTO_MOUNT=True` (default) appends the Reflex SPA catch-all to `ROOT_URLCONF` at startup. No `reflex_mount()` line required in `urls.py`.
 - **`REFLEX_DJANGO_RX_CONFIG["app_name"]`** — Reflex compile identity moves to settings; `reflex_mount(app_name=...)` is deprecated.
 - **`from reflex_django import app`** — native Reflex-style page registration via `app.add_page()` on the `django_led_app` singleton.
-- **`reflex_django.auto_mount`** — `maybe_auto_mount()`, `ensure_reflex_mount()`, `register_mount_from_settings()` for boot-time URL wiring.
+- **`reflex_django.mount.auto`** — `maybe_auto_mount()`, `ensure_reflex_mount()`, `register_mount_from_settings()` for boot-time URL wiring.
 - Tests: `test_auto_mount.py`, `test_django_led_app_pages.py`, `test_production_entry.py`.
 
 ### Changed
 
 - **Docs** — new [mental_model.md](docs/mental_model.md); entry points updated for auto-mount and settings-driven `app_name`.
-- **`reflex_mount()`** — returns a URL-only :class:`~reflex_django.auto_mount.ReflexMountHandle` (iterable / `.urlpatterns`); use for URL overrides only, not page registration.
-- **`reflex_django.urls.urlpatterns`** — default empty list; catch-all comes from auto-mount when enabled.
+- **`reflex_mount()`** — returns a URL-only :class:`~reflex_django.mount.auto.ReflexMountHandle` (iterable / `.urlpatterns`); use for URL overrides only, not page registration.
+- **`reflex_django.django.urls.urlpatterns`** — default empty list; catch-all comes from auto-mount when enabled.
 - **`REFLEX_DJANGO_AUTO_DISCOVER_PAGES`** — still default `True` but emits `DeprecationWarning`; explicit `urls.py` imports recommended until next major.
 - **`apply_reflex_plugins_to_app()`** — restores plugins after `rx.App()` clears `get_config().plugins`.
 
@@ -81,11 +101,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connect).
 - **Vite `strictPort: true`** — injected via `frontend_stability` so Vite does not silently
   hop to `:3001` when `:3000` is busy.
-- **`reflex_django.django_dev_middleware`** — optional Django HTTP middleware for Vite
+- **`reflex_django.dev.django_middleware`** — optional Django HTTP middleware for Vite
   dev (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`, and
   ``DEFAULT_DEV_MIDDLEWARE`` for settings). Documented in
   [Local development](docs/local_development.md).
-- **`reflex_django.frontend_stability`** — post-compile patches for
+- **`reflex_django.dev.frontend_stability`** — post-compile patches for
   ``EventLoopContext``, generated components, and Vite ``resolve.dedupe`` (fixes
   ``useContext is not a function or its return value is not iterable`` without
   breaking ``react/jsx-runtime``).
@@ -153,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ``OnLoadInternalState``), fixing ``SetUndefinedStateVarError`` on ``user_id`` during
   ``on_load_internal``.
 - Guest / unauthenticated ``on_load``: auth auto-sync uses
-  :func:`~reflex_django.auth_state.apply_auth_snapshot_for_event_handler` so snapshot
+  :func:`~reflex_django.states.auth.apply_auth_snapshot_for_event_handler` so snapshot
   updates only mark the handler branch dirty (avoids deltas for unrelated substates);
   stale ``context.js`` is invalidated before compile when dispatch keys are already missing.
 - Guest ``on_load``: skip auth snapshot writes when values are already the anonymous
@@ -198,7 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Django-led URL routing** (``REFLEX_DJANGO_URL_ROUTING = "django_led"``): backend prefixes
   (admin, API, static) go to Django; all other HTTP paths go to Reflex (SPA catch-all).
-- :func:`reflex_django.urls.reflex_mount` catch-all urlpattern and
+- :func:`reflex_django.django.urls.reflex_mount` catch-all urlpattern and
   :class:`reflex_django.views.mount.ReflexMountView`.
 - ``reflex_mount(plugins=..., rx_config=..., django_plugin=...)`` registers Reflex
   ``rx.Config`` from ``urls.py``; :class:`~reflex_django.ReflexDjangoPlugin` is always
@@ -210,8 +230,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edit ``{APP_NAME}/{APP_NAME}.py`` for a custom ``rx.App``.
 - ``reflex_mount(admin_prefix=...)``, ``api_prefix=...``, and ``include_admin`` —
   wire Django routes in ``urlpatterns`` and list prefixes in ``django_prefix``; optional
-  :func:`reflex_django.urls.admin_urlpatterns` for admin.
-- :mod:`reflex_django.app_factory` — built-in :func:`reflex_django.create_app` and
+  :func:`reflex_django.django.urls.admin_urlpatterns` for admin.
+- :mod:`reflex_django.runtime.app_factory` — built-in :func:`reflex_django.create_app` and
   ``REFLEX_DJANGO_PAGE_PACKAGES`` for Django-first page registration.
 - Optional :func:`reflex_django.decorators.page` (``reflex_page`` alias) / ``reflex_template`` with
   ``PAGE_REGISTRY``.
@@ -227,7 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- :func:`reflex_django.urls.reflex_mount` now registers admin routes and resolves
+- :func:`reflex_django.django.urls.reflex_mount` now registers admin routes and resolves
   ``mount_prefix`` / ``django_prefix``; admin and API prefixes from settings like
   :class:`reflex_django.ReflexDjangoPlugin` (kwargs → env → settings → defaults).
   Returns a list of URL patterns; use ``urlpatterns = reflex_mount(...)`` or
@@ -235,13 +255,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- :func:`reflex_django.rxconfig_bridge.ensure_rxconfig_from_django` — load Reflex
+- :func:`reflex_django.setup.rxconfig_bridge.ensure_rxconfig_from_django` — load Reflex
   ``Config`` from Django settings / ASGI (no ``rxconfig.py`` on disk by default).
 - Auto-discovery of ``@template`` / ``@page`` modules: imports ``{app}.views`` for
   each project app in ``INSTALLED_APPS`` (no ``urls.py`` imports required).
-- Django-first mode uses :mod:`reflex_django.django_led_app` instead of writing
+- Django-first mode uses :mod:`reflex_django.runtime.reflex_app` instead of writing
   ``{APP_NAME}/{APP_NAME}.py`` (removed ``ensure_app_module_file`` materialization).
-- :mod:`reflex_django.prefixes` — shared prefix resolution for the plugin and
+- :mod:`reflex_django.mount.prefixes` — shared prefix resolution for the plugin and
   ``reflex_mount``.
 - Built-in :func:`reflex_django.template` layout decorator and ``from reflex_django import template, page``.
 - Built-in :func:`reflex_django.create_app` — no custom factory setting; pages default to ``{APP_NAME}.views`` auto-discovery.
@@ -271,7 +291,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Django ASGI no longer warns about synchronous ``StreamingHttpResponse``
   iterators (admin static, ``FileResponse``, etc.) when
-  ``reflex_django.streaming_middleware.AsyncStreamingMiddleware`` is enabled
+  ``reflex_django.bridge.streaming.AsyncStreamingMiddleware`` is enabled
   (included in bundled ``MIDDLEWARE``).
 - ``AsyncStreamingMiddleware`` now subclasses
   ``MiddlewareMixin`` with both sync and async support, fixing

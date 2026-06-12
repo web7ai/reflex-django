@@ -29,7 +29,7 @@ myproject/
 ├── config/                       # Django project package
 │   ├── settings.py               # INSTALLED_APPS, MIDDLEWARE, REFLEX_DJANGO_*
 │   ├── urls.py                   # Django routes + import page modules
-│   ├── asgi.py                   # reflex_django.asgi_entry:application
+│   ├── asgi.py                   # reflex_django.asgi.entry:application
 │   └── wsgi.py
 │
 ├── shop/                         # a Django app
@@ -50,7 +50,7 @@ Three things to notice:
 
 1. **One `manage.py`** at the repo root, same as any Django project.
 2. **Pages and models share an app folder.** `shop/models.py` and `shop/views.py` sit next to each other.
-3. **No `rxconfig.py`. No `shop/shop.py`.** Config lives in `settings.py`. The Reflex app singleton is `from reflex_django import app` (backed by `reflex_django.reflex_app`).
+3. **No `rxconfig.py`. No `shop/shop.py`.** Config lives in `settings.py`. The Reflex app singleton is `from reflex_django import app` (backed by `reflex_django.runtime.reflex_app`).
 
 For the mental model behind those three knobs, see [The three knobs](mental_model.md).
 
@@ -62,7 +62,7 @@ For the mental model behind those three knobs, see [The three knobs](mental_mode
 |:---|:---|
 | `config/settings.py` | Django apps, middleware, database, `REFLEX_DJANGO_*` overrides |
 | `config/urls.py` | Django routes; `import shop.views` to register pages at import time |
-| `config/asgi.py` | One line pointing at `reflex_django.asgi_entry:application` |
+| `config/asgi.py` | One line pointing at `reflex_django.asgi.entry:application` |
 | `{app}/models.py` | Django ORM models (unchanged) |
 | `{app}/views.py` | `@page`-decorated Reflex pages and `AppState` subclasses |
 | `{app}/serializers.py` | Optional `ReflexDjangoModelSerializer` classes |

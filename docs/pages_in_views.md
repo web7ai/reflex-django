@@ -184,7 +184,7 @@ For explicit control, call `add_auth_pages(app)` in an advanced setup.
 Classic Reflex projects have a `shop/shop.py` with `app = rx.App()`. In reflex-django v1, use the built-in singleton:
 
 ```python
-from reflex_django import app  # same object as reflex_django.reflex_app.app
+from reflex_django import app  # same object as reflex_django.runtime.reflex_app.app
 
 def about() -> rx.Component:
     return rx.text("About")
@@ -192,7 +192,7 @@ def about() -> rx.Component:
 app.add_page(about, route="/about")
 ```
 
-Reflex compile loads `reflex_django.reflex_app:app`. The singleton is created on first access; compile preparation merges `@page` decorators onto the same instance.
+Reflex compile loads `reflex_django.runtime.reflex_app:app`. The singleton is created on first access; compile preparation merges `@page` decorators onto the same instance.
 
 **Recommended:** import page modules in `urls.py` so decorators run before the catch-all mounts.
 

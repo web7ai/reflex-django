@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from reflex_django.auth.pages.base import BaseAuthPage
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 _AUTH_REGISTRY_ROUTES: set[str] = set()
 

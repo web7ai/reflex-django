@@ -52,7 +52,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
 
 REFLEX_DJANGO_RX_CONFIG = {
@@ -80,7 +80,7 @@ import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-from reflex_django.asgi_entry import application  # noqa: E402,F401
+from reflex_django.asgi.entry import application  # noqa: E402,F401
 ```
 
 `shop/views.py`:

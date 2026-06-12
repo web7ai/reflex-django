@@ -12,7 +12,7 @@ tags: [middleware, events]
 - You wrote Django middleware (tenant, audit, feature flags) and need it inside `@rx.event` handlers.
 - A middleware redirect or error should behave correctly for SPA navigation, not only HTTP.
 
-> Development HTTP middleware (Vite port, admin CSRF, synthetic bodies) is separate. See [Local development](local_development.md) for `reflex_django.django_dev_middleware`.
+> Development HTTP middleware (Vite port, admin CSRF, synthetic bodies) is separate. See [Local development](local_development.md) for `reflex_django.dev.django_middleware`.
 
 ---
 
@@ -46,12 +46,12 @@ Override the skip list:
 ```python
 REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
     "django.middleware.csrf.CsrfViewMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
     "myapp.middleware.SomeMiddlewareYouDontWantOnEvents",
 )
 ```
 
-Import defaults from `reflex_django.event_handler.DEFAULT_EVENT_MIDDLEWARE_SKIP` if you want to extend rather than replace.
+Import defaults from `reflex_django.bridge.event_handler.DEFAULT_EVENT_MIDDLEWARE_SKIP` if you want to extend rather than replace.
 
 ---
 
@@ -82,7 +82,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "common.middleware.TenantMiddleware",
     # ...
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
 ```
 

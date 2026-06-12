@@ -88,7 +88,7 @@ When you run the default command (no extra flags):
 1. **Compiles** the Reflex SPA into `.web/`
 2. **Patches** `.web/vite.config.js` with backend proxy routes (two-port mode)
 3. **Starts Vite** on the frontend port (default `3000`)
-4. **Starts** uvicorn (or granian) on `:8000` with `reflex_django.asgi_entry:application`
+4. **Starts** uvicorn (or granian) on `:8000` with `reflex_django.asgi.entry:application`
 5. **Watches** Python files and reloads the backend; page edits hot-reload through Vite
 
 You should see a banner like:
@@ -152,7 +152,7 @@ Wire pages the usual way:
 When you browse admin from `:3000`, POST requests need trusted origins for both ports:
 
 ```python
-from reflex_django.django_dev_middleware import DEFAULT_DEV_MIDDLEWARE
+from reflex_django.dev.django_middleware import DEFAULT_DEV_MIDDLEWARE
 
 USE_X_FORWARDED_HOST = True
 CSRF_TRUSTED_ORIGINS = [
@@ -165,7 +165,7 @@ CSRF_TRUSTED_ORIGINS = [
 MIDDLEWARE = [
     *DEFAULT_DEV_MIDDLEWARE,
     # ... your middleware ...
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
 ```
 

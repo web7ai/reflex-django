@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from reflex_django import dev_proxy
+import reflex_django.dev.proxy as dev_proxy
 
 
 class _FakeUpstream:

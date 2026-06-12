@@ -6,7 +6,7 @@ from typing import Any
 
 from asgiref.sync import sync_to_async
 
-from reflex_django.context import current_user
+from reflex_django.bridge.context import current_user
 
 
 class ReflexDjangoAuthError(PermissionError):

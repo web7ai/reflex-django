@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 
 from reflex_django.management.commands.run_reflex import Command
-from reflex_django.routing import UrlRoutingMode
+from reflex_django.setup.routing import UrlRoutingMode
 
 
 def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,19 +27,19 @@ def test_run_reflex_invokes_reflex_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(reflex_module, "cli", cli_mock)
     install_mock = mock.MagicMock(return_value=mock.Mock())
     monkeypatch.setattr(
-        "reflex_django.integration.install_reflex_django_integration",
+        "reflex_django.runtime.integration.install_reflex_django_integration",
         install_mock,
     )
     monkeypatch.setattr(
-        "reflex_django.integration.refresh_get_config_bindings",
+        "reflex_django.runtime.integration.refresh_get_config_bindings",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.auto_mount.refresh_reflex_mount_catchall",
+        "reflex_django.mount.auto.refresh_reflex_mount_catchall",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.routing.resolve_url_routing",
+        "reflex_django.setup.routing.resolve_url_routing",
         lambda: UrlRoutingMode.DJANGO_OUTER,
     )
 
@@ -61,7 +61,7 @@ def _stub_compile_frontend(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
     """Mock the frontend compiler to prevent real Node build execution in tests."""
     compile_mock = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django._frontend_runner._compile_app_for_frontend",
+        "reflex_django.dev.runners.frontend._compile_app_for_frontend",
         compile_mock,
     )
     return compile_mock
@@ -93,19 +93,19 @@ def _stub_asgi_server(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
 def _force_django_outer_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin the routing mode to DJANGO_OUTER for these tests."""
     monkeypatch.setattr(
-        "reflex_django.routing.resolve_url_routing",
+        "reflex_django.setup.routing.resolve_url_routing",
         lambda: UrlRoutingMode.DJANGO_OUTER,
     )
     monkeypatch.setattr(
-        "reflex_django.integration.install_reflex_django_integration",
+        "reflex_django.runtime.integration.install_reflex_django_integration",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.integration.refresh_get_config_bindings",
+        "reflex_django.runtime.integration.refresh_get_config_bindings",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.auto_mount.refresh_reflex_mount_catchall",
+        "reflex_django.mount.auto.refresh_reflex_mount_catchall",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
@@ -670,7 +670,7 @@ def test_dev_proxy_explicit_env_overrides_settings_false(
     """Explicit ``REFLEX_DJANGO_DEV_PROXY=1`` wins over settings False."""
     from django.conf import settings
 
-    from reflex_django.dev_proxy import _dev_vite_target_or_none
+    from reflex_django.dev.proxy import _dev_vite_target_or_none
 
     monkeypatch.setattr(settings, "DEBUG", True, raising=False)
     monkeypatch.setattr(settings, "REFLEX_DJANGO_DEV_PROXY", False, raising=False)
@@ -737,13 +737,13 @@ def test_patched_uvicorn_backend_uses_asgi_entry_with_reload_excludes(
     """Dev backend with Vite spawns ``_backend_runner`` (Windows-safe subprocess)."""
     _reset_backend_patch_flag()
     monkeypatch.setattr(
-        "reflex_django.routing.resolve_url_routing",
+        "reflex_django.setup.routing.resolve_url_routing",
         lambda: UrlRoutingMode.DJANGO_OUTER,
     )
 
     spawn = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.integration._spawn_django_outer_backend_subprocess",
+        "reflex_django.runtime.integration._spawn_django_outer_backend_subprocess",
         spawn,
     )
     monkeypatch.setattr(
@@ -755,7 +755,7 @@ def test_patched_uvicorn_backend_uses_asgi_entry_with_reload_excludes(
         lambda: mock.Mock(exists=lambda: False),
     )
 
-    from reflex_django.integration import install_reflex_django_integration
+    from reflex_django.runtime.integration import install_reflex_django_integration
     import reflex.utils.exec as exec_module
 
     install_reflex_django_integration()
@@ -776,7 +776,7 @@ def test_patched_uvicorn_backend_inprocess_without_frontend(
     """Backend-only dev uses in-process uvicorn on the main thread."""
     _reset_backend_patch_flag()
     monkeypatch.setattr(
-        "reflex_django.routing.resolve_url_routing",
+        "reflex_django.setup.routing.resolve_url_routing",
         lambda: UrlRoutingMode.DJANGO_OUTER,
     )
 
@@ -799,15 +799,15 @@ def test_patched_uvicorn_backend_inprocess_without_frontend(
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.integration._spawn_django_outer_backend_subprocess",
+        "reflex_django.runtime.integration._spawn_django_outer_backend_subprocess",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.integration.sys.platform",
+        "reflex_django.runtime.integration.sys.platform",
         "linux",
     )
 
-    from reflex_django.integration import install_reflex_django_integration
+    from reflex_django.runtime.integration import install_reflex_django_integration
     import reflex.utils.exec as exec_module
 
     install_reflex_django_integration()
@@ -820,7 +820,7 @@ def test_patched_uvicorn_backend_inprocess_without_frontend(
 
     uvicorn_run.assert_called_once()
     kwargs = uvicorn_run.call_args.kwargs
-    assert kwargs["app"] == "reflex_django.asgi_entry:application"
+    assert kwargs["app"] == "reflex_django.asgi.entry:application"
     assert kwargs["reload"] is True
 
 
@@ -830,13 +830,13 @@ def test_patched_uvicorn_backend_honors_no_reload_env(
     """``REFLEX_DJANGO_BACKEND_RELOAD=0`` disables uvicorn reload."""
     _reset_backend_patch_flag()
     monkeypatch.setattr(
-        "reflex_django.routing.resolve_url_routing",
+        "reflex_django.setup.routing.resolve_url_routing",
         lambda: UrlRoutingMode.DJANGO_OUTER,
     )
 
     spawn = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.integration._spawn_django_outer_backend_subprocess",
+        "reflex_django.runtime.integration._spawn_django_outer_backend_subprocess",
         spawn,
     )
     monkeypatch.setattr(
@@ -852,7 +852,7 @@ def test_patched_uvicorn_backend_honors_no_reload_env(
         mock.MagicMock(),
     )
 
-    from reflex_django.integration import install_reflex_django_integration
+    from reflex_django.runtime.integration import install_reflex_django_integration
     import reflex.utils.exec as exec_module
 
     install_reflex_django_integration()
@@ -873,11 +873,11 @@ def test_backend_runner_passes_reload_excludes_when_vite_active(
     uvicorn_run = mock.MagicMock()
     monkeypatch.setattr("uvicorn.run", uvicorn_run)
     monkeypatch.setattr(
-        "reflex_django.integration.install_reflex_django_integration",
+        "reflex_django.runtime.integration.install_reflex_django_integration",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django._backend_runner._resolve_watch_root",
+        "reflex_django.dev.runners.backend._resolve_watch_root",
         lambda: "/project",
     )
 
@@ -885,14 +885,14 @@ def test_backend_runner_passes_reload_excludes_when_vite_active(
 
     os.environ["REFLEX_DJANGO_FRONTEND_PRESENT"] = "1"
     os.environ.pop("REFLEX_DJANGO_BACKEND_RELOAD", None)
-    monkeypatch.setattr("reflex_django._backend_runner.sys.platform", "linux")
+    monkeypatch.setattr("reflex_django.dev.runners.backend.sys.platform", "linux")
 
-    from reflex_django._backend_runner import main
+    from reflex_django.dev.runners.backend import main
 
     main(["--host", "127.0.0.1", "--port", "8000"])
 
     kwargs = uvicorn_run.call_args.kwargs
-    assert kwargs["app"] == "reflex_django.asgi_entry:application"
+    assert kwargs["app"] == "reflex_django.asgi.entry:application"
     assert kwargs["reload"] is True
     assert kwargs.get("reload_excludes")
 
@@ -964,7 +964,7 @@ def test_env_dev_compiles_to_web_with_single_port_compile_dev(
     )
     start_recompile_watch = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django._frontend_runner.start_compile_dev_watch",
+        "reflex_django.dev.runners.frontend.start_compile_dev_watch",
         start_recompile_watch,
     )
     spawn_uvicorn = mock.MagicMock(

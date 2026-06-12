@@ -5,7 +5,7 @@ from __future__ import annotations
 
 def apply_post_rxconfig_patches() -> None:
     """Apply compile and page patches after rxconfig is materialized."""
-    from reflex_django.integration import (
+    from reflex_django.runtime.integration import (
         _patch_apply_decorated_pages,
         _patch_assert_in_reflex_dir,
         _patch_needs_reinit,

@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from reflex_django.compile_validate import (
+from reflex_django.runtime.compile_validate import (
     dispatch_keys_from_context_js,
     expected_dispatch_keys_from_app,
     filter_delta_to_compiled_dispatch_keys,
@@ -85,7 +85,7 @@ def test_expected_dispatch_keys_from_app_returns_sorted_keys(
             "reflex___state____state.demo___views____home_state": {},
         },
     )
-    import reflex_django.compile_validate as cv
+    import reflex_django.runtime.compile_validate as cv
 
     keys = cv.expected_dispatch_keys_from_app(mock.Mock(_state=object))
     assert keys == {

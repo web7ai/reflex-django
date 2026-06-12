@@ -10,7 +10,7 @@ from unittest import mock
 import reflex as rx
 from django.db import models
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
@@ -544,7 +544,7 @@ def test_bind_request_context_exposes_user() -> None:
 
     async def run() -> None:
         with mock.patch(
-            "reflex_django.context.current_request",
+            "reflex_django.bridge.context.current_request",
             return_value=http,
         ):
             state = _NotesState()

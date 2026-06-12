@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory
 
-from reflex_django.django_dev_middleware import (
+from reflex_django.dev.django_middleware import (
     DEFAULT_DEV_MIDDLEWARE,
     DevViteProxyHostMiddleware,
     EnsureRequestBodyAttrsMiddleware,
@@ -18,7 +18,7 @@ def _middleware_response(request: HttpRequest) -> HttpResponse:
 
 def test_default_dev_middleware_paths() -> None:
     assert len(DEFAULT_DEV_MIDDLEWARE) == 2
-    assert all(p.startswith("reflex_django.django_dev_middleware.") for p in DEFAULT_DEV_MIDDLEWARE)
+    assert all(p.startswith("reflex_django.dev.django_middleware.") for p in DEFAULT_DEV_MIDDLEWARE)
 
 
 def test_ensure_request_body_attrs_stubs_empty_body() -> None:

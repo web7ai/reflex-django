@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from reflex_django.auth.registry import add_auth_pages  # noqa: E402
-from reflex_django.auth_state import DjangoUserState  # noqa: E402
+from reflex_django.states.auth import DjangoUserState  # noqa: E402
 from reflex_django.state import ModelState  # noqa: E402
 
 

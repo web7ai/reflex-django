@@ -8,7 +8,7 @@ import pytest
 from django.conf import settings
 from reflex_base.config import Config
 
-from reflex_django.rxconfig_bridge import (
+from reflex_django.setup.rxconfig_bridge import (
     _apply_built_with_reflex_default,
     ensure_reflex_django_plugin,
     merge_rx_config,
@@ -43,7 +43,7 @@ def test_ensure_reflex_django_plugin_is_noop() -> None:
 
 
 def test_invalid_rx_config_key_raises() -> None:
-    from reflex_django.rxconfig_bridge import _coerce_rx_config_dict
+    from reflex_django.setup.rxconfig_bridge import _coerce_rx_config_dict
 
     with pytest.raises(ValueError, match="Unsupported"):
         _coerce_rx_config_dict({"not_a_real_config_key": 1})
@@ -84,7 +84,7 @@ def test_show_built_with_reflex_respects_explicit_mount_override(
     be quietly clobbered by reflex-django's default flip.
     """
     monkeypatch.setattr(
-        "reflex_django.mount_config.get_mount_rx_config_overrides",
+        "reflex_django.mount.config.get_mount_rx_config_overrides",
         lambda: {"show_built_with_reflex": True},
     )
     base = Config(

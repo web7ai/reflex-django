@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reflex_django.vite_proxy import (
+from reflex_django.dev.vite_proxy import (
     ensure_vite_django_dev_proxy,
     inject_vite_proxy_plugin,
     patch_vite_config,

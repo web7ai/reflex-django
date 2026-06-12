@@ -9,12 +9,12 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import clear_url_caches, path, resolve
 
-from reflex_django.auto_mount import (
+from reflex_django.mount.auto import (
     clear_auto_mount_state,
     maybe_auto_mount,
 )
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
-from reflex_django.mount_registry import clear_mount_registry
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.registry import clear_mount_registry
 from reflex_django.views.mount import ReflexMountView
 
 
@@ -109,7 +109,7 @@ def test_resolve_app_name_from_rx_config(monkeypatch: pytest.MonkeyPatch) -> Non
     import django
 
     django.setup()
-    from reflex_django.mount_config import resolve_app_name
+    from reflex_django.mount.config import resolve_app_name
 
     monkeypatch.setattr(
         settings,
@@ -147,7 +147,7 @@ def test_reflex_mount_app_name_deprecation_warning() -> None:
     import warnings
 
     django.setup()
-    from reflex_django.urls import reflex_mount
+    from reflex_django.django.urls import reflex_mount
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

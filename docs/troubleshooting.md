@@ -55,7 +55,7 @@ python manage.py run_reflex
 **Fix:**
 
 ```python
-from reflex_django.django_dev_middleware import DEFAULT_DEV_MIDDLEWARE
+from reflex_django.dev.django_middleware import DEFAULT_DEV_MIDDLEWARE
 
 USE_X_FORWARDED_HOST = True
 CSRF_TRUSTED_ORIGINS = [
@@ -68,7 +68,7 @@ CSRF_TRUSTED_ORIGINS = [
 MIDDLEWARE = [
     *DEFAULT_DEV_MIDDLEWARE,
     # ... your middleware ...
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
 ```
 

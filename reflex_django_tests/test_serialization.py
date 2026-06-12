@@ -1,4 +1,4 @@
-"""Tests for :mod:`reflex_django.serialization`."""
+"""Tests for :mod:`reflex_django.serializers.core`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone as dt_timezone
 
 from django.db import models
 
-from reflex_django.serialization import serialize_model_row
+from reflex_django.serializers.core import serialize_model_row
 
 
 class _Stamped(models.Model):

@@ -30,7 +30,7 @@ Most projects only touch **settings** and **pages**. The URL catch-all is automa
 | Knob | Where | What you control |
 |:---|:---|:---|
 | **Settings** | `REFLEX_DJANGO_RX_CONFIG`, `REFLEX_DJANGO_PLUGINS`, ... in `settings.py` | `app_name`, ports, `redis_url`, plugins, routing mode |
-| **App** | `from reflex_django import app` | The shared `rx.App()` singleton (`reflex_django.reflex_app`) |
+| **App** | `from reflex_django import app` | The shared `rx.App()` singleton (`reflex_django.runtime.reflex_app`) |
 | **URLs** | automatic (default) or optional `reflex_mount()` | SPA catch-all only; use `reflex_mount()` when you need prefix overrides |
 
 ```mermaid
@@ -125,7 +125,7 @@ Most teams stop here.
 Only when you need a non-root mount or explicit prefix lists:
 
 ```python
-from reflex_django.urls import reflex_mount
+from reflex_django.django.urls import reflex_mount
 
 urlpatterns += reflex_mount(
     mount_prefix="/app",
@@ -214,7 +214,7 @@ See [Pages in views.py](pages_in_views.md) for layout helpers, auth pages, and t
 
 `app_name` in `REFLEX_DJANGO_RX_CONFIG` is Reflex's **compile label**. It is **not** "all pages must live in `{app_name}/views.py`".
 
-Reflex uses it for grouping decorated pages at compile time and for build metadata. The actual `rx.App()` instance always loads from `reflex_django.reflex_app`.
+Reflex uses it for grouping decorated pages at compile time and for build metadata. The actual `rx.App()` instance always loads from `reflex_django.runtime.reflex_app`.
 
 ### Simple project
 

@@ -74,7 +74,7 @@ class BaseModelState(ABC):
 
     async def bind_request_context(self) -> None:
         """Attach :attr:`request` and :attr:`django_request` for this event."""
-        from reflex_django.context import current_request
+        from reflex_django.bridge.context import current_request
         from reflex_django.state.request import DjangoStateRequest
 
         http_request = current_request()

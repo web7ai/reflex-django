@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 def _anonymous_user() -> Any:
-    from reflex_django.context import anonymous_user
+    from reflex_django.bridge.context import anonymous_user
 
     return anonymous_user()
 
@@ -67,14 +67,14 @@ class DjangoStateRequest:
     @property
     def messages(self) -> list[dict[str, Any]]:
         """JSON-safe Django messages for the active event (may be empty)."""
-        from reflex_django.context import current_messages
+        from reflex_django.bridge.context import current_messages
 
         return current_messages()
 
     @property
     def csrf_token(self) -> str:
         """CSRF token bound to the synthetic request (empty if unavailable)."""
-        from reflex_django.context import current_csrf_token
+        from reflex_django.bridge.context import current_csrf_token
 
         return current_csrf_token()
 

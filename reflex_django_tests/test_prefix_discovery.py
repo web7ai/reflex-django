@@ -7,11 +7,11 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path
 
-from reflex_django.conf import configure_django
-from reflex_django.mount_config import clear_mount_rx_config
-from reflex_django.mount_registry import clear_mount_registry
-from reflex_django.prefix_discovery import discover_django_prefixes, resolve_django_prefix
-from reflex_django.urls import reflex_mount
+from reflex_django.setup.conf import configure_django
+from reflex_django.mount.config import clear_mount_rx_config
+from reflex_django.mount.registry import clear_mount_registry
+from reflex_django.mount.discovery import discover_django_prefixes, resolve_django_prefix
+from reflex_django.django.urls import reflex_mount
 
 
 @pytest.fixture(autouse=True)
@@ -95,7 +95,7 @@ def test_reflex_mount_auto_from_module_urlpatterns(
     from django.urls import clear_url_caches
 
     clear_url_caches()
-    from reflex_django.mount_config import get_merged_mount_rx_config
+    from reflex_django.mount.config import get_merged_mount_rx_config
 
     assert get_merged_mount_rx_config().django_prefix == ("/admin", "/api")
     assert len(urlconf.urlpatterns) >= 2

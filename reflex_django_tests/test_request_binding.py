@@ -6,14 +6,14 @@ import asyncio
 import contextvars
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.contrib.auth.models import AnonymousUser  # noqa: E402
 from django.http import HttpRequest  # noqa: E402
 
-from reflex_django.context import begin_event_request, end_event_request  # noqa: E402
+from reflex_django.bridge.context import begin_event_request, end_event_request  # noqa: E402
 from reflex_django.state.request_binding import (  # noqa: E402
     REQUEST_WRAPPER_ATTR,
     bind_request_on_state,
@@ -45,7 +45,7 @@ def test_bind_request_on_state_attaches_wrapper() -> None:
 
 
 def test_preprocess_binds_handler_substate() -> None:
-    from reflex_django.middleware import DjangoEventBridge
+    from reflex_django.bridge.django_event import DjangoEventBridge
 
     bridge = DjangoEventBridge()
     child = HomeState()
@@ -84,7 +84,7 @@ def test_preprocess_binds_handler_substate() -> None:
 
 
 def test_bind_django_request_for_handler_state_without_preprocess() -> None:
-    from reflex_django.middleware import bind_django_request_for_handler_state
+    from reflex_django.bridge.django_event import bind_django_request_for_handler_state
 
     state = HomeState()
     rd = {
@@ -105,7 +105,7 @@ def test_bind_django_request_for_handler_state_without_preprocess() -> None:
 
 
 def test_process_event_is_patched_after_integration_install() -> None:
-    from reflex_django.integration import install_reflex_django_integration
+    from reflex_django.runtime.integration import install_reflex_django_integration
 
     install_reflex_django_integration()
 

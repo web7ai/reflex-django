@@ -151,7 +151,7 @@ uv sync --frozen
 python manage.py migrate --noinput
 python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
 python manage.py collectstatic --noinput
-# start ASGI: reflex_django.asgi_entry:application
+# start ASGI: reflex_django.asgi.entry:application
 ```
 
 ---

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from reflex_django.app_factory import (
+from reflex_django.runtime.app_factory import (
     ensure_django_led_app_ready,
     get_or_create_app,
     reset_app_factory_cache,
 )
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
 from reflex_django.pages.decorators import PAGE_REGISTRY, clear_page_registry
 
 
@@ -26,7 +26,7 @@ def _reset() -> None:
 
 
 def test_get_or_create_app_singleton() -> None:
-    import reflex_django.reflex_app as reflex_app
+    import reflex_django.runtime.reflex_app as reflex_app
 
     reflex_app._app = None
     first = get_or_create_app()
@@ -37,7 +37,7 @@ def test_get_or_create_app_singleton() -> None:
 
 def test_add_page_on_django_led_app() -> None:
     import reflex as rx
-    import reflex_django.reflex_app as reflex_app
+    import reflex_django.runtime.reflex_app as reflex_app
 
     reflex_app._app = None
     app = reflex_app.app
@@ -55,7 +55,7 @@ def test_add_page_on_django_led_app() -> None:
 
 
 def test_lazy_app_export_matches_django_led_app() -> None:
-    import reflex_django.django_led_app as django_led
+    import reflex_django.runtime.reflex_app as django_led
 
     django_led._app = None
     from reflex_django import app as exported
@@ -65,7 +65,7 @@ def test_lazy_app_export_matches_django_led_app() -> None:
 
 def test_page_decorator_and_add_page_share_singleton() -> None:
     import reflex as rx
-    import reflex_django.django_led_app as django_led
+    import reflex_django.runtime.reflex_app as django_led
     from reflex_django.pages.decorators import page
 
     django_led._app = None

@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import Any, cast
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.conf import settings  # noqa: E402
 from django.utils import translation  # noqa: E402
-from reflex_django.middleware import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:

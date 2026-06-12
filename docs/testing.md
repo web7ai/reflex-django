@@ -76,7 +76,7 @@ Reflex handlers expect `self.request` and `self.user`. In tests, bind a syntheti
 # tests/test_inventory_state.py
 import pytest
 from django.contrib.auth import get_user_model
-from reflex_django.context import begin_event_request, end_event_request
+from reflex_django.bridge.context import begin_event_request, end_event_request
 from inventory.views import InventoryState
 from inventory.models import Product
 

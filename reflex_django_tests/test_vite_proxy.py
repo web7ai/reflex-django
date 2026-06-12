@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reflex_django.vite_proxy import (
+from reflex_django.dev.vite_proxy import (
     inject_vite_dev_proxy,
     patch_vite_config,
     strip_vite_config_proxy,

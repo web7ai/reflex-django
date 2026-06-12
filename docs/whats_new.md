@@ -1,11 +1,38 @@
 # What's new in reflex-django
 
-**What you will learn:** What changed in v1.0 and where to read the full release notes.
+**What you will learn:** What changed in recent releases and where to read the full release notes.
 
 **When you need this:**
 
-- You are upgrading from 0.x.
-- You want a quick summary before reading the migration guide.
+- You are upgrading from an older version.
+- You want a quick summary before reading a migration guide.
+
+---
+
+## v2.0 (2026-06-12)
+
+v2.0 reorganizes the Python package into domain subpackages (`asgi/`, `runtime/`, `bridge/`, `django/`, `dev/`, `setup/`, …). Most user-facing imports stay the same; string-based Django settings paths and a few module paths changed.
+
+### Highlights
+
+| Area | v2.0 behavior |
+|:---|:---|
+| **ASGI** | `from reflex_django.asgi.entry import application` (was `asgi_entry`) |
+| **Django URLs** | `reflex_django.django.urls` for `ROOT_URLCONF` defaults and `reflex_mount` |
+| **Streaming middleware** | `reflex_django.bridge.streaming.AsyncStreamingMiddleware` |
+| **Dev middleware** | `reflex_django.dev.django_middleware.DEFAULT_DEV_MIDDLEWARE` |
+| **Package layout** | Root contains only `__init__.py`; see [v2 module paths](migration/v2_module_paths.md) |
+| **`auth_state`** | `DjangoUserState` still lives in `reflex_django.auth_state` for stable compiled event keys |
+
+### Breaking changes (short list)
+
+- Update `config/asgi.py` to import from `reflex_django.asgi.entry`.
+- Update `MIDDLEWARE` and `ROOT_URLCONF` strings if you copied defaults from older docs.
+- Remove any `reflex_django.django_led_app` imports (use `from reflex_django import app`).
+
+### Upgrade path
+
+**[Migrating to v2.0 →](migration/v2_module_paths.md)**
 
 ---
 
@@ -19,7 +46,7 @@ reflex-django v1.0 is a **Django-first** integration release. Configuration, ASG
 |:---|:---|
 | **Routing** | Two supported modes: `django_outer` (default) and `reflex_outer`. Legacy `reflex_led` / `django_led` removed. |
 | **Config** | `REFLEX_DJANGO_RX_CONFIG` in `settings.py` replaces disk `rxconfig.py`. `ReflexDjangoPlugin` auto-injection removed. |
-| **ASGI** | Use `reflex_django.asgi_entry.application`. `make_dispatcher` removed. |
+| **ASGI** | Use `reflex_django.asgi.entry.application`. `make_dispatcher` removed. |
 | **Packages** | New modules: `core`, `bootstrap`, `bridge`, `dev`, `mount.spa_paths`, `errors`. |
 | **Dev** | `RunPlan` drives `run_reflex` flags. Two-port Vite + backend remains the default workflow. |
 | **Docs** | Migration guide, routing reference, architecture overview, and pytest CI for the doc site. |
@@ -28,7 +55,7 @@ reflex-django v1.0 is a **Django-first** integration release. Configuration, ASG
 
 - Set `REFLEX_DJANGO_URL_ROUTING` to `django_outer` or `reflex_outer` (not `django_led` / `reflex_led`).
 - Move Reflex config into Django settings. Delete or stop relying on `rxconfig.py`.
-- Replace `reflex_django.asgi.make_dispatcher` with `build_django_outer_application` / `asgi_entry.application`.
+- Replace `reflex_django.asgi.make_dispatcher` with `build_django_outer_application` / `asgi.entry.application`.
 - Import pages and state from `reflex_django.pages.decorators` and `reflex_django.states`.
 
 ### Upgrade path

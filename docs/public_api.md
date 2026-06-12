@@ -17,17 +17,35 @@ This page is an index only. For walkthroughs, follow the links.
 from reflex_django.states import AppState, ModelState, DjangoUserState
 from reflex_django.pages.decorators import page
 from reflex_django.pages.decorators.templates import centered_template as template
-from reflex_django.urls import reflex_mount
+from reflex_django.django.urls import reflex_mount
 from reflex_django.auth import add_auth_pages, login_required, permission_required
 from reflex_django.serializers import ReflexDjangoModelSerializer
 from reflex_django import request, current_request, current_user
-from reflex_django.asgi_entry import application
+from reflex_django.asgi.entry import application
 from reflex_django import app, create_app
-from reflex_django.routing import UrlRoutingMode, resolve_url_routing
-from reflex_django.context import begin_event_request, end_event_request
+from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
+from reflex_django.bridge.context import begin_event_request, end_event_request
 ```
 
-Most projects import little beyond this list.
+Most projects import little beyond this list. Upgrading from v1? See [v2 module path migration](migration/v2_module_paths.md).
+
+---
+
+## Package layout (v2)
+
+```text
+reflex_django/
+  asgi/          entry, dispatchers, HTTP subprocess
+  runtime/       app factory, integration, reflex_app
+  bridge/        request bridge, event middleware, context
+  django/        apps, urls, admin, model
+  dev/           dev proxy, Vite, internal runners
+  setup/         conf, routing, rxconfig bridge
+  states/        public State classes (AppState, …)
+  auth_state.py  DjangoUserState (canonical for event handler keys)
+  state/         internal model-state framework
+  auth/          auth pages and decorators
+```
 
 ---
 

@@ -95,7 +95,7 @@ This is the single ASGI callable for `manage.py run_reflex` and for production (
 The first run compiles the SPA and starts Vite. That can take a minute. After that, edits hot-reload on `:3000`.
 
 !!! warning "Production settings"
-    In production, always set `DJANGO_SETTINGS_MODULE` to your real settings module. Do not rely on `reflex_django.default_settings` (insecure dev `SECRET_KEY`). See [Deployment](deployment.md).
+    In production, always set `DJANGO_SETTINGS_MODULE` to your real settings module. Do not rely on `reflex_django.setup.default_settings` (insecure dev `SECRET_KEY`). See [Deployment](deployment.md).
 
 ---
 
@@ -114,7 +114,7 @@ Delete any leftover `rxconfig.py`. Set `"app_name": "shop"` in `REFLEX_DJANGO_RX
 
 ## What just happened?
 
-You installed three packages, registered one Django app, pointed ASGI at `reflex_django.asgi_entry.application`, and started the default two-port dev loop. Vite serves the SPA on `:3000`; Django and the Reflex backend listen on `:8000`. When `REFLEX_DJANGO_SEPARATE_DEV_PORTS=True`, Vite proxies admin, API, and `/_event` to the backend so cookies stay on one origin while you browse `:3000`.
+You installed three packages, registered one Django app, pointed ASGI at `reflex_django.asgi.entry.application`, and started the default two-port dev loop. Vite serves the SPA on `:3000`; Django and the Reflex backend listen on `:8000`. When `REFLEX_DJANGO_SEPARATE_DEV_PORTS=True`, Vite proxies admin, API, and `/_event` to the backend so cookies stay on one origin while you browse `:3000`.
 
 ---
 

@@ -66,8 +66,8 @@ Browser
                                          → your @rx.event handlers
 ```
 
-- **HTTP bridge:** Implemented via `ReflexDjangoPlugin.post_compile` appending an `api_transformer` that wraps the inner app (`src/reflex_django/plugin.py`, `src/reflex_django/asgi.py`).
-- **Event bridge:** `DjangoEventBridge` Reflex middleware (`src/reflex_django/middleware.py`) calls `begin_event_request` / `end_event_request` (`src/reflex_django/context.py`).
+- **HTTP bridge:** Implemented via `ReflexDjangoPlugin.post_compile` appending an `api_transformer` that wraps the inner app (`src/reflex_django/setup/plugin.py`, `src/reflex_django/asgi/app.py`).
+- **Event bridge:** `DjangoEventBridge` Reflex middleware (`src/reflex_django/bridge/django_event.py`) calls `begin_event_request` / `end_event_request` (`src/reflex_django/bridge/context.py`).
 - **ASGI lifespan:** Owned by Reflex, not duplicated for Django in the same way as a standalone Django-only deploy—see README “Architecture” for nuance.
 
 ---
@@ -153,7 +153,7 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 
 ## Django settings (`REFLEX_DJANGO_*` and related)
 
-Consolidated from `src/reflex_django/default_settings.py` and related modules:
+Consolidated from `src/reflex_django/setup/default_settings.py` and related modules:
 
 | Setting | Meaning |
 |---------|---------|
@@ -165,7 +165,7 @@ Consolidated from `src/reflex_django/default_settings.py` and related modules:
 | `REFLEX_DJANGO_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
 | `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
 | `REFLEX_DJANGO_AUTH_AUTO_SYNC` | When `True` (default), `DjangoEventBridge` refreshes `AppState` auth snapshot vars on every event. |
-| `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`middleware.py`). |
+| `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`bridge/django_event.py`). |
 | `REFLEX_DJANGO_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
 | `REFLEX_DJANGO_RX_CONFIG` | Dict of `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, etc. Preferred over `rx_config=` in `urls.py`. |
 | `REFLEX_DJANGO_PLUGINS` | List of Reflex plugin dotted paths or instances. |
@@ -259,7 +259,7 @@ Human docs: `docs/authentication.md`.
 
 ## Reflex + Django ORM
 
-- Optional abstract base **`Model`** (`src/reflex_django/model.py`): subclass for tables; run migrations through the CLI below. Importing `reflex_django.model` calls `configure_django()`.
+- Optional abstract base **`Model`** (`src/reflex_django/model.py`): subclass for tables; run migrations through the CLI below. Importing `reflex_django.django.model` calls `configure_django()`.
 - Registered **serializer** turns Django `Model` instances into JSON-friendly dicts (includes PK) for Reflex wire format.
 
 ---
@@ -486,7 +486,7 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 ## CLI
 
 - **Via Reflex:** `uv run reflex django <subcommand>` — e.g. `migrate`, `makemigrations`, `createsuperuser`, `shell`, `collectstatic`, `help`. Loads `rxconfig` first so `ReflexDjangoPlugin` sets `DJANGO_SETTINGS_MODULE` and prefixes, then `configure_django()`.
-- **Standalone:** `uv run reflex-django <subcommand>` — forwards to Django’s `execute_from_command_line` the same way (see `src/reflex_django/cli.py`).
+- **Standalone:** `uv run reflex-django <subcommand>` — forwards to Django’s `execute_from_command_line` the same way (see `src/reflex_django/cli/__init__.py`).
 
 ---
 
@@ -517,4 +517,4 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 - `README.md` — full architecture, examples for states, bridges, context processors.
 - `CHANGELOG.md` — version-to-version changes.
 - `RELEASING.md` — maintainer release process.
-- Source: `src/reflex_django/` — especially `plugin.py`, `middleware.py`, `context.py`, `conf.py`, `asgi.py`, `auth/`, `auth_state.py`, `i18n_state.py`, `model.py`, `state/` (ModelCRUDView), `cli.py`.
+- Source: `src/reflex_django/` — domain packages: `asgi/`, `runtime/`, `bridge/`, `django/`, `dev/`, `setup/`, `mount/`, `auth/`, `auth_state.py`, `states/`, `state/`, `cli/`. See `docs/migration/v2_module_paths.md` for the full map.

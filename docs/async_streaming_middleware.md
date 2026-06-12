@@ -50,7 +50,7 @@ Inside `process_response` (on the way out):
 4. If yes, wrap chunks with `sync_to_async` and mark the response async.
 
 ```python
-# Simplified from reflex_django/streaming_middleware.py
+# Simplified from reflex_django/bridge/streaming.py
 def process_response(self, request, response):
     if not _is_asgi_request(request):
         return response
@@ -110,7 +110,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",  # last
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",  # last
 ]
 ```
 
@@ -132,7 +132,7 @@ Default skip list:
 ```python
 REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
     "django.middleware.csrf.CsrfViewMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 )
 ```
 
@@ -153,7 +153,7 @@ StreamingHttpResponse must consume its content asynchronously
 or the content will be consumed synchronously, blocking the event loop.
 ```
 
-Add `reflex_django.streaming_middleware.AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE`. Restart the server.
+Add `reflex_django.bridge.streaming.AsyncStreamingMiddleware` at the bottom of `MIDDLEWARE`. Restart the server.
 
 ### Admin hangs or truncated content
 
@@ -171,7 +171,7 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",  # if you use it
     "django.contrib.sessions.middleware.SessionMiddleware",
     # ...
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",  # last
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",  # last
 ]
 ```
 
@@ -184,7 +184,7 @@ WhiteNoise creates the streaming response. `AsyncStreamingMiddleware` adapts it 
 The whole implementation lives in:
 
 ```text
-src/reflex_django/streaming_middleware.py
+src/reflex_django/bridge/streaming.py
 ```
 
 - Old-style `MiddlewareMixin` (`sync_capable` and `async_capable`).

@@ -1,4 +1,4 @@
-"""Tests for the Vite frontend runner (``reflex_django._frontend_runner``)."""
+"""Tests for the Vite frontend runner (``reflex_django.dev.runners.frontend``)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from reflex_django import _frontend_runner
+import reflex_django.dev.runners.frontend as _frontend_runner
 
 
 def test_parse_argv_defaults() -> None:
@@ -200,7 +200,7 @@ def test_compile_app_for_frontend_syncs_vite_proxy_layout(
     monkeypatch.setattr(prerequisites, "compile_or_validate_app", mock.MagicMock())
     monkeypatch.setattr(_frontend_runner, "_write_env_json", mock.MagicMock())
     monkeypatch.setattr(
-        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        "reflex_django.dev.frontend_stability.apply_frontend_stability_after_compile",
         mock.MagicMock(),
     )
     sync_layout = mock.MagicMock()
@@ -224,7 +224,7 @@ def test_compile_app_for_frontend_applies_stability_patches(
     monkeypatch.setattr(prerequisites, "compile_or_validate_app", compile_or_validate)
     monkeypatch.setattr(_frontend_runner, "_write_env_json", write_env)
     monkeypatch.setattr(
-        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        "reflex_django.dev.frontend_stability.apply_frontend_stability_after_compile",
         stability,
     )
 
@@ -296,7 +296,7 @@ def test_build_frontend_client_bundle_uses_reflex_build(
 
 
 def test_compile_dev_reload_script_ignores_missing() -> None:
-    from reflex_django.spa_template import compile_dev_reload_script
+    from reflex_django.mount.spa_template import compile_dev_reload_script
 
     script = compile_dev_reload_script(wait_for_ready=False)
     assert "id!=='missing'" in script
@@ -310,7 +310,7 @@ def test_resolve_spa_index_falls_back_to_compile_dev_backup(
     """While ``.web/build`` is wiped, the previous client bundle remains servable."""
     from django.conf import settings
 
-    from reflex_django._frontend_runner import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+    from reflex_django.dev.runners.frontend import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
     from reflex_django.views.mount import _resolve_spa_index
 
     web = tmp_path / ".web"

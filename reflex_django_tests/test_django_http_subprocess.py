@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from reflex_django import django_http_subprocess as subproc
+import reflex_django.asgi.http_subprocess as subproc
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ def test_spawn_and_terminate_subprocess(monkeypatch: pytest.MonkeyPatch) -> None
     fake_proc.wait.return_value = 0
 
     monkeypatch.setattr(
-        "reflex_django.django_http_subprocess.subprocess.Popen",
+        "reflex_django.asgi.http_subprocess.subprocess.Popen",
         lambda *a, **k: fake_proc,
     )
 
@@ -57,7 +57,7 @@ def test_ensure_upstream_ready_when_already_listening(
 ) -> None:
     monkeypatch.setenv("REFLEX_DJANGO_HTTP_UPSTREAM", "http://127.0.0.1:8001")
     monkeypatch.setattr(
-        "reflex_django.django_http_subprocess._tcp_reachable",
+        "reflex_django.asgi.http_subprocess._tcp_reachable",
         lambda *_a, **_k: True,
     )
     spawn = mock.Mock()

@@ -12,8 +12,8 @@ from typing import Any
 import reflex as rx
 
 from reflex_django.auth.login_fields import DEFAULT_LOGIN_FIELDS
-from reflex_django.auth_state import DjangoUserState
-from reflex_django.context import current_request
+from reflex_django.states.auth import DjangoUserState
+from reflex_django.bridge.context import current_request
 from reflex_django.state.auth_bridge import AuthBridgeMixin, session_async_save
 
 # Backward compatibility for modules that imported the private name.
@@ -41,12 +41,12 @@ def _sync_session_cookie_then_nav(
     Reflex events do not run ``SessionMiddleware``, so the browser often never
     receives ``Set-Cookie`` after ``alogin`` / ``alogout``. Without syncing the
     session key here, the next document load can still send a stale ``sessionid``.
-    See :mod:`reflex_django.session_js` and ``SESSION_COOKIE_HTTPONLY``.
+    See :mod:`reflex_django.bridge.session_js` and ``SESSION_COOKIE_HTTPONLY``.
 
     Navigation is deferred briefly so the cookie write is applied before the
     next load.
     """
-    from reflex_django.session_js import (
+    from reflex_django.bridge.session_js import (
         browser_auth_logout_clear_js,
         browser_session_storage_clear_js,
         session_cookie_clear_js,
@@ -154,7 +154,7 @@ def populate_session_auth_state(
     ns[f"set_{p_var}"] = make_pass_setter()
 
     async def _finish_login(self: Any, request: Any) -> Any:
-        from reflex_django.auth_state import (
+        from reflex_django.states.auth import (
             _mark_auth_ui_dirty,
             apply_auth_snapshot_to_state,
         )
@@ -163,7 +163,7 @@ def populate_session_auth_state(
         await session_async_save(request)
         sk = getattr(request.session, "session_key", None) or ""
         if sk:
-            from reflex_django.session_js import mirror_auth_cookies_to_state_tree
+            from reflex_django.bridge.session_js import mirror_auth_cookies_to_state_tree
 
             mirror_auth_cookies_to_state_tree(self, sk)
         await apply_auth_snapshot_to_state(self)
@@ -211,7 +211,7 @@ def populate_session_auth_state(
         ns[cfg.submit_form_event] = rx.event(submit_form_impl)
 
     async def logout_impl(self: Any) -> Any:
-        from reflex_django.session_js import browser_auth_logout_clear_js
+        from reflex_django.bridge.session_js import browser_auth_logout_clear_js
 
         request = current_request()
         await AuthBridgeMixin.logout(self)
@@ -232,12 +232,12 @@ def session_auth_mixin(
 ) -> type[rx.State]:
     """Build a concrete :class:`reflex.state.State` subclass with login/logout events.
 
-    Uses :meth:`~reflex_django.auth_state.DjangoUserState.login` and
-    :meth:`~reflex_django.auth_state.DjangoUserState.logout` (Django async session
-    auth) and :func:`reflex_django.context.current_request` inside Reflex handlers.
+    Uses :meth:`~reflex_django.states.auth.DjangoUserState.login` and
+    :meth:`~reflex_django.states.auth.DjangoUserState.logout` (Django async session
+    auth) and :func:`reflex_django.bridge.context.current_request` inside Reflex handlers.
 
     After successful login or logout, the mixin mirrors the session cookie into
-    ``document.cookie`` (see :mod:`reflex_django.session_js`) and performs a
+    ``document.cookie`` (see :mod:`reflex_django.bridge.session_js`) and performs a
     short deferred full-page navigation. Reflex's synthetic request path does
     not run ``SessionMiddleware``, so ``rx.redirect`` alone often leaves the
     browser without an updated ``sessionid``.

@@ -15,11 +15,11 @@ def install_mock(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
     """Patch ``install_reflex_django_integration`` and assert it runs first."""
     install = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.integration.install_reflex_django_integration",
+        "reflex_django.runtime.integration.install_reflex_django_integration",
         install,
     )
     monkeypatch.setattr(
-        "reflex_django.integration.refresh_get_config_bindings",
+        "reflex_django.runtime.integration.refresh_get_config_bindings",
         mock.MagicMock(),
     )
     return install

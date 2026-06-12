@@ -98,7 +98,7 @@ async def aauthenticate_login_fields(
     and authentication proceeds with their username.
 
     Args:
-        request: Current Django/ASGI request from :func:`reflex_django.context.current_request`.
+        request: Current Django/ASGI request from :func:`reflex_django.bridge.context.current_request`.
         identifier: Value entered in the login form (username and/or email).
         password: Password from the login form.
         login_fields: Normalized tuple from :func:`normalize_login_fields`.

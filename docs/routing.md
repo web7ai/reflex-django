@@ -182,7 +182,7 @@ Explicit Django routes in `urlpatterns` must appear **before** the catch-all. Im
 
 ## Production notes
 
-- **`django_outer`:** Point your reverse proxy at a single ASGI server running `reflex_django.asgi_entry:application`. Enable WebSocket upgrade for `/_event`.
+- **`django_outer`:** Point your reverse proxy at a single ASGI server running `reflex_django.asgi.entry:application`. Enable WebSocket upgrade for `/_event`.
 - **`reflex_outer`:** Supervise two processes: Reflex outer on the public port, Django HTTP worker on `REFLEX_DJANGO_HTTP_PORT`. The edge proxy still talks to **one** public port (Reflex).
 - Export the SPA in CI (`export_reflex` / `collectstatic`), not on every container boot.
 

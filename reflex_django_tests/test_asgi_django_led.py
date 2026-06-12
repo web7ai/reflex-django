@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from reflex_django.asgi import make_dispatcher
-from reflex_django.errors import DeprecationRemovedError
+from reflex_django.asgi.app import make_dispatcher
+from reflex_django.setup.errors import DeprecationRemovedError
 
 
 def test_make_dispatcher_removed() -> None:

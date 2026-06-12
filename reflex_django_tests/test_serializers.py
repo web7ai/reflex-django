@@ -9,7 +9,7 @@ from unittest import mock
 
 from django.db import models
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 from reflex_django.serializers import ReflexDjangoModelSerializer
 
 configure_django()

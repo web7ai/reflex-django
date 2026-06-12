@@ -6,7 +6,7 @@ import pytest
 from django.test import Client
 from django.urls import clear_url_caches
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 
 @pytest.fixture
@@ -32,8 +32,8 @@ def test_bare_admin_segment_not_caught_by_mount_regex() -> None:
     """Root resolver passes ``admin`` (no slash) to included patterns."""
     import re
 
-    from reflex_django.prefixes import resolve_prefixes
-    from reflex_django.urls import _catchall_regex
+    from reflex_django.mount.prefixes import resolve_prefixes
+    from reflex_django.django.urls import _catchall_regex
 
     config = resolve_prefixes(django_prefix=("/admin",))
     pattern = _catchall_regex(
@@ -50,10 +50,10 @@ def test_site_root_not_caught_when_separate_dev_ports(
     """Two-port dev: ``/`` is owned by Django, not the SPA catch-all."""
     import re
 
-    from reflex_django.prefixes import resolve_prefixes
-    from reflex_django.urls import _catchall_regex
+    from reflex_django.mount.prefixes import resolve_prefixes
+    from reflex_django.django.urls import _catchall_regex
 
-    monkeypatch.setattr("reflex_django.dev_proxy.dev_uses_separate_ports", lambda: True)
+    monkeypatch.setattr("reflex_django.dev.proxy.dev_uses_separate_ports", lambda: True)
     config = resolve_prefixes(django_prefix=("/admin", "/api"))
     pattern = _catchall_regex(
         config.mount_prefix,
@@ -70,8 +70,8 @@ def test_site_root_caught_when_single_port_prod(
     """Prod/single-port: ``/`` is served by the SPA catch-all."""
     import re
 
-    from reflex_django.prefixes import resolve_prefixes
-    from reflex_django.urls import _catchall_regex
+    from reflex_django.mount.prefixes import resolve_prefixes
+    from reflex_django.django.urls import _catchall_regex
 
     monkeypatch.setenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", "0")
     config = resolve_prefixes(django_prefix=("/admin", "/api"))

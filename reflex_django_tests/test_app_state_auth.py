@@ -9,14 +9,14 @@ from unittest import mock
 
 import pytest
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.contrib.auth.models import User  # noqa: E402
 
-from reflex_django.context import current_session  # noqa: E402
-from reflex_django.middleware import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.context import current_session  # noqa: E402
+from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
 from reflex_django.state.auth_bridge import SessionProxy  # noqa: E402
 from reflex_django.states import AppState  # noqa: E402
 
@@ -62,7 +62,7 @@ def test_app_state_request_user_matches_user_property() -> None:
         "reflex_django.state.auth_bridge.current_request",
         return_value=http_request,
     ), mock.patch(
-        "reflex_django.context.current_request",
+        "reflex_django.bridge.context.current_request",
         return_value=http_request,
     ):
         assert state.request.user.username == "bob"
@@ -143,7 +143,7 @@ def test_auto_sync_refreshes_all_django_user_substates() -> None:
 
     async def _go() -> None:
         with mock.patch(
-            "reflex_django.auth_state.apply_auth_snapshot_to_state",
+            "reflex_django.states.auth.apply_auth_snapshot_to_state",
             new=mock.AsyncMock(),
         ) as snap:
             await _sync_auth_snapshots_in_tree(dashboard)
@@ -156,7 +156,7 @@ def test_auto_sync_refreshes_all_django_user_substates() -> None:
 
 
 def test_apply_auth_snapshot_marks_inherited_substates_dirty() -> None:
-    from reflex_django.auth_state import _mark_inherited_auth_snapshot_dirty
+    from reflex_django.states.auth import _mark_inherited_auth_snapshot_dirty
 
     parent = mock.Mock()
     parent.inherited_vars = {}
@@ -176,7 +176,7 @@ def test_apply_auth_snapshot_marks_inherited_substates_dirty() -> None:
 
 def test_sync_django_auth_substates_marks_auth_nodes_dirty() -> None:
     from reflex_django.auth.state import DjangoAuthState
-    from reflex_django.auth_state import _sync_django_auth_substates
+    from reflex_django.states.auth import _sync_django_auth_substates
 
     auth = mock.Mock()
     auth.inherited_vars = {"is_authenticated": mock.Mock()}
@@ -189,7 +189,7 @@ def test_sync_django_auth_substates_marks_auth_nodes_dirty() -> None:
     def _isinstance(obj: object, cls: type) -> bool:
         return obj is auth or isinstance(obj, cls)
 
-    with mock.patch("reflex_django.auth_state.isinstance", side_effect=_isinstance):
+    with mock.patch("reflex_django.states.auth.isinstance", side_effect=_isinstance):
         _sync_django_auth_substates(root)
 
     assert "is_authenticated" in auth.dirty_vars
@@ -218,7 +218,7 @@ def test_sync_auth_ui_syncs_tree_and_marks_dirty() -> None:
 
 
 def test_sync_from_django_syncs_entire_auth_tree() -> None:
-    from reflex_django.auth_state import DjangoUserState
+    from reflex_django.states.auth import DjangoUserState
 
     state = _DashboardState()
 
@@ -276,7 +276,7 @@ def test_has_group_uses_snapshot_when_loaded() -> None:
 
 
 def test_app_state_inherits_django_user_state_and_model_crud() -> None:
-    from reflex_django.auth_state import DjangoUserState
+    from reflex_django.states.auth import DjangoUserState
     from reflex_django.state import ModelCRUDView
 
     class _Notes(AppState, ModelCRUDView):

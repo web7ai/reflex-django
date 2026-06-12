@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from reflex_django.core.constants import RESERVED_REFLEX_PREFIXES
-from reflex_django.routing import UrlRoutingMode
-from reflex_django.vite_proxy import (
+from reflex_django.setup.routing import UrlRoutingMode
+from reflex_django.dev.vite_proxy import (
     ViteProxyRoute,
     render_proxy_plugin_js,
     resolve_vite_dev_proxy_routes,

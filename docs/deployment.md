@@ -14,8 +14,8 @@ You deploy reflex-django like any Django ASGI app, with one extra build step for
 ## Production checklist
 
 1. **Build the SPA in CI** with `export_reflex --frontend-only --no-zip --stage-to-static-root`, then `collectstatic`.
-2. **Use real settings** with `DEBUG = False`, a real `SECRET_KEY`, `ALLOWED_HOSTS`, and `STATIC_ROOT`. Never ship `reflex_django.default_settings`.
-3. **Run ASGI** on `reflex_django.asgi_entry:application` (uvicorn, gunicorn+uvicorn worker, granian, or hypercorn).
+2. **Use real settings** with `DEBUG = False`, a real `SECRET_KEY`, `ALLOWED_HOSTS`, and `STATIC_ROOT`. Never ship `reflex_django.setup.default_settings`.
+3. **Run ASGI** on `reflex_django.asgi.entry:application` (uvicorn, gunicorn+uvicorn worker, granian, or hypercorn).
 4. **Reverse proxy** serves `/static/` from disk and forwards everything else with WebSocket upgrade on `/_event`.
 5. **Pre-built bundle:** set `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0` so boot never rebuilds on read-only filesystems.
 
@@ -25,7 +25,7 @@ uv sync --frozen
 uv run python manage.py migrate --noinput
 uv run python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
 uv run python manage.py collectstatic --noinput
-uv run uvicorn reflex_django.asgi_entry:application --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn reflex_django.asgi.entry:application --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 !!! warning "Never use default_settings in production"
@@ -47,14 +47,14 @@ your-project/
     └── _reflex/          ← SPA from export_reflex + collectstatic
 ```
 
-ASGI runs `reflex_django.asgi_entry:application`. The proxy serves `/static/` from `STATIC_ROOT`. Everything else hits the ASGI process.
+ASGI runs `reflex_django.asgi.entry:application`. The proxy serves `/static/` from `STATIC_ROOT`. Everything else hits the ASGI process.
 
 ### `reflex_outer` in production
 
 Two supervised services instead of one:
 
 1. **Reflex-facing** (public): `uvicorn config.asgi:application --port 8000`
-2. **Django HTTP worker** (internal): `uvicorn reflex_django.django_http_entry:application --host 127.0.0.1 --port 8001`
+2. **Django HTTP worker** (internal): `uvicorn reflex_django.asgi.http_entry:application --host 127.0.0.1 --port 8001`
 
 ```python
 REFLEX_DJANGO_HTTP_UPSTREAM = "http://127.0.0.1:8001"
@@ -76,7 +76,7 @@ The proxy points at `:8000` only. See [Routing](routing.md#choosing-a-mode-djang
 
 ### Auto-build on first boot
 
-If no bundle exists, `asgi_entry` can build once at boot. That is a convenience, not a CI substitute. Pre-build in CI and set:
+If no bundle exists, `asgi.entry` can build once at boot. That is a convenience, not a CI substitute. Pre-build in CI and set:
 
 ```bash
 REFLEX_DJANGO_AUTO_EXPORT_ON_START=0
@@ -91,14 +91,14 @@ REFLEX_DJANGO_AUTO_EXPORT_ON_START=0
 ### uvicorn
 
 ```bash
-uv run uvicorn reflex_django.asgi_entry:application \
+uv run uvicorn reflex_django.asgi.entry:application \
     --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ### gunicorn + uvicorn worker
 
 ```bash
-uv run gunicorn reflex_django.asgi_entry:application \
+uv run gunicorn reflex_django.asgi.entry:application \
     --workers 4 --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:8000
 ```
@@ -138,7 +138,7 @@ RUN uv run python manage.py export_reflex \
         --frontend-only --no-zip --stage-to-static-root \
     && uv run python manage.py collectstatic --noinput
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "reflex_django.asgi_entry:application",
+CMD ["uv", "run", "uvicorn", "reflex_django.asgi.entry:application",
      "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
 ```
 

@@ -1,6 +1,6 @@
 """Tests for the ASGI startup "build SPA if missing" hook.
 
-Covers :func:`reflex_django.asgi_entry._maybe_auto_export_spa` and its
+Covers :func:`reflex_django.asgi.entry._maybe_auto_export_spa` and its
 helpers, which let a raw ``uvicorn ...:application`` deploy build the SPA
 bundle once at boot instead of 404ing with "Reflex SPA bundle not found".
 """
@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from reflex_django import asgi_entry
+import reflex_django.asgi.entry as asgi_entry
 
 
 @pytest.fixture(autouse=True)
@@ -158,7 +158,7 @@ def test_probe_disables_proxy_when_vite_unreachable(
 ) -> None:
     """DEBUG-default proxy + no Vite listening -> proxy disabled for process."""
     monkeypatch.setattr(
-        "reflex_django.dev_proxy._dev_vite_target_or_none",
+        "reflex_django.dev.proxy._dev_vite_target_or_none",
         lambda: "http://127.0.0.1:3000",
     )
     monkeypatch.setattr(asgi_entry, "_vite_target_reachable", lambda target: False)
@@ -172,7 +172,7 @@ def test_probe_keeps_proxy_when_vite_reachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "reflex_django.dev_proxy._dev_vite_target_or_none",
+        "reflex_django.dev.proxy._dev_vite_target_or_none",
         lambda: "http://127.0.0.1:3000",
     )
     monkeypatch.setattr(asgi_entry, "_vite_target_reachable", lambda target: True)
@@ -188,7 +188,7 @@ def test_probe_skipped_when_explicitly_forced_on(
     """run_reflex forces DEV_PROXY=1; the probe must not run a reachability check."""
     monkeypatch.setenv("REFLEX_DJANGO_DEV_PROXY", "1")
     monkeypatch.setattr(
-        "reflex_django.dev_proxy._dev_vite_target_or_none",
+        "reflex_django.dev.proxy._dev_vite_target_or_none",
         lambda: "http://127.0.0.1:3000",
     )
     probe = mock.Mock()
@@ -205,7 +205,7 @@ def test_probe_noop_when_proxy_already_off(
 ) -> None:
     """No dev target (proxy off / prod) -> nothing to probe or change."""
     monkeypatch.setattr(
-        "reflex_django.dev_proxy._dev_vite_target_or_none", lambda: None
+        "reflex_django.dev.proxy._dev_vite_target_or_none", lambda: None
     )
     probe = mock.Mock()
     monkeypatch.setattr(asgi_entry, "_vite_target_reachable", probe)

@@ -7,9 +7,9 @@ from typing import Any
 from unittest import mock
 
 import pytest
-from reflex_django.asgi import make_dispatcher
-from reflex_django.django_http_proxy import close_http_proxy_client, make_django_http_proxy
-from reflex_django.routing import UrlRoutingMode
+from reflex_django.asgi.app import make_dispatcher
+from reflex_django.asgi.http_proxy import close_http_proxy_client, make_django_http_proxy
+from reflex_django.setup.routing import UrlRoutingMode
 
 ASGIScope = MutableMapping[str, Any]
 ASGIMessage = MutableMapping[str, Any]
@@ -57,7 +57,7 @@ async def test_proxy_forwards_admin_request() -> None:
     mock_client.request = mock.AsyncMock(return_value=mock_response)
 
     with mock.patch(
-        "reflex_django.django_http_proxy._get_client",
+        "reflex_django.asgi.http_proxy._get_client",
         mock.AsyncMock(return_value=mock_client),
     ):
         proxy = make_django_http_proxy("http://127.0.0.1:8001")

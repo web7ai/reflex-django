@@ -1,11 +1,11 @@
-"""Tests for :mod:`reflex_django.request` (module-level request proxy)."""
+"""Tests for :mod:`reflex_django.bridge.request` (module-level request proxy)."""
 
 from __future__ import annotations
 
 from typing import Any, cast
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
@@ -13,8 +13,8 @@ from django.contrib.auth.models import AnonymousUser  # noqa: E402
 from django.http import QueryDict  # noqa: E402
 
 from reflex_django import request  # noqa: E402
-from reflex_django.context import end_event_request  # noqa: E402
-from reflex_django.middleware import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.context import end_event_request  # noqa: E402
+from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:
@@ -82,7 +82,7 @@ def test_request_proxy_after_preprocess() -> None:
 
 
 def test_request_get_from_pathname_query_only() -> None:
-    from reflex_django.middleware import _build_request_from_event
+    from reflex_django.bridge.django_event import _build_request_from_event
 
     event = _StubEvent(
         router_data={

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from reflex_django import conf as conf_module
-from reflex_django.conf import configure_django
+import reflex_django.setup.conf as conf_module
+from reflex_django.setup.conf import configure_django
 
 
 def test_configure_django_discovers_manage_py(

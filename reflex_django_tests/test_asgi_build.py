@@ -11,7 +11,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
-from reflex_django import asgi as asgi_module
+import reflex_django.asgi.app as asgi_module
 
 
 @pytest.fixture

@@ -8,18 +8,18 @@ import pytest
 from django.conf import settings
 from django.urls import clear_url_caches
 
-from reflex_django.auto_mount import (
+from reflex_django.mount.auto import (
     clear_auto_mount_state,
     maybe_auto_mount,
     register_mount_from_settings,
 )
-from reflex_django.mount_config import (
+from reflex_django.mount.config import (
     clear_mount_rx_config,
     has_mount_rx_config,
     register_mount_rx_config,
 )
-from reflex_django.mount_registry import clear_mount_registry
-from reflex_django.routing import UrlRoutingMode, resolve_url_routing
+from reflex_django.mount.registry import clear_mount_registry
+from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 from reflex_django.views.mount import ReflexMountView
 
 
@@ -46,7 +46,7 @@ def test_register_mount_from_settings_before_ready() -> None:
 def test_legacy_reflex_led_routing_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from reflex_django.errors import RoutingModeError
+    from reflex_django.setup.errors import RoutingModeError
 
     monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "reflex_led")
     with pytest.raises(RoutingModeError):
@@ -79,7 +79,7 @@ def test_install_reflex_django_integration_auto_mounts(
     import django
 
     django.setup()
-    from reflex_django.integration import install_reflex_django_integration
+    from reflex_django.runtime.integration import install_reflex_django_integration
 
     urlconf_name = "reflex_django_tests.test_auto_mount_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
@@ -106,7 +106,7 @@ def test_ensure_mount_config_loaded_registers_from_settings(
     import django
 
     django.setup()
-    from reflex_django.mount_config import ensure_mount_config_loaded
+    from reflex_django.mount.config import ensure_mount_config_loaded
 
     monkeypatch.setattr(
         settings,

@@ -7,18 +7,18 @@ import contextvars
 from typing import Any, cast
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.http import HttpRequest  # noqa: E402
 
-from reflex_django.middleware import DjangoEventBridge  # noqa: E402
-from reflex_django.middleware import (  # noqa: E402
+from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.django_event import (  # noqa: E402
     _build_request_from_router_data,
     _resolve_router_data,
 )
-from reflex_django.session_js import (  # noqa: E402
+from reflex_django.bridge.session_js import (  # noqa: E402
     browser_auth_cookies_clear_js,
     browser_auth_logout_clear_js,
     browser_client_storage_clear_js,
@@ -141,7 +141,7 @@ def test_logout_strips_request_cookies_after_alogout() -> None:
             "reflex_django.state.auth_bridge.session_async_save",
             new=mock.AsyncMock(),
         ), mock.patch(
-            "reflex_django.auth_state.apply_auth_snapshot_to_state",
+            "reflex_django.states.auth.apply_auth_snapshot_to_state",
             new=mock.AsyncMock(),
         ):
             await bridge.preprocess(

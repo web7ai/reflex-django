@@ -1,6 +1,6 @@
 """Catch-all Django view that serves the Reflex SPA shell.
 
-In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
+In :class:`~reflex_django.setup.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
 this view is the entry point Django uses for every non-Reflex, non-Django
 request:
 
@@ -32,7 +32,7 @@ from django.http import (
 )
 from django.views import View
 
-from reflex_django.dev_proxy import (
+from reflex_django.dev.proxy import (
     _dev_vite_target_or_none,
     _resolve_backend_port_from_config,
     _resolve_frontend_port_from_config,
@@ -44,8 +44,8 @@ from reflex_django.mount.spa_paths import (
     resolve_spa_index as _resolve_spa_index_impl,
     spa_root_candidates as _spa_root_candidates_impl,
 )
-from reflex_django.routing import UrlRoutingMode, resolve_url_routing
-from reflex_django.spa_template import maybe_render_spa_html
+from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
+from reflex_django.mount.spa_template import maybe_render_spa_html
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -119,7 +119,7 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
         A :class:`~django.http.FileResponse` for binary/JS/CSS assets,
         a plain :class:`~django.http.HttpResponse` with the bytes of an
         HTML asset (so it can be templated by
-        :mod:`reflex_django.spa_template`), or a 404 if nothing is found.
+        :mod:`reflex_django.mount.spa_template`), or a 404 if nothing is found.
     """
     asset = _resolve_spa_asset(request_path)
     if asset is None:
@@ -143,7 +143,7 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
                     )
                 elif _compile_dev_mode_enabled():
                     backend_port = _resolve_backend_port_from_config() or 8000
-                    from reflex_django.spa_template import compile_dev_waiting_html
+                    from reflex_django.mount.spa_template import compile_dev_waiting_html
 
                     return HttpResponse(
                         compile_dev_waiting_html(backend_port),
@@ -210,7 +210,7 @@ def _disable_dev_proxy_after_self_loop(target: str) -> None:
     Running the ASGI app standalone (no separate Vite) with ``DEBUG=True``
     makes the dev proxy point back at this server. Rather than re-checking and
     re-warning on every request, we set ``REFLEX_DJANGO_DEV_PROXY=0`` so
-    :func:`reflex_django.dev_proxy._dev_vite_target_or_none` returns ``None``
+    :func:`reflex_django.dev.proxy._dev_vite_target_or_none` returns ``None``
     from here on, and the app serves the compiled SPA from disk like prod.
     The warning is logged only once.
     """

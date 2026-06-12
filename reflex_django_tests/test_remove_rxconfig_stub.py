@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from reflex_django.rxconfig_bridge import (
+from reflex_django.setup.rxconfig_bridge import (
     ensure_rxconfig_file,
     remove_django_first_rxconfig_stub,
 )

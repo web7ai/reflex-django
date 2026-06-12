@@ -35,7 +35,7 @@ No matter which side you start from, you will:
 1. Install `reflex` and `reflex-django`
 2. Put Reflex runtime config in `settings.py` (`REFLEX_DJANGO_RX_CONFIG`)
 3. Import page modules from `urls.py` so `@page` decorators register
-4. Point `config/asgi.py` at `reflex_django.asgi_entry.application`
+4. Point `config/asgi.py` at `reflex_django.asgi.entry.application`
 5. Run `python manage.py run_reflex` instead of juggling separate servers
 
 Your `@page` routes, `@rx.event` handlers, and Django `urlpatterns` for `/admin` and `/api` work together. See [Routing](routing.md) for how URLs are split.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from reflex_django.dev_watch import (
+from reflex_django.dev.watch import (
     backend_reload_excludes,
     is_backend_reload_path,
     is_frontend_recompile_path,

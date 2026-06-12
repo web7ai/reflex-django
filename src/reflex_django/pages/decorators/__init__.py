@@ -56,8 +56,8 @@ def page(
     breadcrumb_tuple = tuple(breadcrumbs or ())
 
     def decorator(render_fn: Callable[..., Any]) -> Callable[..., Any]:
-        from reflex_django.app_factory import migrate_decorated_pages_app_name
-        from reflex_django.mount_config import ensure_mount_config_loaded, resolve_app_name
+        from reflex_django.runtime.app_factory import migrate_decorated_pages_app_name
+        from reflex_django.mount.config import ensure_mount_config_loaded, resolve_app_name
 
         page_kwargs = dict(kwargs)
         if route is not None:

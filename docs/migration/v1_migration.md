@@ -85,20 +85,20 @@ Details: [Configuration](../configuration.md), [Add to an existing Reflex projec
 **Before:**
 
 ```python
-from reflex_django.asgi import make_dispatcher
+from reflex_django.asgi.app import make_dispatcher
 application = make_dispatcher()
 ```
 
 **After:**
 
 ```python
-from reflex_django.asgi_entry import application  # noqa: F401
+from reflex_django.asgi.entry import application  # noqa: F401
 ```
 
 Or, for explicit django_outer construction in custom hosting:
 
 ```python
-from reflex_django.asgi_entry import build_django_outer_application
+from reflex_django.asgi.entry import build_django_outer_application
 application = build_django_outer_application()
 ```
 
@@ -155,11 +155,13 @@ If admin CSRF fails from `:3000`, add trusted origins. [Local development](../lo
 
 ## 8. Rename deprecated app module (if present)
 
-`reflex_django.django_led_app` is deprecated in favor of `reflex_django.reflex_app`. User code should use:
+`reflex_django.django_led_app` was removed in v2.0. User code should use:
 
 ```python
 from reflex_django import app
 ```
+
+The implementation module is `reflex_django.runtime.reflex_app` if you need an explicit import.
 
 ---
 
@@ -185,7 +187,7 @@ If something fails, use [Troubleshooting](../troubleshooting.md).
 |:---|:---|
 | `reflex_led`, `django_led` routing | `django_outer`, `reflex_outer` |
 | `ReflexDjangoPlugin` | Django-first bootstrap in `reflex_django.bootstrap` |
-| `reflex_django.asgi.make_dispatcher` | `reflex_django.asgi_entry.application` |
+| `reflex_django.asgi.make_dispatcher` | `reflex_django.asgi.entry.application` |
 | `reflex_django.decorators` | `reflex_django.pages.decorators` |
 | Context processor bridge (0.5+) | Middleware-backed `AppState` fields |
 

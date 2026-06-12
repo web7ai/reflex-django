@@ -1,4 +1,4 @@
-"""Tests for :mod:`reflex_django.spa_template` — Django-templated SPA shell."""
+"""Tests for :mod:`reflex_django.mount.spa_template` — Django-templated SPA shell."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
@@ -14,7 +14,7 @@ from django.contrib.auth.models import AnonymousUser  # noqa: E402
 from django.http import FileResponse, HttpResponse  # noqa: E402
 from django.test import RequestFactory  # noqa: E402
 
-from reflex_django.spa_template import (  # noqa: E402
+from reflex_django.mount.spa_template import (  # noqa: E402
     _render_via_template_engine_enabled,
     _response_is_html,
     maybe_render_spa_html,

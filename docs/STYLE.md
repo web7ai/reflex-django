@@ -22,4 +22,4 @@ Not published on the docs site.
 
 - from reflex_django.states import AppState
 - from reflex_django.pages.decorators import page
-- from reflex_django.asgi_entry import application
+- from reflex_django.asgi.entry import application

@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest import mock
 
 import pytest
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 

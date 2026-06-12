@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import reflex as rx
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from reflex_django.app_factory import reset_app_factory_cache, sync_page_load_events  # noqa: E402
+from reflex_django.runtime.app_factory import reset_app_factory_cache, sync_page_load_events  # noqa: E402
 from reflex_django.pages.decorators import clear_page_registry, page
 from reflex_django.states import AppState
 

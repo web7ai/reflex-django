@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import reflex as rx
-from reflex_django.context import current_user
+from reflex_django.bridge.context import current_user
 from reflex_django.core.users import username_str
 from reflex_django.state.auth_bridge import AuthBridgeMixin
 
@@ -215,7 +215,7 @@ def _collect_middleware_mirror_snapshot() -> dict[str, Any]:
 
     if getattr(settings, "REFLEX_DJANGO_MIRROR_MESSAGES", True):
         try:
-            from reflex_django.context import current_messages
+            from reflex_django.bridge.context import current_messages
 
             snap["messages"] = current_messages()
         except Exception:
@@ -223,7 +223,7 @@ def _collect_middleware_mirror_snapshot() -> dict[str, Any]:
 
     if getattr(settings, "REFLEX_DJANGO_MIRROR_CSRF", True):
         try:
-            from reflex_django.context import current_csrf_token
+            from reflex_django.bridge.context import current_csrf_token
 
             snap["csrf_token"] = current_csrf_token()
         except Exception:

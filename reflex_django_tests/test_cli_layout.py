@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from reflex_django.integration import (
+from reflex_django.runtime.integration import (
     install_reflex_django_integration,
     reset_integration_for_tests,
 )
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
 
 
 @pytest.fixture(autouse=True)

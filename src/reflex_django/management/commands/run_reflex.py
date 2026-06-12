@@ -1,8 +1,8 @@
 """Run the unified Reflex + Django dev server via ``manage.py``.
 
-In :class:`~reflex_django.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
+In :class:`~reflex_django.setup.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
 the default Vite-HMR dev loop delegates to ``reflex run`` with the backend
-patched to serve :func:`reflex_django.asgi_entry.application`. Custom
+patched to serve :func:`reflex_django.asgi.entry.application`. Custom
 orchestration remains for ``--from-build``, ``--env dev`` compile dev, and
 ``--env prod``.
 
@@ -131,11 +131,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
-        from reflex_django.integration import (
+        from reflex_django.runtime.integration import (
             install_reflex_django_integration,
             refresh_get_config_bindings,
         )
-        from reflex_django.routing import UrlRoutingMode, resolve_url_routing
+        from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 
         install_reflex_django_integration()
         refresh_get_config_bindings()
@@ -147,7 +147,7 @@ class Command(BaseCommand):
         if mode == UrlRoutingMode.REFLEX_OUTER:
             self._run_reflex_outer(options)
             return
-        from reflex_django.errors import RoutingModeError
+        from reflex_django.setup.errors import RoutingModeError
 
         raise RoutingModeError(
             f"Unsupported routing mode {mode!r}. "
@@ -160,7 +160,7 @@ class Command(BaseCommand):
 
     def _run_reflex_outer(self, options: dict[str, Any]) -> None:
         """Run Reflex as the outer ASGI app with Django HTTP in a subprocess."""
-        from reflex_django.django_http_subprocess import (
+        from reflex_django.asgi.http_subprocess import (
             ensure_django_http_upstream_ready,
             terminate_django_http_subprocess,
         )
@@ -293,7 +293,7 @@ class Command(BaseCommand):
         if not serve_from_disk and not frontend_only and not is_single_port_dev:
             os.environ["REFLEX_DJANGO_SEPARATE_DEV_PORTS"] = "1"
             os.environ["REFLEX_DJANGO_DEV_PROXY"] = "0"
-            from reflex_django.auto_mount import refresh_reflex_mount_catchall
+            from reflex_django.mount.auto import refresh_reflex_mount_catchall
 
             refresh_reflex_mount_catchall()
             self._invoke_reflex_run(options)
@@ -358,14 +358,14 @@ class Command(BaseCommand):
 
         # Catch-all was built during Django startup (before CLI env above).
         # Rebuild it so prod/single-port/from-build own ``/`` on the backend port.
-        from reflex_django.auto_mount import refresh_reflex_mount_catchall
+        from reflex_django.mount.auto import refresh_reflex_mount_catchall
 
         refresh_reflex_mount_catchall()
 
         reload_enabled = not options.get("no_reload") and not is_prod
         # In from-build dev mode we MUST own the reload loop ourselves. If we
         # delegated to uvicorn's ``--reload``, the child would re-import
-        # :mod:`reflex_django.asgi_entry` on every file change, which re-runs
+        # :mod:`reflex_django.asgi.entry` on every file change, which re-runs
         # the reflex-django bootstrap inside a process that already has the
         # SPA cached on disk. That often appears "stuck" (the bootstrap can
         # deadlock on duplicate Reflex compiler patches) and — crucially —
@@ -598,7 +598,7 @@ class Command(BaseCommand):
 
     def _compile_dev_app_once(self) -> None:
         """Compile the SPA once before spawning Vite + uvicorn (native Reflex flow)."""
-        from reflex_django._frontend_runner import _compile_app_for_frontend
+        from reflex_django.dev.runners.frontend import _compile_app_for_frontend
 
         self.stdout.write(
             self.style.NOTICE("reflex-django: compiling Reflex app...")
@@ -714,7 +714,7 @@ class Command(BaseCommand):
     @staticmethod
     def _vite_http_ready(target: str) -> bool:
         """Return True when *target* serves a Vite/React SPA root document."""
-        from reflex_django.asgi_entry import _vite_target_reachable
+        from reflex_django.asgi.entry import _vite_target_reachable
 
         if not _vite_target_reachable(target):
             return False
@@ -779,10 +779,10 @@ class Command(BaseCommand):
     ) -> subprocess.Popen[bytes]:
         """Spawn Vite behind the proxy via the reflex-django bootstrap runner.
 
-        We spawn :mod:`reflex_django._frontend_runner` instead of ``reflex``
+        We spawn :mod:`reflex_django.dev.runners.frontend` instead of ``reflex``
         directly so the subprocess loads the reflex-django integration first
         (otherwise Reflex CLI fails with ``rxconfig.py not found`` because the
-        :func:`~reflex_django.cli_layout.ensure_reflex_cli_layout` import patch
+        :func:`~reflex_django.cli.layout.ensure_reflex_cli_layout` import patch
         is not in place).
 
         When ``watch`` is True (the default) the runner also watches the
@@ -794,7 +794,7 @@ class Command(BaseCommand):
         cmd = [
             sys.executable,
             "-m",
-            "reflex_django._frontend_runner",
+            "reflex_django.dev.runners.frontend",
             "--frontend-port",
             str(frontend_port),
         ]
@@ -819,7 +819,7 @@ class Command(BaseCommand):
         cmd = [
             sys.executable,
             "-m",
-            "reflex_django._frontend_runner",
+            "reflex_django.dev.runners.frontend",
             "--frontend-port",
             str(frontend_port),
         ]
@@ -836,8 +836,8 @@ class Command(BaseCommand):
         reload: bool,
         reload_backend_only: bool = False,
     ) -> None:
-        """Boot the ASGI server with :func:`reflex_django.asgi_entry.application`."""
-        target = "reflex_django.asgi_entry:application"
+        """Boot the ASGI server with :func:`reflex_django.asgi.entry.application`."""
+        target = "reflex_django.asgi.entry:application"
 
         for runner in (self._run_uvicorn, self._run_granian, self._run_hypercorn):
             try:
@@ -878,7 +878,7 @@ class Command(BaseCommand):
 
         * Uvicorn's reloader re-imports the ASGI app inside a child interpreter
           on every change. For reflex-django this re-runs
-          :func:`~reflex_django.integration.install_reflex_django_integration`,
+          :func:`~reflex_django.runtime.integration.install_reflex_django_integration`,
           which monkey-patches Reflex's compiler/config modules. The second
           application of those patches can race or deadlock, manifesting as a
           "WatchFiles detected changes ... Reloading" line that never returns.
@@ -921,7 +921,7 @@ class Command(BaseCommand):
             host=host, port=port, loglevel=loglevel
         )
         try:
-            from reflex_django.dev_watch import WATCH_DEBOUNCE_MS
+            from reflex_django.dev.watch import WATCH_DEBOUNCE_MS
 
             for changes in watch(
                 str(watch_root),
@@ -1058,7 +1058,7 @@ class Command(BaseCommand):
             sys.executable,
             "-m",
             "uvicorn",
-            "reflex_django.asgi_entry:application",
+            "reflex_django.asgi.entry:application",
             "--host",
             host,
             "--port",
@@ -1069,7 +1069,7 @@ class Command(BaseCommand):
             "auto",
         ]
         if reload:
-            from reflex_django.dev_watch import BACKEND_RELOAD_DELAY_S
+            from reflex_django.dev.watch import BACKEND_RELOAD_DELAY_S
 
             cmd.append("--reload")
             cmd.extend(["--reload-dir", str(self._resolve_watch_root())])
@@ -1079,7 +1079,7 @@ class Command(BaseCommand):
             # non-Vite modes; here we rely on ``--reload-dir`` + frontend watch
             # filtering to avoid double work on ``views.py`` edits.
             if sys.platform != "win32":
-                from reflex_django.dev_watch import backend_reload_excludes
+                from reflex_django.dev.watch import backend_reload_excludes
 
                 for pattern in backend_reload_excludes():
                     cmd.extend(["--reload-exclude", pattern])
@@ -1116,7 +1116,7 @@ class Command(BaseCommand):
             sys.executable,
             "-m",
             "uvicorn",
-            "reflex_django.asgi_entry:application",
+            "reflex_django.asgi.entry:application",
             "--host",
             host,
             "--port",
@@ -1180,7 +1180,7 @@ class Command(BaseCommand):
         }
         if reload:
             if reload_backend_only:
-                from reflex_django.dev_watch import (
+                from reflex_django.dev.watch import (
                     BACKEND_RELOAD_DELAY_S,
                     backend_reload_excludes,
                 )
@@ -1298,7 +1298,7 @@ class Command(BaseCommand):
             pass
 
         import reflex_base.config as config_module
-        from reflex_django.integration import _rebind_get_config_imports
+        from reflex_django.runtime.integration import _rebind_get_config_imports
 
         original_get_config = config_module.get_config
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
@@ -17,7 +17,7 @@ from reflex_django.auth.mixins.password_reset import (  # noqa: E402
     _reset_uid_and_token,
     password_reset_mixin,
 )
-from reflex_django.auth_state import DjangoUserState  # noqa: E402
+from reflex_django.states.auth import DjangoUserState  # noqa: E402
 
 
 class _Base(DjangoUserState):

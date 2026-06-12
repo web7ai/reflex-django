@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
-from reflex_django.rxconfig_bridge import ensure_rxconfig_file
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_file
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +35,7 @@ def test_ensure_rxconfig_file_writes_stub(tmp_path: Path, monkeypatch: pytest.Mo
     assert (tmp_path / "rxconfig.py").is_file()
     text = (tmp_path / "rxconfig.py").read_text(encoding="utf-8")
     assert 'app_name="myfrontend"' in text or "app_name='myfrontend'" in text
-    assert "app_module_import='reflex_django.reflex_app'" in text
+    assert "app_module_import='reflex_django.runtime.reflex_app'" in text
 
     assert ensure_rxconfig_file() is None
 
@@ -79,7 +79,7 @@ def test_ensure_rxconfig_file_updates_stale_stub(
 
     assert ensure_rxconfig_file() is None
 
-    from reflex_django.rxconfig_bridge import is_django_first_rxconfig_stub
+    from reflex_django.setup.rxconfig_bridge import is_django_first_rxconfig_stub
 
     (tmp_path / "rxconfig.py").write_text(
         '"""Stub ``rxconfig`` for reflex-django Django-first mode."""\n'
@@ -92,7 +92,7 @@ def test_ensure_rxconfig_file_updates_stale_stub(
     text = (tmp_path / "rxconfig.py").read_text(encoding="utf-8")
     assert "app_name='wrong'" in text
 
-    from reflex_django.rxconfig_bridge import remove_django_first_rxconfig_stub
+    from reflex_django.setup.rxconfig_bridge import remove_django_first_rxconfig_stub
 
     assert remove_django_first_rxconfig_stub() is True
     assert not (tmp_path / "rxconfig.py").is_file()

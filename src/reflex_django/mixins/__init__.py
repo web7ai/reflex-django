@@ -17,7 +17,7 @@ _LAZY: dict[str, tuple[str, str]] = {
         "reflex_django.serializers",
         "ReflexDjangoModelSerializer",
     ),
-    "serialize_model_row": ("reflex_django.serialization", "serialize_model_row"),
+    "serialize_model_row": ("reflex_django.serializers.core", "serialize_model_row"),
     "session_auth_mixin": ("reflex_django.mixins.session_auth", "session_auth_mixin"),
 }
 

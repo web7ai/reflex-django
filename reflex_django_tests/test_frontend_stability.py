@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reflex_django.frontend_stability import (
+from reflex_django.dev.frontend_stability import (
     apply_frontend_stability_after_compile,
     apply_frontend_stability_patches,
     patch_context_js,

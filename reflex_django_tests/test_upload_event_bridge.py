@@ -8,18 +8,18 @@ from unittest import mock
 
 from starlette.requests import Request
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from reflex_django.context import current_request, current_user  # noqa: E402
-from reflex_django.middleware import (  # noqa: E402
+from reflex_django.bridge.context import current_request, current_user  # noqa: E402
+from reflex_django.bridge.django_event import (  # noqa: E402
     DjangoEventBridge,
     _resolve_router_data,
     _router_data_from_starlette_request,
     _router_data_from_state_chain,
 )
-from reflex_django.upload_patch import (  # noqa: E402
+from reflex_django.bridge.upload import (  # noqa: E402
     apply_upload_router_data_patch,
     inject_router_data_into_event,
 )

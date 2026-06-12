@@ -1,15 +1,15 @@
-"""Tests for reflex_django.auth_state."""
+"""Tests for reflex_django.states.auth."""
 
 from __future__ import annotations
 
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.contrib.auth.models import AnonymousUser  # noqa: E402
-from reflex_django.auth_state import user_snapshot  # noqa: E402
+from reflex_django.states.auth import user_snapshot  # noqa: E402
 
 
 def test_user_snapshot_anonymous() -> None:

@@ -27,7 +27,7 @@ def compile_dev_mode_enabled() -> bool:
 
 def _append_web_spa_roots(roots: list[Path], base: Path) -> None:
     """Append in-place Reflex build output directories under base/.web."""
-    from reflex_django._frontend_runner import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+    from reflex_django.dev.runners.frontend import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
 
     roots.append(base / ".web" / "build" / "client")
     if compile_dev_mode_enabled():

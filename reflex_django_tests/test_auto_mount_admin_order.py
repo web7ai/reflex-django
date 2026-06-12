@@ -53,7 +53,7 @@ def test_schedule_auto_mount_patches_admin_when_reflex_listed_first(
     from django.conf import settings
     from django.contrib.admin.apps import AdminConfig
 
-    from reflex_django.auto_mount import (
+    from reflex_django.mount.auto import (
         clear_auto_mount_state,
         schedule_auto_mount_after_admin,
     )

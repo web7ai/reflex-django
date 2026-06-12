@@ -1,1 +1,1 @@
-import reflex_django._reflex_cli_bootstrap
+import reflex_django.dev.runners.cli_bootstrap

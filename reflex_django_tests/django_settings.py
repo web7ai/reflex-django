@@ -30,10 +30,10 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
 
-ROOT_URLCONF = "reflex_django.urls"
+ROOT_URLCONF = "reflex_django.django.urls"
 
 TEMPLATES = [
     {

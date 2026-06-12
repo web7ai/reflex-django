@@ -12,7 +12,7 @@ def apply_reflex_plugins_to_app(app: App) -> None:
     """Install DjangoEventBridge and run user plugin post_compile hooks."""
     from reflex_base.config import get_config
 
-    from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+    from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
     ensure_rxconfig_from_django()
     _ensure_event_bridge(app)
@@ -24,7 +24,7 @@ def apply_reflex_plugins_to_app(app: App) -> None:
 
 
 def _ensure_event_bridge(app: Any) -> None:
-    from reflex_django.middleware import DjangoEventBridge
+    from reflex_django.bridge.django_event import DjangoEventBridge
 
     middlewares = getattr(app, "_middlewares", ())
     if any(type(m).__name__ == "DjangoEventBridge" for m in middlewares):

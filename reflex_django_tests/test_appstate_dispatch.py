@@ -7,20 +7,20 @@ from unittest import mock
 import pytest
 import reflex as rx
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from reflex_django.app_factory import (  # noqa: E402
+from reflex_django.runtime.app_factory import (  # noqa: E402
     prepare_pages_for_compile,
     reset_app_factory_cache,
 )
-from reflex_django.compile_validate import (  # noqa: E402
+from reflex_django.runtime.compile_validate import (  # noqa: E402
     expected_dispatch_keys_from_app,
     missing_frontend_dispatchers,
 )
 from reflex_django.pages.decorators import clear_page_registry, page
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
 from reflex_django.state.auth_bridge import (  # noqa: E402
     _handler_state_class_chain,
     _sync_auth_snapshots_in_tree,
@@ -67,7 +67,7 @@ def test_expected_dispatch_keys_from_app_includes_home_state() -> None:
         return rx.text(_HomeState.message)
 
     prepare_pages_for_compile()
-    from reflex_django.app_factory import load_app_factory
+    from reflex_django.runtime.app_factory import load_app_factory
 
     app = load_app_factory()
     keys = expected_dispatch_keys_from_app(app)
@@ -96,7 +96,7 @@ def test_missing_frontend_dispatchers_uses_app_tree_not_global_registry(
         return rx.text("x")
 
     prepare_pages_for_compile()
-    from reflex_django.app_factory import load_app_factory
+    from reflex_django.runtime.app_factory import load_app_factory
 
     app = load_app_factory()
     expected = expected_dispatch_keys_from_app(app)
@@ -105,7 +105,7 @@ def test_missing_frontend_dispatchers_uses_app_tree_not_global_registry(
 
 
 def test_ancestor_dispatch_keys_cover_handler_chain() -> None:
-    from reflex_django.compile_validate import ancestor_dispatch_keys_for_handler
+    from reflex_django.runtime.compile_validate import ancestor_dispatch_keys_for_handler
 
     keys = ancestor_dispatch_keys_for_handler(_HomeState)
     assert _HomeState.get_full_name() in keys
@@ -118,8 +118,8 @@ def test_apply_auth_snapshot_for_event_handler_guest_user() -> None:
     from django.contrib.auth.models import AnonymousUser
     from django.http import HttpRequest
 
-    from reflex_django.auth_state import apply_auth_snapshot_for_event_handler
-    from reflex_django.context import begin_event_request, end_event_request
+    from reflex_django.states.auth import apply_auth_snapshot_for_event_handler
+    from reflex_django.bridge.context import begin_event_request, end_event_request
 
     handler = _HomeState()
     handler.inherited_vars = {"is_authenticated": None}
@@ -145,8 +145,8 @@ def test_apply_auth_snapshot_skips_unchanged_guest_snapshot() -> None:
     from django.contrib.auth.models import AnonymousUser
     from django.http import HttpRequest
 
-    from reflex_django.auth_state import apply_auth_snapshot_for_event_handler
-    from reflex_django.context import begin_event_request, end_event_request
+    from reflex_django.states.auth import apply_auth_snapshot_for_event_handler
+    from reflex_django.bridge.context import begin_event_request, end_event_request
 
     owner = mock.Mock()
     owner.user_id = None
@@ -174,13 +174,13 @@ def test_apply_auth_snapshot_skips_unchanged_guest_snapshot() -> None:
         end_event_request()
         begin_event_request(http)
         with mock.patch(
-            "reflex_django.auth_state._auth_snapshot_owner",
+            "reflex_django.states.auth._auth_snapshot_owner",
             return_value=owner,
         ), mock.patch(
-            "reflex_django.auth_state._write_auth_snapshot_to_owner",
+            "reflex_django.states.auth._write_auth_snapshot_to_owner",
             write_mock,
         ), mock.patch(
-            "reflex_django.auth_state._mark_auth_snapshot_dirty_subtree",
+            "reflex_django.states.auth._mark_auth_snapshot_dirty_subtree",
             dirty_mock,
         ):
             await apply_auth_snapshot_for_event_handler(handler)
@@ -228,10 +228,10 @@ def test_sync_auth_snapshots_scoped_to_handler_branch() -> None:
             "reflex_django.state.auth_bridge._resolve_substate_node",
             return_value=node,
         ) as resolve_mock, mock.patch(
-            "reflex_django.auth_state.apply_auth_snapshot_for_event_handler",
+            "reflex_django.states.auth.apply_auth_snapshot_for_event_handler",
             new=mock.AsyncMock(),
         ) as apply_mock, mock.patch(
-            "reflex_django.auth_state._mark_inherited_auth_snapshot_dirty",
+            "reflex_django.states.auth._mark_inherited_auth_snapshot_dirty",
         ) as dirty_mock:
             await _sync_auth_snapshots_in_tree(
                 root,

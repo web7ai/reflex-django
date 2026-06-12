@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from django.conf import settings
 
-from reflex_django.app_factory import (
+from reflex_django.runtime.app_factory import (
     create_app,
     discover_page_modules,
     import_page_packages,
@@ -15,8 +15,8 @@ from reflex_django.app_factory import (
     resolve_page_packages,
 )
 from reflex_django.pages.decorators import PAGE_REGISTRY, clear_page_registry
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
-from reflex_django.routing import UrlRoutingMode, resolve_url_routing
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def test_resolve_url_routing_default() -> None:
 def test_resolve_url_routing_legacy_django_led_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from reflex_django.errors import RoutingModeError
+    from reflex_django.setup.errors import RoutingModeError
 
     monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "django_led")
     with pytest.raises(RoutingModeError):
@@ -74,7 +74,7 @@ def test_ensure_django_led_app_ready_does_not_materialize_app_module(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from reflex_django.app_factory import ensure_django_led_app_ready
+    from reflex_django.runtime.app_factory import ensure_django_led_app_ready
 
     manage = tmp_path / "manage.py"
     manage.write_text(
@@ -96,9 +96,9 @@ def test_ensure_django_led_app_ready_installs_event_bridge(
     import django
 
     django.setup()
-    from reflex_django.app_factory import ensure_django_led_app_ready
-    from reflex_django.middleware import DjangoEventBridge
-    from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+    from reflex_django.runtime.app_factory import ensure_django_led_app_ready
+    from reflex_django.bridge.django_event import DjangoEventBridge
+    from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
     ensure_rxconfig_from_django()
     app = ensure_django_led_app_ready()

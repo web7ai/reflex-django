@@ -23,7 +23,7 @@ For the friendly overview (three knobs, two jobs, `app_name` FAQ), start at [The
 | Knob | Where | What it controls |
 |:---|:---|:---|
 | **Settings** | `REFLEX_DJANGO_RX_CONFIG` | `app_name`, ports, `redis_url`, and other `rx.Config` fields |
-| **App** | `from reflex_django import app` | Pages via `@page` or `app.add_page()` on the shared singleton (`reflex_django.reflex_app`) |
+| **App** | `from reflex_django import app` | Pages via `@page` or `app.add_page()` on the shared singleton (`reflex_django.runtime.reflex_app`) |
 | **URLs** | automatic (default) or `reflex_mount()` | SPA catch-all; override prefix or plugins only when needed |
 
 With `REFLEX_DJANGO_AUTO_MOUNT=True` (the default), you do **not** need a `reflex_mount()` line in `urls.py`. The catch-all is appended at startup after your Django routes are defined.
@@ -65,7 +65,7 @@ Point `manage.py run_reflex` and your production server (uvicorn, granian, hyper
 Use when you need a non-root mount prefix, an explicit `django_prefix`, or per-project plugin overrides:
 
 ```python
-from reflex_django.urls import reflex_mount
+from reflex_django.django.urls import reflex_mount
 
 urlpatterns += reflex_mount(
     mount_prefix="/app",
@@ -219,7 +219,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "reflex_django.streaming_middleware.AsyncStreamingMiddleware",   # last
+    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",   # last
 ]
 ```
 
@@ -279,7 +279,7 @@ REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"  # callable() -> rx.App
 
 ```python
 import reflex as rx
-import reflex_django.reflex_app as reflex_app_module
+import reflex_django.runtime.reflex_app as reflex_app_module
 
 reflex_app_module._app = rx.App(theme=rx.theme(accent_color="blue"))
 ```
@@ -301,7 +301,7 @@ In order of preference:
 
 1. The `DJANGO_SETTINGS_MODULE` environment variable, if set.
 2. Auto-discovery: reflex-django walks up looking for `manage.py` and reads its settings reference.
-3. Falls back to `reflex_django.default_settings` (dev-only, never rely on this in production).
+3. Falls back to `reflex_django.setup.default_settings` (dev-only, never rely on this in production).
 
 In production, always set `DJANGO_SETTINGS_MODULE` explicitly in your container or systemd unit.
 
@@ -319,7 +319,7 @@ You imported a model at the top of `views.py`. Move the import inside the handle
 If you have a leftover `rxconfig.py` from plain Reflex, set `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` to merge it, or delete it. By default reflex-django ignores files on disk.
 
 **Wrong `app_name`**
-Set `app_name` in `REFLEX_DJANGO_RX_CONFIG`. It is the Reflex compile identity (often your primary Django app label), not a Python module path like `shop.shop`. The runtime loader is `reflex_django.reflex_app:app`.
+Set `app_name` in `REFLEX_DJANGO_RX_CONFIG`. It is the Reflex compile identity (often your primary Django app label), not a Python module path like `shop.shop`. The runtime loader is `reflex_django.runtime.reflex_app:app`.
 
 !!! warning "Do not pass plugins in REFLEX_DJANGO_RX_CONFIG"
     Put plugins in `REFLEX_DJANGO_PLUGINS` or the `plugins=` argument on `reflex_mount()`. The `plugins` key inside `REFLEX_DJANGO_RX_CONFIG` is ignored.

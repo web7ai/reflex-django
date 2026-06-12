@@ -13,7 +13,7 @@ from reflex_django.auth.login_fields import (
     aauthenticate_login_fields,
 )
 from reflex_django.auth.shortcuts import auser_has_perm
-from reflex_django.context import current_request, current_session, current_user
+from reflex_django.bridge.context import current_request, current_session, current_user
 
 if TYPE_CHECKING:
     from django.contrib.sessions.backends.base import SessionBase
@@ -97,7 +97,7 @@ class AuthBridgeMixin:
     @property
     def request(self) -> Any:
         """Bridged Django request for the current event."""
-        from reflex_django.context import current_request
+        from reflex_django.bridge.context import current_request
         from reflex_django.state.request import DjangoStateRequest
         from reflex_django.state.request_binding import REQUEST_WRAPPER_ATTR
 
@@ -134,14 +134,14 @@ class AuthBridgeMixin:
         available for handlers that want to inspect or mutate the response
         (set cookies, add headers) before returning.
         """
-        from reflex_django.context import current_response
+        from reflex_django.bridge.context import current_response
 
         return current_response()
 
     @property
     def django_response(self) -> Any | None:
         """Alias for :attr:`response`."""
-        from reflex_django.context import current_response
+        from reflex_django.bridge.context import current_response
 
         return current_response()
 
@@ -155,7 +155,7 @@ class AuthBridgeMixin:
         new messages — they will appear in this list on the next event after
         ``MessageMiddleware`` runs.
         """
-        from reflex_django.context import current_messages
+        from reflex_django.bridge.context import current_messages
 
         return current_messages()
 
@@ -166,7 +166,7 @@ class AuthBridgeMixin:
         Useful when you need to submit a CSRF-protected POST from the SPA to
         a Django view (e.g. ``/admin``) without involving Reflex events.
         """
-        from reflex_django.context import current_csrf_token
+        from reflex_django.bridge.context import current_csrf_token
 
         return current_csrf_token()
 
@@ -203,7 +203,7 @@ class AuthBridgeMixin:
         include_groups: bool | None = None,
     ) -> None:
         """Update auth snapshot vars on this substate from :func:`current_user`."""
-        from reflex_django.auth_state import apply_auth_snapshot_to_state
+        from reflex_django.states.auth import apply_auth_snapshot_to_state
 
         await apply_auth_snapshot_to_state(self, include_groups=include_groups)
 
@@ -238,7 +238,7 @@ class AuthBridgeMixin:
         await session_async_save(request)
         sk = getattr(request.session, "session_key", None) or ""
         if sk:
-            from reflex_django.session_js import mirror_auth_cookies_to_state_tree
+            from reflex_django.bridge.session_js import mirror_auth_cookies_to_state_tree
 
             mirror_auth_cookies_to_state_tree(self, sk)
         await self.refresh_django_user_fields()
@@ -252,12 +252,12 @@ class AuthBridgeMixin:
         removes session/CSRF cookies from the synthetic request and from persisted
         ``router_data`` on the Reflex state tree so later events in the same page
         life do not resurrect the old session. Pair with
-        :func:`~reflex_django.session_js.browser_auth_logout_clear_js` (via
+        :func:`~reflex_django.bridge.session_js.browser_auth_logout_clear_js` (via
         :func:`~reflex_django.mixins.session_auth._sync_session_cookie_then_nav`)
         when the browser must drop cookies and Reflex client storage before the
         next document load.
         """
-        from reflex_django.session_js import (
+        from reflex_django.bridge.session_js import (
             clear_auth_cookies_from_state_tree,
             strip_auth_cookies_from_request,
         )
@@ -280,8 +280,8 @@ class AuthBridgeMixin:
 
 
 def _iter_django_user_state_classes() -> Any:
-    """Yield every registered :class:`~reflex_django.auth_state.DjangoUserState` subclass."""
-    from reflex_django.auth_state import DjangoUserState
+    """Yield every registered :class:`~reflex_django.states.auth.DjangoUserState` subclass."""
+    from reflex_django.states.auth import DjangoUserState
 
     seen: set[type] = set()
     stack: list[type] = [rx.State]
@@ -317,7 +317,7 @@ def _is_django_user_handler_cls(handler_state_cls: type | None) -> bool:
     """Return whether *handler_state_cls* is a user-defined ``DjangoUserState`` handler."""
     if handler_state_cls is None:
         return False
-    from reflex_django.auth_state import DjangoUserState
+    from reflex_django.states.auth import DjangoUserState
 
     try:
         return issubclass(handler_state_cls, DjangoUserState)
@@ -350,7 +350,7 @@ async def _sync_auth_snapshots_on_handler_branch(
     if not _is_django_user_handler_cls(handler_state_cls):
         return
 
-    from reflex_django.auth_state import apply_auth_snapshot_for_event_handler
+    from reflex_django.states.auth import apply_auth_snapshot_for_event_handler
 
     try:
         handler = await root.get_state(handler_state_cls)
@@ -370,7 +370,7 @@ async def _sync_auth_snapshots_in_tree(
     include_groups: bool | None = None,
 ) -> None:
     """Refresh auth snapshot vars on ``DjangoUserState`` substates for the active branch."""
-    from reflex_django.auth_state import (
+    from reflex_django.states.auth import (
         DjangoUserState,
         _auth_snapshot_owner,
         apply_auth_snapshot_to_state,

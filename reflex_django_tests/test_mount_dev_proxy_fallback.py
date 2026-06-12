@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from reflex_django.routing import UrlRoutingMode
+from reflex_django.setup.routing import UrlRoutingMode
 from reflex_django.views import mount
 
 

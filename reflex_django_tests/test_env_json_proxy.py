@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from reflex_django.vite_proxy import patch_env_json_for_frontend_proxy
+from reflex_django.dev.vite_proxy import patch_env_json_for_frontend_proxy
 
 
 def test_patch_env_json_for_frontend_proxy(tmp_path: Path) -> None:

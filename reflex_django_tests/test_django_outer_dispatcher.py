@@ -1,4 +1,4 @@
-"""Pure ASGI tests for :class:`reflex_django.django_outer_dispatcher.DjangoOuterDispatcher`.
+"""Pure ASGI tests for :class:`reflex_django.asgi.django_outer.DjangoOuterDispatcher`.
 
 The dispatcher must:
 
@@ -14,7 +14,7 @@ import contextlib
 from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
-from reflex_django.django_outer_dispatcher import (
+from reflex_django.asgi.django_outer import (
     DEFAULT_RESERVED_REFLEX_PREFIXES,
     DjangoOuterDispatcher,
 )

@@ -21,14 +21,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from reflex_django.asgi import build_django_asgi
+from reflex_django.asgi.app import build_django_asgi
 from reflex_django.cli import django_cli
-from reflex_django.conf import configure_django
-from reflex_django.app_factory import create_app
-from reflex_django.plugin import ReflexDjangoPlugin, make_dispatcher
+from reflex_django.setup.conf import configure_django
+from reflex_django.runtime.app_factory import create_app
+from reflex_django.setup.plugin import ReflexDjangoPlugin, make_dispatcher
 
 if TYPE_CHECKING:
-    from reflex_django.admin import register as register_admin
+    from reflex_django.django.admin import register as register_admin
     from reflex_django.auth import (
         AuthPageMeta,
         AuthSettings,
@@ -54,12 +54,12 @@ if TYPE_CHECKING:
     )
     from reflex_django.auth_state import user_snapshot
     from reflex_django.serializers import ReflexDjangoModelSerializer
-    from reflex_django.asgi_entry import (
+    from reflex_django.asgi.entry import (
         application as asgi_application,
         build_application as build_asgi_application,
         build_django_outer_application,
     )
-    from reflex_django.context import (
+    from reflex_django.bridge.context import (
         begin_event_request,
         begin_event_response,
         current_csrf_token,
@@ -72,11 +72,11 @@ if TYPE_CHECKING:
         end_event_request,
         end_event_response,
     )
-    from reflex_django.event_handler import run_middleware_chain
-    from reflex_django.request import RequestProxy, request
-    from reflex_django.middleware import DjangoEventBridge
-    from reflex_django.model import Model
-    from reflex_django.session_js import (
+    from reflex_django.bridge.event_handler import run_middleware_chain
+    from reflex_django.bridge.request import RequestProxy, request
+    from reflex_django.bridge.django_event import DjangoEventBridge
+    from reflex_django.django.model import Model
+    from reflex_django.bridge.session_js import (
         session_cookie_clear_js,
         session_cookie_name_and_suffix,
         session_cookie_set_js,
@@ -137,38 +137,38 @@ __all__ = [
 # ``INSTALLED_APPS``). Resolve them on first attribute access instead so the
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
-    "app": ("reflex_django.reflex_app", "app"),
-    "asgi_application": ("reflex_django.asgi_entry", "application"),
-    "build_asgi_application": ("reflex_django.asgi_entry", "build_application"),
+    "app": ("reflex_django.runtime.reflex_app", "app"),
+    "asgi_application": ("reflex_django.asgi.entry", "application"),
+    "build_asgi_application": ("reflex_django.asgi.entry", "build_application"),
     "build_django_outer_application": (
-        "reflex_django.asgi_entry",
+        "reflex_django.asgi.entry",
         "build_django_outer_application",
     ),
-    "begin_event_response": ("reflex_django.context", "begin_event_response"),
-    "current_csrf_token": ("reflex_django.context", "current_csrf_token"),
-    "current_messages": ("reflex_django.context", "current_messages"),
-    "current_response": ("reflex_django.context", "current_response"),
-    "end_event_response": ("reflex_django.context", "end_event_response"),
+    "begin_event_response": ("reflex_django.bridge.context", "begin_event_response"),
+    "current_csrf_token": ("reflex_django.bridge.context", "current_csrf_token"),
+    "current_messages": ("reflex_django.bridge.context", "current_messages"),
+    "current_response": ("reflex_django.bridge.context", "current_response"),
+    "end_event_response": ("reflex_django.bridge.context", "end_event_response"),
     "run_middleware_chain": (
-        "reflex_django.event_handler",
+        "reflex_django.bridge.event_handler",
         "run_middleware_chain",
     ),
     "ReflexDjangoModelSerializer": (
         "reflex_django.serializers",
         "ReflexDjangoModelSerializer",
     ),
-    "DjangoEventBridge": ("reflex_django.middleware", "DjangoEventBridge"),
-    "Model": ("reflex_django.model", "Model"),
+    "DjangoEventBridge": ("reflex_django.bridge.django_event", "DjangoEventBridge"),
+    "Model": ("reflex_django.django.model", "Model"),
     "ReflexDjangoAuthError": ("reflex_django.auth.shortcuts", "ReflexDjangoAuthError"),
     "auser_has_perm": ("reflex_django.auth.shortcuts", "auser_has_perm"),
-    "begin_event_request": ("reflex_django.context", "begin_event_request"),
-    "current_language": ("reflex_django.context", "current_language"),
-    "current_request": ("reflex_django.context", "current_request"),
-    "current_session": ("reflex_django.context", "current_session"),
-    "current_user": ("reflex_django.context", "current_user"),
-    "end_event_request": ("reflex_django.context", "end_event_request"),
-    "request": ("reflex_django.request", "request"),
-    "RequestProxy": ("reflex_django.request", "RequestProxy"),
+    "begin_event_request": ("reflex_django.bridge.context", "begin_event_request"),
+    "current_language": ("reflex_django.bridge.context", "current_language"),
+    "current_request": ("reflex_django.bridge.context", "current_request"),
+    "current_session": ("reflex_django.bridge.context", "current_session"),
+    "current_user": ("reflex_django.bridge.context", "current_user"),
+    "end_event_request": ("reflex_django.bridge.context", "end_event_request"),
+    "request": ("reflex_django.bridge.request", "request"),
+    "RequestProxy": ("reflex_django.bridge.request", "RequestProxy"),
     "AuthSettings": ("reflex_django.auth.settings", "AuthSettings"),
     "add_auth_pages": ("reflex_django.auth.registry", "add_auth_pages"),
     "auth_pages": ("reflex_django.auth", "pages"),
@@ -197,16 +197,16 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
         "register_register_page",
     ),
     "get_auth_settings": ("reflex_django.auth.settings", "get_auth_settings"),
-    "register_admin": ("reflex_django.admin", "register"),
+    "register_admin": ("reflex_django.django.admin", "register"),
     "login_required": ("reflex_django.auth.decorators", "login_required"),
     "permission_required": ("reflex_django.auth.decorators", "permission_required"),
     "require_login_user": ("reflex_django.auth.shortcuts", "require_login_user"),
-    "session_cookie_clear_js": ("reflex_django.session_js", "session_cookie_clear_js"),
+    "session_cookie_clear_js": ("reflex_django.bridge.session_js", "session_cookie_clear_js"),
     "session_cookie_name_and_suffix": (
-        "reflex_django.session_js",
+        "reflex_django.bridge.session_js",
         "session_cookie_name_and_suffix",
     ),
-    "session_cookie_set_js": ("reflex_django.session_js", "session_cookie_set_js"),
+    "session_cookie_set_js": ("reflex_django.bridge.session_js", "session_cookie_set_js"),
     "user_snapshot": ("reflex_django.auth_state", "user_snapshot"),
 }
 

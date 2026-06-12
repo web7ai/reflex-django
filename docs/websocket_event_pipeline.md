@@ -62,9 +62,9 @@ The outer dispatcher (`DjangoOuterDispatcher` in `django_outer`, or `ReflexOuter
 
 | File | Role |
 |:---|:---|
-| `reflex_django/django_outer_dispatcher.py` | Routes reserved paths in `django_outer` |
-| `reflex_django/reflex_outer_dispatcher.py` | Routes Django prefixes to the HTTP worker in `reflex_outer` |
-| `reflex_django/asgi_entry.py` | Builds the composed ASGI application |
+| `reflex_django/asgi/django_outer.py` | Routes reserved paths in `django_outer` |
+| `reflex_django/asgi/reflex_outer.py` | Routes Django prefixes to the HTTP worker in `reflex_outer` |
+| `reflex_django/asgi/entry.py` | Builds the composed ASGI application |
 
 ---
 
@@ -74,7 +74,7 @@ Reflex supports preprocess middleware: callables that run **before** the event h
 
 ```python
 # reflex_django/bootstrap/app_setup.py (simplified)
-from reflex_django.middleware import DjangoEventBridge
+from reflex_django.bridge.django_event import DjangoEventBridge
 
 app.add_middleware(DjangoEventBridge())
 ```
@@ -100,7 +100,7 @@ Reflex events carry a `router_data` dict that describes the page the event came 
 
 It then constructs a real `django.http.HttpRequest` with those fields filled in. From this point on, the request looks like a normal Django GET to middleware. The body is empty (events have no HTTP bodies) and the method is `GET` by default.
 
-Source: `reflex_django/middleware.py` (`bridge_request_for_state`, `_build_request_from_event`).
+Source: `reflex_django/bridge/django_event.py` (`bridge_request_for_state`, `_build_request_from_event`).
 
 ---
 
@@ -110,7 +110,7 @@ The bridge passes the request through `EventMiddlewareHandler`, a subclass of Dj
 
 ```python
 # Effectively:
-from reflex_django.event_handler import run_middleware_chain
+from reflex_django.bridge.event_handler import run_middleware_chain
 
 response = await run_middleware_chain(request)
 ```
@@ -122,7 +122,7 @@ Every middleware in `settings.MIDDLEWARE` runs in order (except the skip list). 
 | Middleware | Why |
 |:---|:---|
 | `django.middleware.csrf.CsrfViewMiddleware` | CSRF protects cross-origin HTML form posts. Same-origin WebSocket events do not carry CSRF tokens. |
-| `reflex_django.streaming_middleware.AsyncStreamingMiddleware` | Adapts streaming HTTP responses. No streaming on WebSocket events. |
+| `reflex_django.bridge.streaming.AsyncStreamingMiddleware` | Adapts streaming HTTP responses. No streaming on WebSocket events. |
 
 Override the skip list with `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
 
@@ -132,7 +132,7 @@ Disable the entire chain temporarily with `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = 
 
 `process_view` is not called (there is no Django view). `process_request`, `process_response`, and `process_exception` run normally.
 
-Source: `reflex_django/event_handler.py`.
+Source: `reflex_django/bridge/event_handler.py`.
 
 ---
 
@@ -151,7 +151,7 @@ request.user = user
 
 By the time your handler sees `self.request.user`, it is a real `User` instance, not a lazy proxy.
 
-Source: `reflex_django/middleware.py` (`_resolve_user_eagerly`).
+Source: `reflex_django/bridge/django_event.py` (`_resolve_user_eagerly`).
 
 ---
 
@@ -167,7 +167,7 @@ The bridge uses Python `ContextVar` primitives to attach the per-event request t
 
 All three return the **same** request for the current event. Outside an event (import time, background thread), they return `None` or an anonymous default.
 
-Source: `reflex_django/context.py`, `reflex_django/request.py`.
+Source: `reflex_django/bridge/context.py`, `reflex_django/bridge/request.py`.
 
 ---
 
@@ -252,7 +252,7 @@ See [Custom middleware in events](django_middleware_to_reflex.md) for more patte
 
 `/_upload` receives a full HTTP request with a body. reflex-django patches the upload handler to inject `router_data` (cookies, session) so file uploads carry auth context.
 
-Source: `reflex_django/upload_patch.py`.
+Source: `reflex_django/bridge/upload.py`.
 
 ---
 
@@ -286,7 +286,7 @@ Between events, Reflex pickles `BaseState` instances to its state manager (memor
 
 The next event rebuilds them from incoming `router_data`. You keep `self.request` semantics between events without shipping a synthetic request across processes.
 
-Source: `reflex_django/integration.py` (state patch).
+Source: `reflex_django/runtime/integration.py` (state patch).
 
 ---
 
@@ -305,15 +305,15 @@ If something feels off, try this order:
 
 | File | What it does |
 |:---|:---|
-| `reflex_django/django_outer_dispatcher.py` | Outer ASGI dispatcher (`django_outer`) |
-| `reflex_django/reflex_outer_dispatcher.py` | Outer ASGI dispatcher (`reflex_outer`) |
-| `reflex_django/asgi_entry.py` | Builds the full ASGI application |
+| `reflex_django/asgi/django_outer.py` | Outer ASGI dispatcher (`django_outer`) |
+| `reflex_django/asgi/reflex_outer.py` | Outer ASGI dispatcher (`reflex_outer`) |
+| `reflex_django/asgi/entry.py` | Builds the full ASGI application |
 | `reflex_django/bootstrap/app_setup.py` | Installs `DjangoEventBridge` on the Reflex app |
-| `reflex_django/middleware.py` | `DjangoEventBridge` preprocess hook |
-| `reflex_django/event_handler.py` | `EventMiddlewareHandler`, skip list |
-| `reflex_django/context.py` | ContextVars |
-| `reflex_django/request.py` | `RequestProxy` for non-AppState access |
-| `reflex_django/upload_patch.py` | Injects router_data into uploads |
+| `reflex_django/bridge/django_event.py` | `DjangoEventBridge` preprocess hook |
+| `reflex_django/bridge/event_handler.py` | `EventMiddlewareHandler`, skip list |
+| `reflex_django/bridge/context.py` | ContextVars |
+| `reflex_django/bridge/request.py` | `RequestProxy` for non-AppState access |
+| `reflex_django/bridge/upload.py` | Injects router_data into uploads |
 
 ---
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from reflex_base.plugins.base import Plugin
 
-from reflex_django.urls import reflex_mount
+from reflex_django.django.urls import reflex_mount
 
 
 class MountTestPlugin(Plugin):

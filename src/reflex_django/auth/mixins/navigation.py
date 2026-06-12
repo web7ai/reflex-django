@@ -22,7 +22,7 @@ def populate_navigation_state(
     @rx.var
     def is_authenticated(self) -> bool:
         """Live session check for UI (replaces inherited snapshot field on ``DjangoAuthState``)."""
-        from reflex_django.context import current_user
+        from reflex_django.bridge.context import current_user
 
         user = current_user()
         return bool(user and getattr(user, "is_authenticated", False))
@@ -32,7 +32,7 @@ def populate_navigation_state(
     @rx.event
     async def sync_auth_ui(self: Any) -> None:
         """Refresh auth snapshot and force UI re-render on ``DjangoAuthState``."""
-        from reflex_django.auth_state import _mark_auth_ui_dirty
+        from reflex_django.states.auth import _mark_auth_ui_dirty
         from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
 
         await _sync_auth_snapshots_in_tree(self)
@@ -44,7 +44,7 @@ def populate_navigation_state(
     async def redirect_to_login(self: Any) -> Any:
         import reflex_django.auth.routes as auth_routes
 
-        from reflex_django.context import current_user
+        from reflex_django.bridge.context import current_user
 
         if not self.is_hydrated:
             return type(self).redirect_to_login

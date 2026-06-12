@@ -18,7 +18,7 @@ def test_ensure_rxconfig_from_django_without_file(
         '"reflex_django_tests.django_settings")\n',
         encoding="utf-8",
     )
-    from reflex_django.mount_config import register_mount_rx_config
+    from reflex_django.mount.config import register_mount_rx_config
 
     register_mount_rx_config(
         app_name="myfrontend",
@@ -30,7 +30,7 @@ def test_ensure_rxconfig_from_django_without_file(
 
     assert not (tmp_path / "rxconfig.py").is_file()
 
-    from reflex_django.rxconfig_bridge import ensure_rxconfig_from_django
+    from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
     config = ensure_rxconfig_from_django()
     assert config.app_name == "myfrontend"

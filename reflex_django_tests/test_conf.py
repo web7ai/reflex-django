@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 
 import pytest
-from reflex_django import conf as conf_module
-from reflex_django.conf import configure_django, is_configured
+import reflex_django.setup.conf as conf_module
+from reflex_django.setup.conf import configure_django, is_configured
 
 
 def test_configure_django_is_idempotent() -> None:

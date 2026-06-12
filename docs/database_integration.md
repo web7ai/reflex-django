@@ -201,7 +201,7 @@ Once your project boots cleanly, top-of-file imports often work. The inside-hand
 Plain `django.db.models.Model` works fine. reflex-django also ships an optional base:
 
 ```python
-from reflex_django.model import Model
+from reflex_django.django.model import Model
 from django.db import models
 
 class Product(Model):

@@ -150,7 +150,7 @@ queryset_prefetch = ("tags",)
 ## Low-level helper
 
 ```python
-from reflex_django.serialization import serialize_model_row
+from reflex_django.serializers.core import serialize_model_row
 
 row = serialize_model_row(product, fields=("id", "name", "price"))
 ```

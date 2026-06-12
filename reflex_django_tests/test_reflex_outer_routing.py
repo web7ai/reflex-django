@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from reflex_django.routing import UrlRoutingMode, resolve_url_routing
+from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 
 
 def test_resolve_reflex_outer_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -16,7 +16,7 @@ def test_build_application_uses_reflex_outer_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "reflex_outer")
-    import reflex_django.asgi_entry as entry
+    import reflex_django.asgi.entry as entry
 
     entry._application = None
     called = {"reflex": False}

@@ -11,7 +11,7 @@ import reflex as rx
 
 from reflex_django.auth.mixins.navigation import populate_navigation_state
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 from reflex_django.mixins.session_auth import SessionAuthConfig, populate_session_auth_state
 from reflex_django.state.auth_bridge import AuthBridgeMixin
 

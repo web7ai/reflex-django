@@ -29,7 +29,7 @@ reflex-django v1.0 optimizes for four properties:
 
 ## Boot sequence
 
-When ASGI loads `reflex_django.asgi_entry.application`:
+When ASGI loads `reflex_django.asgi.entry.application`:
 
 ```mermaid
 flowchart TD
@@ -50,9 +50,9 @@ Key modules:
 | Module | Role |
 |:---|:---|
 | `reflex_django.bootstrap` | Registers patches, event bridge, compile hooks |
-| `reflex_django.auto_mount` | Appends SPA catch-all from settings |
+| `reflex_django.mount.auto` | Appends SPA catch-all from settings |
 | `reflex_django.mount.spa_paths` | Finds compiled `index.html` on disk |
-| `reflex_django.asgi_entry` | Builds the production ASGI callable |
+| `reflex_django.asgi.entry` | Builds the production ASGI callable |
 | `reflex_django.dev` | `RunPlan`, process supervision for `run_reflex` |
 
 Startup may compile the SPA once when `REFLEX_DJANGO_AUTO_EXPORT_ON_START=True` and no bundle exists. Production CI should still pre-export.
@@ -92,7 +92,7 @@ In dev with `REFLEX_DJANGO_DEV_PROXY=1`, the catch-all may reverse-proxy to Vite
 - **Reflex inner ASGI** for reserved prefixes and SPA traffic on the public port.
 - **HTTP proxy** to the Django worker for prefixes in `REFLEX_DJANGO_DJANGO_PREFIX` (admin, API, static).
 
-The worker runs `reflex_django.django_http_entry` (separate uvicorn/granian bind, default `:8001`). ORM access in `@rx.event` handlers still uses the **main** process database connections.
+The worker runs `reflex_django.asgi.http_entry` (separate uvicorn/granian bind, default `:8001`). ORM access in `@rx.event` handlers still uses the **main** process database connections.
 
 Compare modes: [Routing](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
 
@@ -181,8 +181,8 @@ Discovery logic is centralized in `reflex_django.mount.spa_paths`.
 | `reflex_django.bootstrap` | One-time app setup and patch registry |
 | `reflex_django.bridge` | Event bridge implementation |
 | `reflex_django.dev` | Dev servers, `RunPlan`, subprocess utilities |
-| `reflex_django.errors` | Typed configuration exceptions |
-| `reflex_django.vite_proxy` | Multi-target Vite proxy injection |
+| `reflex_django.setup.errors` | Typed configuration exceptions |
+| `reflex_django.dev.vite_proxy` | Multi-target Vite proxy injection |
 
 Removed in v1.0: `make_dispatcher`, `ReflexDjangoPlugin`, legacy routing mode names. See [Migrating to v1.0](migration/v1_migration.md).
 

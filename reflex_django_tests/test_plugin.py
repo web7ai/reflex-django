@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from reflex_django.errors import DeprecationRemovedError
-from reflex_django.plugin import ReflexDjangoPlugin, make_dispatcher
+from reflex_django.setup.errors import DeprecationRemovedError
+from reflex_django.setup.plugin import ReflexDjangoPlugin, make_dispatcher
 
 
 def test_plugin_constructor_raises() -> None:

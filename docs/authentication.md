@@ -256,7 +256,7 @@ class AuthState(AppState):
 After `self.login(...)`, the browser may still hold the anonymous session cookie until the next HTTP response sets a fresh one. For most apps a redirect is enough. To force an immediate cookie update:
 
 ```python
-from reflex_django.context import current_request
+from reflex_django.bridge.context import current_request
 from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
 
 @rx.event

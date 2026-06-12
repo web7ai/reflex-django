@@ -1,11 +1,11 @@
-"""Tests for reflex_django.streaming_middleware.AsyncStreamingMiddleware."""
+"""Tests for reflex_django.bridge.streaming.AsyncStreamingMiddleware."""
 
 from __future__ import annotations
 
 import warnings
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
@@ -13,7 +13,7 @@ from django.core.handlers.asgi import ASGIRequest  # noqa: E402
 from django.http import StreamingHttpResponse  # noqa: E402
 from django.test import RequestFactory  # noqa: E402
 
-from reflex_django.streaming_middleware import AsyncStreamingMiddleware  # noqa: E402
+from reflex_django.bridge.streaming import AsyncStreamingMiddleware  # noqa: E402
 
 
 def _sync_streaming_response() -> StreamingHttpResponse:

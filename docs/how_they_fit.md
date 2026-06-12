@@ -81,7 +81,7 @@ Django is the **outer** app. The **outer dispatcher** decides: is this a Reflex-
 | **`import shop.views`** | Loads `@page` at import time | `config/urls.py` |
 | **`AppState`** | Base state with Django context | `{app}/views.py` |
 | **`@page`** | Registers a Reflex page with a URL | `{app}/views.py` |
-| **`asgi_entry.application`** | ASGI callable that boots everything | `config/asgi.py` |
+| **`asgi.entry.application`** | ASGI callable that boots everything | `config/asgi.py` |
 
 The SPA catch-all is appended automatically when `REFLEX_DJANGO_AUTO_MOUNT=True`. Call `reflex_mount()` only for URL prefix overrides.
 
@@ -106,7 +106,7 @@ In their natural habitat:
 That is a complete (minimal) reflex-django app.
 
 !!! tip "The shared app object"
-    `from reflex_django import app` is the `rx.App()` singleton in `reflex_django.reflex_app`. Use `app.add_page()` for native Reflex-style registration.
+    `from reflex_django import app` is the `rx.App()` singleton in `reflex_django.runtime.reflex_app`. Use `app.add_page()` for native Reflex-style registration.
 
 ---
 
@@ -152,7 +152,7 @@ You write step 7. The bridge does the rest.
 In plain Reflex you might keep a root config file and `shop/shop.py` with `app = rx.App()`. In reflex-django v1:
 
 - Put config in **`REFLEX_DJANGO_RX_CONFIG`**, **`REFLEX_DJANGO_PLUGINS`**, and **`REFLEX_DJANGO_PLUGIN`** in `settings.py`.
-- Use **`from reflex_django import app`** (backed by `reflex_django.reflex_app`) instead of a local `shop.py` app module.
+- Use **`from reflex_django import app`** (backed by `reflex_django.runtime.reflex_app`) instead of a local `shop.py` app module.
 - Put pages in `{app}/views.py` with `@page`, or call `app.add_page()` directly.
 
 At compile time, reflex-django imports your page modules, merges decorated pages onto `app`, and applies plugins. See [The three knobs](mental_model.md).

@@ -27,7 +27,7 @@ Good news: you add reflex-django like any other Django app. Your models stay put
 - [ ] `AsyncStreamingMiddleware` last in `MIDDLEWARE`
 - [ ] `REFLEX_DJANGO_RX_CONFIG` in `settings.py`
 - [ ] `import yourapp.views` in `urls.py` (so `@page` registers)
-- [ ] `config/asgi.py` → `from reflex_django.asgi_entry import application`
+- [ ] `config/asgi.py` → `from reflex_django.asgi.entry import application`
 - [ ] First `@page` in `{app}/views.py` with optional `AppState`
 - [ ] `python manage.py run_reflex` (not `runserver` + `reflex run`)
 

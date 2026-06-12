@@ -1,4 +1,4 @@
-"""Tests for reflex_django.middleware.DjangoEventBridge."""
+"""Tests for reflex_django.bridge.django_event.DjangoEventBridge."""
 
 from __future__ import annotations
 
@@ -6,18 +6,18 @@ import contextvars
 from typing import Any, cast
 from unittest import mock
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from django.http import QueryDict  # noqa: E402
 
-from reflex_django.context import (  # noqa: E402
+from reflex_django.bridge.context import (  # noqa: E402
     current_request,
     current_session,
     current_user,
 )
-from reflex_django.middleware import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import reflex as rx
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
 from reflex.page import DECORATED_PAGES  # noqa: E402
-from reflex_django.app_factory import (  # noqa: E402
+from reflex_django.runtime.app_factory import (  # noqa: E402
     migrate_decorated_pages_app_name,
     reset_app_factory_cache,
 )
 from reflex_django.pages.decorators import clear_page_registry, page
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
 
 
 def test_migrate_decorated_pages_moves_empty_key_to_mount_app_name() -> None:

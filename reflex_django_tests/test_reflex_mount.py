@@ -7,9 +7,9 @@ from django.conf import settings
 from django.test import RequestFactory
 from django.urls import clear_url_caches, resolve
 
-from reflex_django.mount_config import clear_mount_rx_config
-from reflex_django.mount_registry import MOUNT_REGISTRY, clear_mount_registry
-from reflex_django.urls import reflex_mount
+from reflex_django.mount.config import clear_mount_rx_config
+from reflex_django.mount.registry import MOUNT_REGISTRY, clear_mount_registry
+from reflex_django.django.urls import reflex_mount
 from reflex_django.views.mount import ReflexMountView
 
 

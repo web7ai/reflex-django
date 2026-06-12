@@ -10,7 +10,7 @@ from typing import Any, TypeVar
 import reflex as rx
 
 from reflex_django.auth.shortcuts import auser_has_perm
-from reflex_django.context import current_user
+from reflex_django.bridge.context import current_user
 
 F = TypeVar("F", bound=Callable[..., Any])
 

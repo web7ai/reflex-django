@@ -20,7 +20,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
 from reflex_django.auth.settings import AuthSettings
-from reflex_django.context import current_request
+from reflex_django.bridge.context import current_request
 from reflex_django.mixins.session_auth import _defer_nav_js
 
 

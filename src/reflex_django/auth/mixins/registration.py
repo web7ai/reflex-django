@@ -15,7 +15,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
 from reflex_django.auth.settings import AuthSettings
-from reflex_django.context import current_request
+from reflex_django.bridge.context import current_request
 from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
 from reflex_django.state.auth_bridge import session_async_save
 
@@ -177,7 +177,7 @@ def populate_registration_state(
         await session_async_save(request)
         sk = getattr(request.session, "session_key", None) or ""
         if sk:
-            from reflex_django.session_js import mirror_auth_cookies_to_state_tree
+            from reflex_django.bridge.session_js import mirror_auth_cookies_to_state_tree
 
             mirror_auth_cookies_to_state_tree(self, sk)
         await self.refresh_django_user_fields()

@@ -7,7 +7,7 @@ from unittest import mock
 
 import reflex as rx
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 

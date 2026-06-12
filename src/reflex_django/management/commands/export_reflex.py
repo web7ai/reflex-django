@@ -2,7 +2,7 @@
 
 Running plain ``reflex export`` from a reflex-django project fails with
 ``rxconfig.py not found`` because Reflex's CLI is launched without our
-:mod:`reflex_django.integration` hooks, which is what synthesizes
+:mod:`reflex_django.runtime.integration` hooks, which is what synthesizes
 ``rxconfig`` from your Django settings and bootstraps the Reflex app from
 the Django ``INSTALLED_APPS`` registry.
 
@@ -116,7 +116,7 @@ class Command(BaseCommand):
         # export utilities. Otherwise ``reflex.utils.prerequisites`` would
         # look for ``rxconfig.py`` on disk and raise the same error the
         # user hit running ``reflex export`` directly.
-        from reflex_django.integration import (
+        from reflex_django.runtime.integration import (
             install_reflex_django_integration,
             refresh_get_config_bindings,
         )

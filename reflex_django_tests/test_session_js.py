@@ -1,12 +1,12 @@
-"""Tests for :mod:`reflex_django.session_js`."""
+"""Tests for :mod:`reflex_django.bridge.session_js`."""
 
 from __future__ import annotations
 
-from reflex_django.conf import configure_django
+from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from reflex_django.session_js import (  # noqa: E402
+from reflex_django.bridge.session_js import (  # noqa: E402
     browser_auth_cookies_clear_js,
     session_cookie_clear_js,
     session_cookie_name_and_suffix,

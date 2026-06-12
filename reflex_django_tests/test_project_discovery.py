@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from reflex_django.project import (
+from reflex_django.setup.project import (
     RXCONFIG_SYNTHETIC_ATTR,
     discover_settings_module,
     find_manage_py,
@@ -65,10 +65,10 @@ def test_find_manage_py_walks_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_rxconfig_module_has_file_ignores_synthetic_module(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from reflex_django.project import rxconfig_path
+    from reflex_django.setup.project import rxconfig_path
 
     monkeypatch.setattr(
-        "reflex_django.project.rxconfig_path",
+        "reflex_django.setup.project.rxconfig_path",
         lambda *args, **kwargs: None,
     )
     stub = types.ModuleType("rxconfig")

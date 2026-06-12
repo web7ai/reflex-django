@@ -6,12 +6,12 @@ from unittest import mock
 
 import pytest
 
-from reflex_django.integration import (
+from reflex_django.runtime.integration import (
     _patch_reflex_compile,
     install_reflex_django_integration,
     reset_integration_for_tests,
 )
-from reflex_django.mount_config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +53,7 @@ def test_configure_django_bootstraps_integration(
         rx_config={"frontend_port": 4000},
     )
 
-    from reflex_django.conf import configure_django, _bootstrap_reflex_integration_for_django_mode
+    from reflex_django.setup.conf import configure_django, _bootstrap_reflex_integration_for_django_mode
 
     configure_django()
     _bootstrap_reflex_integration_for_django_mode()
@@ -79,31 +79,31 @@ def test_compile_wrapper_applies_stability_after_compile(
     monkeypatch.setattr(reflex_module, "_reflex_django_compile_patched", False)
     monkeypatch.setattr(reflex_module, "_compile_app", original_compile)
     monkeypatch.setattr(
-        "reflex_django.app_factory.prepare_pages_for_compile",
+        "reflex_django.runtime.app_factory.prepare_pages_for_compile",
         mock.MagicMock(),
     )
     monkeypatch.setattr(
-        "reflex_django.app_factory.load_app_factory",
+        "reflex_django.runtime.app_factory.load_app_factory",
         mock.MagicMock(return_value=mock.MagicMock()),
     )
     monkeypatch.setattr(
-        "reflex_django.compile_validate.expected_dispatch_keys_from_app",
+        "reflex_django.runtime.compile_validate.expected_dispatch_keys_from_app",
         lambda app: set(),
     )
     monkeypatch.setattr(
-        "reflex_django.compile_validate.missing_frontend_dispatchers",
+        "reflex_django.runtime.compile_validate.missing_frontend_dispatchers",
         lambda **kwargs: [],
     )
     monkeypatch.setattr(
-        "reflex_django.compile_validate.warn_if_frontend_dispatchers_out_of_sync",
+        "reflex_django.runtime.compile_validate.warn_if_frontend_dispatchers_out_of_sync",
         lambda **kwargs: None,
     )
     monkeypatch.setattr(
-        "reflex_django.vite_proxy.ensure_vite_django_dev_proxy_from_config",
+        "reflex_django.dev.vite_proxy.ensure_vite_django_dev_proxy_from_config",
         lambda: False,
     )
     monkeypatch.setattr(
-        "reflex_django.frontend_stability.apply_frontend_stability_after_compile",
+        "reflex_django.dev.frontend_stability.apply_frontend_stability_after_compile",
         lambda: stability_calls.append(True) or [],
     )
 
