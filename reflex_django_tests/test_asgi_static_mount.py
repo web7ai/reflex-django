@@ -4,4 +4,4 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="make_dispatcher removed in v1.0; see test_django_outer_dispatcher.py")
+pytestmark = pytest.mark.skip(reason="make_dispatcher removed; mount-only architecture")

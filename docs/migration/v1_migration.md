@@ -1,5 +1,8 @@
 # Migrating to reflex-django v1.0
 
+!!! warning "Superseded by v3 mount-only"
+    v3 removed `django_outer`, `reflex_outer`, and `reflex_django.asgi.entry`. If you are on v2+, read **[Migrating to mount-only](v3_mount_only.md)** first. This page remains for historical v0.x → v1.0 upgrades.
+
 **What you will learn:** How to upgrade from reflex-django 0.x (or legacy routing layouts) to v1.0 with a verification checklist.
 
 **When you need this:**
@@ -45,7 +48,7 @@ REFLEX_DJANGO_URL_ROUTING = "django_led"   # use django_outer
 REFLEX_DJANGO_URL_ROUTING = "reflex_led"   # use reflex_outer
 ```
 
-Read the comparison: [Routing (choosing a mode)](../routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+Read the comparison: [Migrating to mount-only](../migration/v3_mount_only.md) (v3 replaced routing modes).
 
 ---
 

@@ -163,6 +163,7 @@ nav:
     - Best practices: best_practices.md
     - Upgrade to v1: migration/v1_migration.md
     - Upgrade to v2: migration/v2_module_paths.md
+    - Upgrade to v3 (mount-only): migration/v3_mount_only.md
   - Reference:
     - What's new: whats_new.md
     - Settings: settings_reference.md

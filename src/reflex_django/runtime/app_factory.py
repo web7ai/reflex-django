@@ -78,7 +78,16 @@ def get_or_create_app() -> Any:
     register_reflex_app_module(resolve_app_name(), app)
     reflex_app_module._app = app
     _APP_INSTANCE = app
+    _apply_django_integration_to_app(app)
     return app
+
+
+def _apply_django_integration_to_app(app: Any) -> None:
+    """Attach Django ASGI dispatch and optional Reflex API routes to *app*."""
+    from reflex_django.bootstrap.app_setup import apply_reflex_plugins_to_app
+
+    apply_reflex_plugins_to_app(app)
+    _ensure_optional_api_endpoints(app)
 
 
 def reflex_app_module_name(app_name: str) -> str:

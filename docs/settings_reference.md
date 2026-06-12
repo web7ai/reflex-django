@@ -13,32 +13,18 @@ Most projects change zero settings. The defaults are tuned for v1.0.
 
 ---
 
-## Routing
-
-Who handles each URL path: Django views, the SPA catch-all, or reserved Reflex prefixes.
-
-Read the full walkthrough in [Routing (choosing a mode)](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+## Routing and proxy
 
 | Setting | Type | Default | Purpose |
 |:---|:---|:---|:---|
+| `RXDJANGO_PROXY_SERVER` | `str` | `""` | Optional. Base URL of a **separate** Django HTTP server for Vite dev proxy. When unset, Django prefixes are served from the Reflex backend. Env: `RXDJANGO_PROXY_SERVER`. |
 | `REFLEX_DJANGO_MOUNT_PREFIX` | `str` | `"/"` | Catch-all mount prefix. Env: `REFLEX_DJANGO_MOUNT_PREFIX`. |
-| `REFLEX_DJANGO_AUTO_MOUNT` | `bool` | `True` | Append SPA catch-all at startup. Set `False` for custom URL layouts. Env: `REFLEX_DJANGO_AUTO_MOUNT=0`. |
-| `REFLEX_DJANGO_URL_ROUTING` | `str` | `"auto"` → `"django_outer"` | `"django_outer"` (default) or `"reflex_outer"`. Legacy `reflex_led` / `django_led` removed in v1.0. |
-| `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `tuple[str, ...]` | `()` | Extra prefixes always routed to Reflex. |
-| `REFLEX_DJANGO_HTTP_SUBPROCESS` | `bool` | `True` | **`reflex_outer` only.** Auto-spawn Django HTTP worker in dev. Set `False` when Supervisor runs it. Env: `REFLEX_DJANGO_HTTP_SUBPROCESS=0`. |
-| `REFLEX_DJANGO_HTTP_UPSTREAM` | `str` | `""` | Base URL of Django HTTP worker (e.g. `http://127.0.0.1:8001`). Empty means derive from `REFLEX_DJANGO_HTTP_PORT`. |
+| `REFLEX_DJANGO_AUTO_MOUNT` | `bool` | `True` | Append SPA catch-all at startup. Env: `REFLEX_DJANGO_AUTO_MOUNT=0`. |
+| `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `tuple[str, ...]` | `()` | Extra Reflex path prefixes for dev proxy routing. |
 
-### `REFLEX_DJANGO_HTTP_PORT`
+Deprecated: `REFLEX_DJANGO_HTTP_UPSTREAM` maps to `RXDJANGO_PROXY_SERVER` with a warning.
 
-| | |
-|:---|:---|
-| **Type** | `int` |
-| **Default** | `8001` |
-| **Env** | `REFLEX_DJANGO_HTTP_PORT` |
-
-Internal bind port for the Django HTTP worker in **`reflex_outer`** mode. Browsers do not open this port directly. Reflex on `:8000` (or Vite on `:3000`) proxies Django prefixes (`/admin`, `/api`, …) to this worker.
-
-Use when the default `8001` conflicts with another service, or when your supervised worker listens on a custom port (then also set `REFLEX_DJANGO_HTTP_UPSTREAM`).
+Removed in v3: `REFLEX_DJANGO_URL_ROUTING`, `REFLEX_DJANGO_HTTP_SUBPROCESS`, `REFLEX_DJANGO_HTTP_PORT`.
 
 ---
 
@@ -104,12 +90,7 @@ export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/internal"
 python manage.py run_reflex
 ```
 
-### `reflex_outer` worker env vars
-
-| Setting / env | Default | Purpose |
-|:---|:---|:---|
-| `REFLEX_DJANGO_HTTP_HOST` | `127.0.0.1` | Bind host for auto-spawned Django HTTP worker. |
-| `REFLEX_DJANGO_HTTP_LOG_LEVEL` | `warning` | Log level for the worker subprocess. |
+Removed in v3: `REFLEX_DJANGO_HTTP_HOST`, `REFLEX_DJANGO_HTTP_PORT`, `REFLEX_DJANGO_HTTP_SUBPROCESS`. Use `RXDJANGO_PROXY_SERVER` for optional split-process dev instead.
 
 ---
 
@@ -181,7 +162,7 @@ When reflex-django supplies bundled settings, env vars include `REFLEX_DJANGO_DA
 
 1. Most projects need **zero** changes.
 2. First touch is often `REFLEX_DJANGO_AUTH`.
-3. Dev port confusion? Read **SEPARATE_DEV_PORTS**, **DEV_PROXY**, and **HTTP_PORT** above.
+3. Dev port confusion? Read **SEPARATE_DEV_PORTS**, **DEV_PROXY**, and **RXDJANGO_PROXY_SERVER** above.
 4. Routing 404s? Check **DJANGO_PREFIX** and [Troubleshooting](troubleshooting.md).
 
 ---

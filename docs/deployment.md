@@ -1,6 +1,6 @@
 # Deployment
 
-**What you will learn:** How to build, configure, and serve a reflex-django app in production with one ASGI process and a reverse proxy.
+**What you will learn:** How to build, configure, and serve a reflex-django app in production with Django ASGI, a Reflex backend, and a reverse proxy.
 
 **When you need this:**
 
@@ -15,9 +15,9 @@ You deploy reflex-django like any Django ASGI app, with one extra build step for
 
 1. **Build the SPA in CI** with `export_reflex --frontend-only --no-zip --stage-to-static-root`, then `collectstatic`.
 2. **Use real settings** with `DEBUG = False`, a real `SECRET_KEY`, `ALLOWED_HOSTS`, and `STATIC_ROOT`. Never ship `reflex_django.setup.default_settings`.
-3. **Run ASGI** on `reflex_django.asgi.entry:application` (uvicorn, gunicorn+uvicorn worker, granian, or hypercorn).
-4. **Reverse proxy** serves `/static/` from disk and forwards everything else with WebSocket upgrade on `/_event`.
-5. **Pre-built bundle:** set `REFLEX_DJANGO_AUTO_EXPORT_ON_START=0` so boot never rebuilds on read-only filesystems.
+3. **Run Django ASGI** with plain `get_asgi_application()` (see `config/asgi.py` snippet).
+4. **Run Reflex backend** (or serve static export only) and **reverse-proxy** `/_event`, `/_upload`, etc. to it.
+5. **Edge proxy** serves `/static/` from disk and forwards HTTP to Django.
 
 ```bash
 export DJANGO_SETTINGS_MODULE=config.production
@@ -25,7 +25,7 @@ uv sync --frozen
 uv run python manage.py migrate --noinput
 uv run python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
 uv run python manage.py collectstatic --noinput
-uv run uvicorn reflex_django.asgi.entry:application --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 !!! warning "Never use default_settings in production"
@@ -47,21 +47,11 @@ your-project/
     └── _reflex/          ← SPA from export_reflex + collectstatic
 ```
 
-ASGI runs `reflex_django.asgi.entry:application`. The proxy serves `/static/` from `STATIC_ROOT`. Everything else hits the ASGI process.
+ASGI runs `config.asgi:application` (plain Django). The proxy serves `/static/` from `STATIC_ROOT`. Forward `/_event` and related paths to your Reflex backend.
 
-### `reflex_outer` in production
+### Optional split-process dev
 
-Two supervised services instead of one:
-
-1. **Reflex-facing** (public): `uvicorn config.asgi:application --port 8000`
-2. **Django HTTP worker** (internal): `uvicorn reflex_django.asgi.http_entry:application --host 127.0.0.1 --port 8001`
-
-```python
-REFLEX_DJANGO_HTTP_UPSTREAM = "http://127.0.0.1:8001"
-REFLEX_DJANGO_HTTP_SUBPROCESS = False
-```
-
-The proxy points at `:8000` only. See [Routing](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+Set `RXDJANGO_PROXY_SERVER` when Django runs on `runserver` and Reflex runs via `run_reflex`. This is a **dev-only** layout; production still uses Django ASGI plus a separate Reflex backend behind your edge proxy. See [Routing](routing.md).
 
 ---
 
@@ -76,7 +66,7 @@ The proxy points at `:8000` only. See [Routing](routing.md#choosing-a-mode-djang
 
 ### Auto-build on first boot
 
-If no bundle exists, `asgi.entry` can build once at boot. That is a convenience, not a CI substitute. Pre-build in CI and set:
+Pre-build in CI. Do not rely on runtime auto-export in production:
 
 ```bash
 REFLEX_DJANGO_AUTO_EXPORT_ON_START=0
@@ -91,14 +81,16 @@ REFLEX_DJANGO_AUTO_EXPORT_ON_START=0
 ### uvicorn
 
 ```bash
-uv run uvicorn reflex_django.asgi.entry:application \
+uv run uvicorn config.asgi:application \
     --host 0.0.0.0 --port 8000 --workers 4
 ```
+
+Run your Reflex backend separately (or serve static export only) and configure the edge proxy to forward `/_event`, `/_upload`, etc.
 
 ### gunicorn + uvicorn worker
 
 ```bash
-uv run gunicorn reflex_django.asgi.entry:application \
+uv run gunicorn config.asgi:application \
     --workers 4 --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:8000
 ```
@@ -138,7 +130,7 @@ RUN uv run python manage.py export_reflex \
         --frontend-only --no-zip --stage-to-static-root \
     && uv run python manage.py collectstatic --noinput
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "reflex_django.asgi.entry:application",
+CMD ["uv", "run", "uvicorn", "config.asgi:application",
      "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
 ```
 
@@ -193,7 +185,7 @@ More: [Troubleshooting](troubleshooting.md).
 
 ## What just happened?
 
-You have a production path: export SPA in CI, run one ASGI app, put a proxy in front with WebSocket support on `/_event`.
+You have a production path: export SPA in CI, run Django ASGI, run Reflex backend (or static export), put a proxy in front with WebSocket support on `/_event`.
 
 ## Next up
 

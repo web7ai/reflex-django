@@ -5,6 +5,9 @@ tags: [websocket, events, middleware]
 
 # The WebSocket event pipeline
 
+!!! note "v3 routing update"
+    Outer dispatchers (`DjangoOuterDispatcher`, `ReflexOuterDispatcher`) were removed in v3. In dev, `/_event` is handled by the Reflex backend; Django middleware still runs via `DjangoEventBridge` below. See [Architecture](architecture.md).
+
 **What you'll learn:** The exact path from a button click in the browser to your `@rx.event` handler, including the synthetic `HttpRequest` and middleware chain.
 
 **When you need this:**
@@ -25,7 +28,7 @@ You do not need this page to build features. You need it when something goes wro
 ```text
 1. Browser: user clicks a button
 2. Browser: send Socket.IO event over WebSocket → /_event
-3. Outer dispatcher: sees /_event, forwards to Reflex inner ASGI
+3. Reflex backend: reserved path → Reflex inner ASGI (not Django HTTP)
 4. Reflex: receives event, calls registered preprocess middleware
 5. Bridge: builds synthetic HttpRequest from event.router_data
 6. Bridge: runs settings.MIDDLEWARE on it (minus skip list)
@@ -42,7 +45,7 @@ Steps 5 through 8 are what reflex-django adds. The rest is normal Reflex plus AS
 ```mermaid
 flowchart TD
     A[Browser click] --> B[Socket.IO on /_event]
-    B --> C[Outer dispatcher]
+    B --> C[Reflex backend api_transformer]
     C --> D[Reflex inner ASGI]
     D --> E[DjangoEventBridge.preprocess]
     E --> F[Synthetic HttpRequest]
@@ -54,17 +57,19 @@ flowchart TD
 
 ---
 
-## Step 1–3: from click to dispatcher
+## Step 1–3: from click to Reflex inner ASGI
 
 The Reflex SPA opens a single WebSocket to `/_event` when the page loads. Every UI action is sent as a Socket.IO event over that connection.
 
-The outer dispatcher (`DjangoOuterDispatcher` in `django_outer`, or `ReflexOuterDispatcher` in `reflex_outer`) sees that `/_event` is a [reserved Reflex prefix](routing.md#reserved-reflex-prefixes-both-modes) and forwards the scope straight to Reflex's inner ASGI app (`rx_app._api`). Django's HTTP middleware does **not** run on this ASGI hop. There is no Django view to dispatch yet.
+In default dev, Vite on `:3000` proxies WebSocket and HTTP to the Reflex backend (`config.api_url`, typically `:8000`). The backend's `api_transformer` (`make_dispatcher`) routes [reserved Reflex prefixes](routing.md#reserved-reflex-prefixes) such as `/_event` straight to Reflex's inner ASGI app (`rx_app._api`). Django HTTP middleware does **not** run on this ASGI hop. There is no Django view to dispatch yet.
+
+In production, your edge proxy forwards `/_event` to the Reflex backend the same way. Django ASGI never sees the WebSocket scope unless you add Channels separately.
 
 | File | Role |
 |:---|:---|
-| `reflex_django/asgi/django_outer.py` | Routes reserved paths in `django_outer` |
-| `reflex_django/asgi/reflex_outer.py` | Routes Django prefixes to the HTTP worker in `reflex_outer` |
-| `reflex_django/asgi/entry.py` | Builds the composed ASGI application |
+| `reflex_django/asgi/app.py` | `make_dispatcher()` path-prefix transformer |
+| `reflex_django/runtime/app_factory.py` | Attaches dispatcher when the Reflex app is created |
+| `reflex_django/bootstrap/app_setup.py` | Installs `DjangoEventBridge` and dispatcher hooks |
 
 ---
 
@@ -260,9 +265,9 @@ Source: `reflex_django/bridge/upload.py`.
 
 | Situation | Behavior |
 |:---|:---|
-| `/_event`, `/_upload` | Always forwarded to Reflex |
-| Vite HMR WebSocket (`django_outer` dev) | `DjangoOuterDispatcher` proxies to Vite when the dev server is reachable |
-| Any other path | Closed politely (no Django Channels required) |
+| `/_event`, `/_upload` | Always forwarded to Reflex inner ASGI |
+| Vite HMR WebSocket | Handled by the Vite dev server on `:3000`, not by `make_dispatcher` |
+| Any other path on the Reflex backend | Routed by prefix: Django urlpatterns or Reflex SPA |
 
 Django itself never sees these scopes unless you add Channels separately.
 
@@ -270,13 +275,11 @@ Django itself never sees these scopes unless you add Channels separately.
 
 ## Lifespan handling
 
-ASGI servers send a `"lifespan"` scope at startup and shutdown. In `django_outer`, the dispatcher forwards lifespan to Reflex's inner ASGI, which uses it to:
+ASGI servers send a `"lifespan"` scope at startup and shutdown. `make_dispatcher` always forwards lifespan to Reflex's inner ASGI, which uses it to:
 
 - Start Reflex's event processor.
 - Start background tasks (`@rx.background`).
 - Tear them down on shutdown.
-
-In `reflex_outer`, lifespan stays on the main Reflex process for the same reason.
 
 ---
 
@@ -305,9 +308,8 @@ If something feels off, try this order:
 
 | File | What it does |
 |:---|:---|
-| `reflex_django/asgi/django_outer.py` | Outer ASGI dispatcher (`django_outer`) |
-| `reflex_django/asgi/reflex_outer.py` | Outer ASGI dispatcher (`reflex_outer`) |
-| `reflex_django/asgi/entry.py` | Builds the full ASGI application |
+| `reflex_django/asgi/app.py` | `make_dispatcher()` path-prefix ASGI transformer |
+| `reflex_django/runtime/app_factory.py` | Wires dispatcher on `get_or_create_app()` |
 | `reflex_django/bootstrap/app_setup.py` | Installs `DjangoEventBridge` on the Reflex app |
 | `reflex_django/bridge/django_event.py` | `DjangoEventBridge` preprocess hook |
 | `reflex_django/bridge/event_handler.py` | `EventMiddlewareHandler`, skip list |
@@ -319,6 +321,6 @@ If something feels off, try this order:
 
 ## What just happened?
 
-You traced a Reflex event from the browser through the outer dispatcher, `DjangoEventBridge`, the full middleware chain, and back to the UI update.
+You traced a Reflex event from the browser through the Reflex backend, `DjangoEventBridge`, the full middleware chain, and back to the UI update.
 
 **Next up:** [AsyncStreamingMiddleware explained →](async_streaming_middleware.md)

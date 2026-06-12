@@ -9,7 +9,30 @@
 
 ---
 
+## v3 (mount-only, unreleased)
+
+v3 removes composed ASGI routing (`django_outer`, `reflex_outer`, `reflex_django.asgi.entry`). Production Django uses plain `get_asgi_application()`. Dev uses `manage.py run_reflex` with Django mounted in the Reflex backend via `make_dispatcher`.
+
+### Highlights
+
+| Area | v3 behavior |
+|:---|:---|
+| **Production ASGI** | `get_asgi_application()` in `config/asgi.py` |
+| **Dev** | `run_reflex` → Vite + Reflex backend; Django in-process (no `RXDJANGO_PROXY_SERVER` required) |
+| **Optional dev split** | `RXDJANGO_PROXY_SERVER` when Django runs on separate `runserver` |
+| **Removed** | `REFLEX_DJANGO_URL_ROUTING`, `REFLEX_DJANGO_HTTP_*`, `asgi.entry` |
+| **Restored** | `make_dispatcher` for in-process Django on Reflex backend |
+
+### Upgrade path
+
+**[Migrating to mount-only →](migration/v3_mount_only.md)**
+
+---
+
 ## v2.0 (2026-06-12)
+
+!!! note "Superseded by v3 for ASGI"
+    v3 removed `reflex_django.asgi.entry`. If you are on v2+, read **[Migrating to mount-only](migration/v3_mount_only.md)** for current ASGI and dev workflow.
 
 v2.0 reorganizes the Python package into domain subpackages (`asgi/`, `runtime/`, `bridge/`, `django/`, `dev/`, `setup/`, …). Most user-facing imports stay the same; string-based Django settings paths and a few module paths changed.
 
@@ -37,6 +60,9 @@ v2.0 reorganizes the Python package into domain subpackages (`asgi/`, `runtime/`
 ---
 
 ## v1.0 (2026-06-07)
+
+!!! note "Historical release"
+    v1.0 introduced `django_outer` / `reflex_outer` routing and `reflex_django.asgi.entry`, both **removed in v3**. This section documents v1.0 only for upgrades from v0.x.
 
 reflex-django v1.0 is a **Django-first** integration release. Configuration, ASGI boot, and dev orchestration all assume Django owns project settings and `manage.py run_reflex` is the primary dev entry.
 
@@ -78,6 +104,6 @@ Every added, changed, and removed item is recorded in the repository changelog:
 
 ## What just happened?
 
-You saw the v1.0 headline changes and where to find exhaustive release notes.
+You saw headline changes for v3, v2, and v1 and where to find exhaustive release notes.
 
-**Next up:** [Migrating to v1.0](migration/v1_migration.md) if you are upgrading, or [What's in the box](index.md) if you are starting fresh.
+**Next up:** [Migrating to mount-only](migration/v3_mount_only.md) if you are upgrading, or [What's in the box](index.md) if you are starting fresh.

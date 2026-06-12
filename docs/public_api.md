@@ -21,13 +21,12 @@ from reflex_django.django.urls import reflex_mount
 from reflex_django.auth import add_auth_pages, login_required, permission_required
 from reflex_django.serializers import ReflexDjangoModelSerializer
 from reflex_django import request, current_request, current_user
-from reflex_django.asgi.entry import application
+from reflex_django.asgi.app import build_django_asgi, make_dispatcher
 from reflex_django import app, create_app
-from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 from reflex_django.bridge.context import begin_event_request, end_event_request
 ```
 
-Most projects import little beyond this list. Upgrading from v1? See [v2 module path migration](migration/v2_module_paths.md).
+Most projects import little beyond this list. Upgrading? See [v3 mount-only](migration/v3_mount_only.md) or [v2 module paths](migration/v2_module_paths.md).
 
 ---
 
@@ -35,7 +34,7 @@ Most projects import little beyond this list. Upgrading from v1? See [v2 module 
 
 ```text
 reflex_django/
-  asgi/          entry, dispatchers, HTTP subprocess
+  asgi/          build_django_asgi, make_dispatcher
   runtime/       app factory, integration, reflex_app
   bridge/        request bridge, event middleware, context
   django/        apps, urls, admin, model

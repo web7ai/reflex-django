@@ -2,25 +2,56 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from reflex.app import App
 
 
+def _as_api_transformer_sequence(value: Any) -> tuple[Any, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, Sequence) and not callable(value):
+        return tuple(value)
+    return (value,)
+
+
 def apply_reflex_plugins_to_app(app: App) -> None:
-    """Install DjangoEventBridge and run user plugin post_compile hooks."""
+    """Install Django ASGI dispatch, event bridge, and user plugin hooks."""
     from reflex_base.config import get_config
 
     from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
     ensure_rxconfig_from_django()
+    _ensure_django_api_transformer(app)
     _ensure_event_bridge(app)
 
     for plugin in get_config().plugins or ():
         post_compile = getattr(plugin, "post_compile", None)
         if callable(post_compile):
             post_compile(app=app)
+
+
+def _ensure_django_api_transformer(app: App) -> None:
+    """Mount Django ASGI inside the Reflex backend for configured URL prefixes."""
+    if getattr(app, "_reflex_django_dispatcher_configured", False):
+        return
+
+    from reflex_django.asgi.app import django_asgi_application, make_dispatcher
+    from reflex_django.mount.prefixes import resolve_prefixes
+
+    prefixes = resolve_prefixes().backend_prefixes_for_asgi()
+    if not prefixes:
+        return
+
+    transformer = make_dispatcher(
+        django_asgi_application(),
+        backend_prefixes=prefixes,
+    )
+    existing = _as_api_transformer_sequence(app.api_transformer)
+    app.api_transformer = (*existing, transformer)
+    app._reflex_django_dispatcher_configured = True  # type: ignore[attr-defined]
 
 
 def _ensure_event_bridge(app: Any) -> None:

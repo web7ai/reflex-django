@@ -22,9 +22,11 @@ class ReflexDjangoPlugin:
         raise DeprecationRemovedError(_REMOVED_MSG)
 
 
-def make_dispatcher(*args: object, **kwargs: object) -> None:
-    """Removed legacy ASGI dispatcher helper."""
-    raise DeprecationRemovedError(_REMOVED_MSG)
+def make_dispatcher(*args: object, **kwargs: object):
+    """Re-export :func:`reflex_django.asgi.app.make_dispatcher`."""
+    from reflex_django.asgi.app import make_dispatcher as _make_dispatcher
+
+    return _make_dispatcher(*args, **kwargs)
 
 
 __all__ = ["ReflexDjangoPlugin", "make_dispatcher"]

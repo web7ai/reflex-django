@@ -16,7 +16,6 @@ from reflex_django.runtime.app_factory import (
 )
 from reflex_django.pages.decorators import PAGE_REGISTRY, clear_page_registry
 from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
-from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 
 
 @pytest.fixture(autouse=True)
@@ -29,20 +28,6 @@ def _reset_factory() -> None:
     reset_app_factory_cache()
     clear_page_registry()
     clear_mount_rx_config()
-
-
-def test_resolve_url_routing_default() -> None:
-    assert resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER
-
-
-def test_resolve_url_routing_legacy_django_led_raises(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from reflex_django.setup.errors import RoutingModeError
-
-    monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "django_led")
-    with pytest.raises(RoutingModeError):
-        resolve_url_routing()
 
 
 def test_import_page_packages_registers_pages(

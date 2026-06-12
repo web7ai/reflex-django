@@ -80,7 +80,7 @@ location /media/ {
 
 For S3 or similar, set `MEDIA_URL` to your CDN URL and use `django-storages`.
 
-In **`reflex_outer`**, the Django HTTP worker needs the same media configuration. See [Deployment](deployment.md).
+When using optional split-process dev (`RXDJANGO_PROXY_SERVER`), configure media on the Django `runserver` process as well. See [Deployment](deployment.md).
 
 ---
 

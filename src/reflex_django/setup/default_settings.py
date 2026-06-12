@@ -108,17 +108,9 @@ def _db_config_from_url(url: str) -> dict[str, object]:
 # Marker for the plugin so it can warn users running with the bundled defaults.
 REFLEX_DJANGO_AUTO_SETTINGS = True
 
-# ASGI routing mode for combining Reflex + Django:
-# - "django_outer" (default): Django is the outer ASGI app on one port,
-#   Reflex's Socket.IO/upload endpoints are mounted under Django. One process.
-#   Recommended for new projects. See docs/routing.md.
-# - "reflex_outer": Reflex is the outer app on the public port; Django admin/API/
-#   static run in a separate HTTP worker (auto-spawned in dev, supervised in prod).
-#   ORM and the event bridge stay in the Reflex process. See docs/routing.md.
-# - "reflex_led": Legacy — Reflex outer, Django mounted in-process by prefix.
-# - "django_led": Legacy alias (in-process, reserved-path guarantees).
-# - "auto": resolve from REFLEX_DJANGO_URL_ROUTING env or fall back to default.
-REFLEX_DJANGO_URL_ROUTING = os.environ.get("REFLEX_DJANGO_URL_ROUTING", "auto")
+# Base URL of an optional external Django HTTP server for split-process dev.
+# When unset, Django is mounted in the Reflex backend during ``run_reflex``.
+RXDJANGO_PROXY_SERVER = os.environ.get("RXDJANGO_PROXY_SERVER", "")
 
 # Catch-all mount prefix for :func:`reflex_django.django.urls.reflex_mount`.
 REFLEX_DJANGO_MOUNT_PREFIX = os.environ.get("REFLEX_DJANGO_MOUNT_PREFIX", "/")
@@ -129,14 +121,6 @@ REFLEX_DJANGO_AUTO_MOUNT = os.environ.get("REFLEX_DJANGO_AUTO_MOUNT", "1") not i
     "false",
     "False",
 }
-
-# ``REFLEX_OUTER`` only: spawn a Django-only HTTP worker for admin/API/static.
-REFLEX_DJANGO_HTTP_SUBPROCESS = os.environ.get(
-    "REFLEX_DJANGO_HTTP_SUBPROCESS", "1"
-) not in {"0", "false", "False"}
-REFLEX_DJANGO_HTTP_PORT = int(os.environ.get("REFLEX_DJANGO_HTTP_PORT", "8001"))
-# When empty, derived from REFLEX_DJANGO_HTTP_PORT (http://127.0.0.1:<port>).
-REFLEX_DJANGO_HTTP_UPSTREAM = os.environ.get("REFLEX_DJANGO_HTTP_UPSTREAM", "")
 
 # Optional dotted path to a callable returning rx.App (e.g. "myapp.reflex:create_app").
 # REFLEX_DJANGO_CREATE_APP = "myapp.reflex.create_app"
@@ -283,28 +267,12 @@ REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX: bool = False
 # Passing ``--with-vite`` forces the Vite-HMR loop regardless of this setting.
 REFLEX_DJANGO_SERVE_FROM_BUILD: bool = False
 
-# Whether the ASGI entry point (``reflex_django.asgi.entry:application``) should
-# build the SPA bundle once at startup when none is found on disk.
-#
-# The canonical production launch is a raw ASGI server, e.g.
-# ``uvicorn backend.asgi:application``. If the operator forgot to run
-# ``reflex export`` + ``manage.py collectstatic`` first, the catch-all view
-# would 404 every request with "Reflex SPA bundle not found", making a deploy
-# fail in a confusing way. When this is True (default), the server instead
-# builds the bundle once on first boot (equivalent to ``manage.py
-# export_reflex --frontend-only --no-zip --stage-to-static-root``) so the app
-# comes up serving a real SPA out of the box.
-#
-# Set to False (or env ``REFLEX_DJANGO_AUTO_EXPORT_ON_START=0``) in
-# environments where the bundle is built ahead of time (CI image build,
-# read-only filesystems, or when you want a fast, deterministic boot). The
-# build still requires Node/npm to be available on the host. ``manage.py
-# run_reflex`` disables this automatically because it manages builds itself.
-REFLEX_DJANGO_AUTO_EXPORT_ON_START: bool = True
+# Whether Django should build the SPA bundle once at startup when none is on disk.
+# Prefer pre-building in CI with ``manage.py export_reflex`` instead.
+REFLEX_DJANGO_AUTO_EXPORT_ON_START: bool = False
 
-# Additional reserved Reflex path prefixes for the outer dispatcher
-# (advanced; usually not needed). Combined with the defaults in
-# :data:`reflex_django.asgi.django_outer.DEFAULT_RESERVED_REFLEX_PREFIXES`.
+# Additional reserved Reflex path prefixes (advanced; usually not needed).
+# Combined with :data:`reflex_django.core.constants.RESERVED_REFLEX_PREFIXES`.
 REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES: tuple[str, ...] = ()
 
 # Static files (CSS, JavaScript, images) — served by ASGIStaticFilesHandler in

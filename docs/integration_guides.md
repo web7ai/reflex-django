@@ -35,24 +35,14 @@ No matter which side you start from, you will:
 1. Install `reflex` and `reflex-django`
 2. Put Reflex runtime config in `settings.py` (`REFLEX_DJANGO_RX_CONFIG`)
 3. Import page modules from `urls.py` so `@page` decorators register
-4. Point `config/asgi.py` at `reflex_django.asgi.entry.application`
+4. Point `config/asgi.py` at plain `get_asgi_application()` (see [minimal_asgi.py](snippets/minimal_asgi.py))
 5. Run `python manage.py run_reflex` instead of juggling separate servers
 
 Your `@page` routes, `@rx.event` handlers, and Django `urlpatterns` for `/admin` and `/api` work together. See [Routing](routing.md) for how URLs are split.
 
-### Choosing a routing mode (v1.0)
+### Optional split-process dev
 
-```text
-Need Django ORM + admin in the same process as Reflex?
-  └─ Default: django_outer (one ASGI process)
-
-Heavy Django HTTP load and want Reflex isolated on the public port?
-  └─ reflex_outer (Reflex outer + separate Django HTTP worker)
-```
-
-v1.0 supports **`django_outer`** and **`reflex_outer`** only. Legacy `reflex_led` / `django_led` modes are removed. See [v1 migration](migration/v1_migration.md) if you are upgrading.
-
-Media and uploads work in both modes once Django media is configured: [Media files](media_files.md), [File uploads](file_uploads.md).
+Run Django with `runserver` and set `RXDJANGO_PROXY_SERVER` when you want Django HTTP isolated from the Reflex backend. See [Migrating to mount-only](migration/v3_mount_only.md).
 
 ---
 
@@ -63,7 +53,7 @@ Media and uploads work in both modes once Django media is configured: [Media fil
 | Biggest lift | Writing your first `@page` in `views.py` | Adding `manage.py` + Django settings shell |
 | Config | Mostly new keys in existing `settings.py` | Move `rxconfig.py` into `settings.py` |
 | App entry | No `{app}/{app}.py` needed | Replace `app = rx.App()` with `from reflex_django import app` |
-| Default routing | `django_outer` (keep default) | Same unless you need `reflex_outer` |
+| Default dev | `run_reflex` with Django mounted in Reflex backend | Same; optional `RXDJANGO_PROXY_SERVER` for split Django |
 | Typical motivation | SPA on top of existing API/admin | Database and admin without rebuilding UI |
 
 ---
@@ -74,13 +64,13 @@ Media and uploads work in both modes once Django media is configured: [Media fil
 - [Pages in views.py](pages_in_views.md)
 - [Local development](local_development.md)
 - [Deployment](deployment.md)
-- [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer)
+- [Migrating to mount-only](migration/v3_mount_only.md)
 
 ---
 
 ## What just happened?
 
-You matched your starting codebase to one of three paths. Django-first teams add Reflex pages inside existing apps. Reflex-first teams wrap the UI in a Django project shell. Both land on the same v1.0 layout: settings-driven config, `@page` in `views.py`, and `run_reflex` for dev.
+You matched your starting codebase to one of three paths. Django-first teams add Reflex pages inside existing apps. Reflex-first teams wrap the UI in a Django project shell. Both land on the same v3 layout: settings-driven config, `@page` in `views.py`, and `run_reflex` for dev with Django mounted in the Reflex backend.
 
 ---
 

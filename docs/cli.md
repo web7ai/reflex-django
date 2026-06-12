@@ -15,7 +15,7 @@
 
 | Command | What it does |
 |:---|:---|
-| `python manage.py run_reflex` | Dev server: Vite on `:3000` (default) plus ASGI backend on `:8000`. |
+| `python manage.py run_reflex` | Dev: Vite on `:3000` + Reflex backend (Django mounted in-process). |
 | `python manage.py export_reflex` | Build the SPA bundle for CI and production. |
 
 Standard Django commands are unchanged:
@@ -36,14 +36,14 @@ This is the command you run while building UI.
 
 By default it:
 
-1. Compiles the Reflex SPA into `.web/`.
-2. Starts Vite on port `3000` (open this URL for the SPA).
-3. Waits for Vite, then starts uvicorn on port `8000` (admin, API, `/_event`).
-4. Watches `.py` files (see [Reload precedence](#reload-precedence)).
+1. Installs reflex-django integration (Django dispatch, event bridge, Vite proxy).
+2. Runs `reflex run`: Vite on port `3000` and the Reflex backend on port `8000`.
+3. Mounts Django ASGI inside the Reflex backend for configured URL prefixes (`/admin`, `/api`, …).
+4. Watches `.py` files for backend reload (see [Reload precedence](#reload-precedence)).
 
 --8<-- "snippets/run_reflex_command.md"
 
-Open **`http://localhost:3000/`** for UI work. In default **`django_outer`** mode, the SPA's `env.json` points admin, API, and `/_event` at **`http://localhost:8000`**. Use **`http://localhost:8000/admin/`** when you want admin directly.
+Open **`http://localhost:3000/`** for UI work. Admin and API work at **`http://localhost:3000/admin/`** (proxied) or **`http://localhost:8000/admin/`** (direct to Reflex backend). Set **`RXDJANGO_PROXY_SERVER`** only when Django runs on a separate server — see [Routing](routing.md).
 
 For compile dev on one port (no Vite), use **`--env dev`** and browse **`http://localhost:8000/`**. See [Local development](local_development.md).
 
@@ -61,7 +61,7 @@ For compile dev on one port (no Vite), use **`--env dev`** and browse **`http://
 | `--skip-rebuild` | With `--from-build` or `--env prod`, skip SPA build before start. |
 | `--no-reload` | Disable file watching. |
 | `--frontend-only` | Only Vite (or only build with `--from-build`); no backend. |
-| `--backend-only` | Only uvicorn; assumes bundle already on disk. |
+| `--backend-only` | Run plain Django ASGI only (no Vite). |
 | `--frontend-port N` | Vite port (default `3000`). |
 | `--backend-port N` | ASGI port (default `8000`). |
 | `--backend-host HOST` | Backend bind host (default `0.0.0.0`). |
@@ -95,8 +95,9 @@ python manage.py run_reflex --backend-port 9000
 ```text
 1. install_reflex_django_integration()
 2. Sets two-port dev (REFLEX_DJANGO_SEPARATE_DEV_PORTS=1, REFLEX_DJANGO_DEV_PROXY=0)
-3. reflex run: compiles .web, starts Vite :3000 and backend :8000
-4. Page edits hot-reload via Vite; backend reload skips views.py (see dev_watch)
+3. Patches .web/vite.config.js (Django + Reflex → Reflex backend, or split if RXDJANGO_PROXY_SERVER set)
+4. reflex run: Vite :3000 and Reflex backend :8000 (Django mounted in-process)
+5. Page edits hot-reload via Vite; backend reload on Python changes
 ```
 
 With `--from-build` or `--env dev`:
@@ -151,7 +152,7 @@ uv sync --frozen
 python manage.py migrate --noinput
 python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
 python manage.py collectstatic --noinput
-# start ASGI: reflex_django.asgi.entry:application
+# start Django ASGI: config.asgi:application
 ```
 
 ---

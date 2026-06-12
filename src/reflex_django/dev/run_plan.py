@@ -53,15 +53,14 @@ def build_run_plan(options: dict[str, Any]) -> RunPlan:
     is_prod = env_name == "prod"
     with_vite = bool(options.get("with_vite"))
     is_env_dev = options.get("env") == "dev"
-    is_single_port_dev = is_env_dev and not with_vite
     from_build = resolve_from_build(options)
-    serve_from_disk = is_prod or from_build or is_single_port_dev
+    serve_from_disk = is_prod or from_build
     return RunPlan(
         env_name=env_name,
         is_prod=is_prod,
         from_build=from_build,
         serve_from_disk=serve_from_disk,
-        is_single_port_dev=is_single_port_dev,
+        is_single_port_dev=False,
         frontend_only=bool(options.get("frontend_only")),
         backend_only=bool(options.get("backend_only")),
         skip_rebuild=bool(options.get("skip_rebuild")),

@@ -37,13 +37,12 @@ Python 3.12+, Django 6.0+, Reflex 0.9.2+.
 
 In production, usually **one ASGI process** on one port. In default dev, **two ports**: Vite `:3000` and backend `:8000`. See [Architecture](architecture.md).
 
-### What is the difference between `django_outer` and `reflex_outer`?
+### How does routing work in dev?
 
-**`django_outer` (default):** Django owns the public port; Reflex handles reserved paths like `/_event`.
+Default: `run_reflex` runs Vite on `:3000` and the Reflex backend on `:8000`. Django admin/API are mounted **in-process** inside the Reflex backend. Vite proxies all backend paths there. Set `RXDJANGO_PROXY_SERVER` only when Django runs separately. See [Routing](routing.md) and [Migrating to mount-only](migration/v3_mount_only.md).
 
-**`reflex_outer`:** Reflex owns the public port; Django admin/API run on an internal HTTP worker (default `:8001`).
-
-Same pages and state classes; only wiring changes. [Routing comparison](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+!!! note "Legacy modes removed"
+    **`django_outer`** and **`reflex_outer`** were removed in v3. Older docs may still mention them; use the mount-only model instead.
 
 ### Do I need CORS?
 
@@ -115,7 +114,7 @@ Yes: `python manage.py run_reflex --from-build --skip-rebuild`. [CLI reference](
 
 ### One container or two?
 
-One ASGI app for **`django_outer`**. **`reflex_outer`** may use two supervised processes internally. [Deployment](deployment.md).
+One Django ASGI process for HTTP in production, plus a Reflex backend (or static export) behind your proxy. In dev, Reflex backend serves both Reflex and Django routes in one process. [Deployment](deployment.md).
 
 ### Must I rebuild the SPA every deploy?
 

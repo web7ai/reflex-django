@@ -60,9 +60,7 @@ def _auto_mount_enabled() -> bool:
 
 
 def _should_auto_mount_urls() -> bool:
-    from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
-
-    return resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER
+    return True
 
 
 def has_reflex_mount(urlpatterns: Sequence[Any]) -> bool:
@@ -332,6 +330,40 @@ def schedule_auto_mount_after_admin() -> None:
     AdminConfig.ready = ready_with_auto_mount  # type: ignore[method-assign]
 
 
+def _ensure_default_admin_urlpatterns(
+    mod: Any,
+    patterns: list[Any],
+) -> list[Any]:
+    """Prepend default admin URLs when admin is installed but not yet wired."""
+    try:
+        from django.conf import settings
+    except Exception:
+        return patterns
+
+    if "django.contrib.admin" not in getattr(settings, "INSTALLED_APPS", ()):
+        return patterns
+
+    from reflex_django.django.urls import admin_urlpatterns
+    from reflex_django.mount.discovery import discover_django_prefixes
+
+    if "/admin" in discover_django_prefixes(patterns):
+        return patterns
+
+    admin_patterns = admin_urlpatterns("/admin")
+    if not admin_patterns:
+        return patterns
+
+    mod_urlpatterns = getattr(mod, "urlpatterns", None)
+    if isinstance(mod_urlpatterns, list):
+        mod_urlpatterns[:0] = admin_patterns
+        from django.urls import clear_url_caches
+
+        clear_url_caches()
+        return list(mod_urlpatterns)
+
+    return admin_patterns + patterns
+
+
 def maybe_auto_mount() -> ReflexMountHandle | None:
     """Append SPA catch-all from settings when enabled (boot-only, idempotent)."""
     global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE
@@ -353,6 +385,7 @@ def maybe_auto_mount() -> ReflexMountHandle | None:
 
     urlconf_name = getattr(settings, "ROOT_URLCONF", None)
     patterns: list[Any] = []
+    mod: Any | None = None
     if isinstance(urlconf_name, str) and urlconf_name:
         from importlib import import_module
 
@@ -360,6 +393,8 @@ def maybe_auto_mount() -> ReflexMountHandle | None:
         raw = getattr(mod, "urlpatterns", None)
         if isinstance(raw, list):
             patterns = list(raw)
+        if mod is not None:
+            patterns = _ensure_default_admin_urlpatterns(mod, patterns)
 
     if has_reflex_mount(patterns):
         _MOUNT_BOOT_COMPLETED = True

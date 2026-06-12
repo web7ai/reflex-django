@@ -136,9 +136,9 @@ python manage.py createsuperuser
 
 ---
 
-## Routing mode
+## Optional split-process dev
 
-Default: **`django_outer`**. Optional: **`reflex_outer`** when Django HTTP should run in a sidecar worker. See [comparison](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+Set `RXDJANGO_PROXY_SERVER` when Django should run on `runserver` separately from Reflex. See [Migrating to mount-only](migration/v3_mount_only.md).
 
 ---
 
@@ -176,7 +176,7 @@ See [Deployment](deployment.md).
 
 ## What just happened?
 
-You moved Reflex config into Django settings, deleted the standalone bootstrap path, and pointed ASGI at reflex-django. Your pages still compile to the same `.web/` tree, but auth, ORM, and admin now live in the same process (or the v1.0 `reflex_outer` sidecar layout) instead of a separate backend you wire by hand.
+You moved Reflex config into Django settings, deleted the standalone bootstrap path, and pointed ASGI at plain Django. Your pages still compile to the same `.web/` tree; auth, ORM, and admin run through Django with Reflex events on the same session cookies.
 
 ---
 

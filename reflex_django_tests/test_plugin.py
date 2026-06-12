@@ -13,6 +13,17 @@ def test_plugin_constructor_raises() -> None:
         ReflexDjangoPlugin()
 
 
-def test_make_dispatcher_raises() -> None:
-    with pytest.raises(DeprecationRemovedError):
-        make_dispatcher(None, backend_prefixes=("/admin",))
+def test_make_dispatcher_returns_transformer() -> None:
+    from reflex_django.asgi.app import make_dispatcher
+
+    calls: list[str] = []
+
+    async def django_asgi(scope, receive, send):  # noqa: ANN001
+        calls.append("django")
+
+    async def reflex_asgi(scope, receive, send):  # noqa: ANN001
+        calls.append("reflex")
+
+    transformer = make_dispatcher(django_asgi, backend_prefixes=("/admin",))
+    dispatch = transformer(reflex_asgi)
+    assert callable(dispatch)

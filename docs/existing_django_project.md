@@ -27,7 +27,7 @@ Good news: you add reflex-django like any other Django app. Your models stay put
 - [ ] `AsyncStreamingMiddleware` last in `MIDDLEWARE`
 - [ ] `REFLEX_DJANGO_RX_CONFIG` in `settings.py`
 - [ ] `import yourapp.views` in `urls.py` (so `@page` registers)
-- [ ] `config/asgi.py` → `from reflex_django.asgi.entry import application`
+- [ ] `config/asgi.py` → plain `get_asgi_application()` (see [minimal_asgi.py](snippets/minimal_asgi.py))
 - [ ] First `@page` in `{app}/views.py` with optional `AppState`
 - [ ] `python manage.py run_reflex` (not `runserver` + `reflex run`)
 
@@ -74,7 +74,7 @@ The streaming middleware must be **last**. It keeps Django admin streaming respo
 --8<-- "snippets/minimal_urls.py"
 ```
 
-Auto-detection reads the **first segment** of each top-level `path()` (`path("api/", include(...))` covers `/api/products/`, and so on). Pass explicit `REFLEX_DJANGO_DJANGO_PREFIX` only if auto-detection misses a prefix (common in `reflex_outer`). See [The three knobs](mental_model.md).
+Auto-detection reads the **first segment** of each top-level `path()` (`path("api/", include(...))` covers `/api/products/`, and so on). Pass explicit `REFLEX_DJANGO_DJANGO_PREFIX` only if auto-detection misses a prefix. See [The three knobs](mental_model.md).
 
 ---
 
@@ -136,10 +136,10 @@ This file can hold both Django views (`HttpResponse`) and Reflex pages (`rx.Comp
 --8<-- "snippets/run_reflex_command.md"
 
 - `http://localhost:3000/`: new Reflex pages (SPA + hot reload)
-- `http://localhost:8000/admin/`: admin, unchanged
-- `http://localhost:8000/api/...`: existing API, unchanged
+- `http://localhost:3000/admin/` or `http://localhost:8000/admin/`: admin (Django mounted in Reflex backend)
+- `http://localhost:3000/api/...` or `http://localhost:8000/api/...`: existing API
 
-With `REFLEX_DJANGO_SEPARATE_DEV_PORTS=True`, Vite on `:3000` proxies admin, API, and `/_event` to `:8000` in `django_outer` mode. Optional: `--env dev` to browse only `:8000`.
+With `REFLEX_DJANGO_SEPARATE_DEV_PORTS=True`, Vite on `:3000` proxies admin, API, and `/_event` to the Reflex backend. Optional: `--env dev` to browse only `:8000`.
 
 ---
 
@@ -157,15 +157,11 @@ Same origin, same cookies. Mobile clients can keep hitting `/api/` while browser
 
 ---
 
-## Routing mode
+## Optional split-process dev
 
-New integrations should stay on **`django_outer`** (the default). One process, simplest ops.
+If you need Django on `runserver` separately from Reflex, set `RXDJANGO_PROXY_SERVER` and run both processes. See [Routing](routing.md) and [Migrating to mount-only](migration/v3_mount_only.md).
 
-If admin/API traffic competes with live Reflex sessions, switch to **`reflex_outer`**. Same `urls.py`, different dev networking:
-
---8<-- "snippets/reflex_outer_settings.py"
-
-Full comparison: [django_outer vs reflex_outer](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+--8<-- "snippets/proxy_server_settings.py"
 
 ---
 

@@ -376,41 +376,38 @@ def resolve_vite_dev_proxy_routes() -> tuple[ViteProxyRoute, ...]:
     """Resolve Vite proxy route groups for two-port local dev."""
     from reflex_base.config import get_config
 
-    from reflex_django.asgi.http_subprocess import resolve_django_http_upstream
+    from reflex_django.core.env import resolve_rxdjango_proxy_server
     from reflex_django.mount.prefixes import resolve_prefixes
-    from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 
     prefix_config = resolve_prefixes()
     django_prefixes = _normalized_prefixes(prefix_config.backend_prefixes_for_asgi())
     reflex_prefixes = _normalized_prefixes(RESERVED_REFLEX_PREFIXES)
     config = get_config()
-    mode = resolve_url_routing()
+    reflex_target = config.api_url.rstrip("/")
+    django_target = resolve_rxdjango_proxy_server() or reflex_target
 
-    if mode == UrlRoutingMode.REFLEX_OUTER:
-        routes: list[ViteProxyRoute] = []
-        if django_prefixes:
-            routes.append(
-                ViteProxyRoute(
-                    target=resolve_django_http_upstream(),
-                    prefixes=django_prefixes,
-                )
-            )
-        if reflex_prefixes:
-            routes.append(
-                ViteProxyRoute(
-                    target=config.api_url.rstrip("/"),
-                    prefixes=reflex_prefixes,
-                )
-            )
-        return tuple(routes)
+    if django_target == reflex_target:
+        combined = _normalized_prefixes((*django_prefixes, *reflex_prefixes))
+        if not combined:
+            return ()
+        return (ViteProxyRoute(target=reflex_target, prefixes=combined),)
 
-    backend_target = config.api_url.rstrip("/")
-    combined_prefixes = (
-        vite_dev_proxy_prefixes(django_prefixes)
-        if django_prefixes
-        else vite_dev_proxy_prefixes(())
-    )
-    return (ViteProxyRoute(target=backend_target, prefixes=combined_prefixes),)
+    routes: list[ViteProxyRoute] = []
+    if django_prefixes:
+        routes.append(
+            ViteProxyRoute(
+                target=django_target,
+                prefixes=django_prefixes,
+            )
+        )
+    if reflex_prefixes:
+        routes.append(
+            ViteProxyRoute(
+                target=reflex_target,
+                prefixes=reflex_prefixes,
+            )
+        )
+    return tuple(routes)
 
 
 def ensure_vite_django_dev_proxy(
@@ -473,11 +470,10 @@ def ensure_vite_django_dev_proxy(
 
 
 def strip_vite_django_dev_proxy(web_dir: Path) -> bool:
-    """Remove Vite→Django proxy rules from ``.web/`` (DJANGO_OUTER single-port mode).
+    """Remove Vite→Django proxy rules from ``.web/`` when two-port dev is off.
 
-    In :class:`~reflex_django.setup.routing.UrlRoutingMode.DJANGO_OUTER`, the browser
-    uses the Django port and Django reverse-proxies SPA traffic to Vite.
-    Bidirectional Vite ``server.proxy`` rules would create request loops.
+    When the browser uses Django directly, bidirectional Vite ``server.proxy``
+    rules would create request loops.
 
     Returns:
         ``True`` when any file was modified or deleted.

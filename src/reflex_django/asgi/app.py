@@ -22,7 +22,6 @@ from typing import Any
 
 from reflex_django.setup.conf import configure_django
 from reflex_django.core.constants import RESERVED_REFLEX_PREFIXES
-from reflex_django.setup.routing import UrlRoutingMode
 
 ASGIScope = MutableMapping[str, Any]
 ASGIMessage = MutableMapping[str, Any]
@@ -190,8 +189,50 @@ def _patch_http_only_static_mounts(app: ASGIApp) -> ASGIApp:
     return app
 
 
-def make_dispatcher(*args: object, **kwargs: object) -> Callable[[ASGIApp], ASGIApp]:
-    """Removed in v1.0 — use :func:`reflex_django.asgi.entry.build_django_outer_application`."""
-    from reflex_django.setup.plugin import make_dispatcher as _removed
+def make_dispatcher(
+    django_asgi: ASGIApp,
+    *,
+    backend_prefixes: tuple[str, ...],
+) -> Callable[[ASGIApp], ASGIApp]:
+    """Build an ``api_transformer`` that routes Django URL prefixes to Django ASGI.
 
-    return _removed(*args, **kwargs)  # type: ignore[return-value]
+    Used when ``manage.py run_reflex`` runs the native Reflex backend with Django
+    mounted in-process. Set ``RXDJANGO_PROXY_SERVER`` only when Django runs on a
+    separate HTTP server instead.
+    """
+    if not backend_prefixes:
+        msg = "backend_prefixes must contain at least one prefix."
+        raise ValueError(msg)
+
+    normalized: tuple[str, ...] = tuple(
+        _normalize_prefix(prefix) for prefix in backend_prefixes
+    )
+    _check_reserved(normalized)
+
+    def transformer(reflex_asgi: ASGIApp) -> ASGIApp:
+        reflex_asgi = _patch_http_only_static_mounts(reflex_asgi)
+
+        async def dispatch(
+            scope: ASGIScope, receive: ASGIReceive, send: ASGISend
+        ) -> None:
+            scope_type = scope.get("type")
+            if scope_type == "lifespan":
+                await reflex_asgi(scope, receive, send)
+                return
+
+            path = scope.get("path", "")
+
+            if _is_reserved_reflex_path(path):
+                await reflex_asgi(scope, receive, send)
+                return
+            if _should_route_to_django(scope, path, normalized):
+                await django_asgi(scope, receive, send)
+                return
+
+            await reflex_asgi(scope, receive, send)
+
+        dispatch.backend_prefixes = normalized  # pyright: ignore[reportFunctionMemberAccess]
+        return dispatch
+
+    transformer.backend_prefixes = normalized  # pyright: ignore[reportFunctionMemberAccess]
+    return transformer

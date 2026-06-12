@@ -84,7 +84,7 @@ Import your page module so `@page` decorators register at startup. The SPA catch
 --8<-- "snippets/minimal_asgi.py"
 ```
 
-This is the single ASGI callable for `manage.py run_reflex` and for production (uvicorn, granian, hypercorn, and so on). Django and Reflex share one process in `django_outer` mode (the default).
+This is your Django ASGI entry for production. Dev uses `manage.py run_reflex`, which runs the Reflex backend with Django mounted in-process.
 
 ---
 
@@ -114,7 +114,7 @@ Delete any leftover `rxconfig.py`. Set `"app_name": "shop"` in `REFLEX_DJANGO_RX
 
 ## What just happened?
 
-You installed three packages, registered one Django app, pointed ASGI at `reflex_django.asgi.entry.application`, and started the default two-port dev loop. Vite serves the SPA on `:3000`; Django and the Reflex backend listen on `:8000`. When `REFLEX_DJANGO_SEPARATE_DEV_PORTS=True`, Vite proxies admin, API, and `/_event` to the backend so cookies stay on one origin while you browse `:3000`.
+You installed three packages, registered one Django app, pointed ASGI at plain Django, and started the default two-port dev loop. Vite serves the SPA on `:3000`; the Reflex backend on `:8000` serves admin, API, and `/_event` with Django mounted in-process.
 
 ---
 

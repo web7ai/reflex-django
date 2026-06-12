@@ -16,23 +16,27 @@ tags: [dev, cli]
 
 ## The short version
 
+**Default (one terminal):**
+
 ```bash
 python manage.py run_reflex
 ```
 
-That one command starts **two servers** in default `django_outer` mode:
-
-| Server | Port (default) | What you open it for |
+| Server | Port (default) | Role |
 |:---|:---|:---|
-| **Vite** (frontend) | `3000` | **Reflex UI** (pages, hot reload, in-browser navigation) |
-| **ASGI backend** | `8000` | **Django + Reflex backend** (admin, API, `/_event` WebSocket) |
+| **Vite** | `3000` | Reflex UI with HMR — **open this for frontend work** |
+| **Reflex backend** | (Reflex default) | Django admin/API, `/_event`, `/_upload` — all proxied from Vite |
 
-**For frontend work, open `http://localhost:3000/`.**
+**Browse `http://localhost:3000/`** for the SPA. Django admin/API and Reflex WebSocket paths are proxied to the Reflex backend (Django is mounted there in-process).
 
-**For backend-only checks**, hit `http://localhost:8000/admin/` or your API on `:8000`.
+**Optional — separate Django server:** run `python manage.py runserver` in another terminal and set:
 
-!!! tip "One URL in the address bar?"
-    `python manage.py run_reflex --env dev` serves the compiled SPA from Django on `:8000` only (no Vite, no HMR).
+```python
+# settings.py
+RXDJANGO_PROXY_SERVER = "http://127.0.0.1:8000"
+```
+
+Then Vite proxies Django prefixes to that server instead of the Reflex backend.
 
 ---
 
@@ -40,40 +44,16 @@ That one command starts **two servers** in default `django_outer` mode:
 
 Default dev sets `REFLEX_DJANGO_SEPARATE_DEV_PORTS=True`. Vite listens on `:3000` and **proxies backend paths** so the browser stays on one origin for cookies and CSRF.
 
-| Routing mode | Django prefixes (`/admin`, `/api`, …) | Reflex paths (`/_event`, `/_upload`, …) |
+| Path group | Proxied to (default) | With `RXDJANGO_PROXY_SERVER` |
 |:---|:---|:---|
-| **`django_outer`** (default) | → `:8000` | → `:8000` |
-| **`reflex_outer`** | → `:8001` (Django HTTP worker) | → `:8000` (Reflex outer) |
-
-In **`django_outer`**, every proxied backend path goes to the **same** ASGI process on `:8000`.
-
-In **`reflex_outer`**, `run_reflex` spawns a Django HTTP worker on `:8001` automatically. Reflex reserved paths still proxy to `:8000`. You do not browse `:8001` directly; stay on `:3000` or `:8000`.
+| Django prefixes (`/admin`, `/api`, …) | Reflex backend (`config.api_url`) | External Django server |
+| Reflex paths (`/_event`, `/_upload`, …) | Reflex backend (`config.api_url`) | Reflex backend |
 
 ```mermaid
 flowchart LR
-  subgraph browser [Browser]
-    UI["localhost:3000 SPA"]
-  end
-
-  subgraph vite [Vite on :3000]
-    HMR["HMR and page routes"]
-    PROXY["Backend proxy plugin"]
-  end
-
-  subgraph django_outer_mode ["django_outer default"]
-    BE8000["ASGI :8000 Django + Reflex"]
-  end
-
-  subgraph reflex_outer_mode ["reflex_outer"]
-    DJ8001["Django HTTP worker :8001"]
-    RX8000["Reflex outer :8000"]
-  end
-
-  UI --> HMR
-  UI --> PROXY
-  PROXY -->|"admin, api, static, /_event"| BE8000
-  PROXY -->|"admin, api, static"| DJ8001
-  PROXY -->|"/_event, /_upload, etc."| RX8000
+  Browser["Browser :3000"] --> Vite[Vite]
+  Vite -->|"admin, api, static"| Django["Django :8000"]
+  Vite -->|"/_event, /_upload"| Reflex[Reflex backend]
 ```
 
 !!! warning "Single-port dev strips proxies"
@@ -85,23 +65,22 @@ flowchart LR
 
 When you run the default command (no extra flags):
 
-1. **Compiles** the Reflex SPA into `.web/`
-2. **Patches** `.web/vite.config.js` with backend proxy routes (two-port mode)
-3. **Starts Vite** on the frontend port (default `3000`)
-4. **Starts** uvicorn (or granian) on `:8000` with `reflex_django.asgi.entry:application`
-5. **Watches** Python files and reloads the backend; page edits hot-reload through Vite
+1. **Validates** Vite proxy routes (Django + Reflex → Reflex backend by default)
+2. **Patches** `.web/vite.config.js` with proxy rules
+3. **Mounts** Django ASGI inside the Reflex backend for configured URL prefixes
+4. **Delegates** to `reflex run` (Vite + native Reflex backend on `:backend_port`)
+
+Set `RXDJANGO_PROXY_SERVER` only when Django runs on a separate HTTP server.
 
 You should see a banner like:
 
 ```text
-reflex-django: Vite-HMR dev loop (default). Editing a Reflex page recompiles the SPA ...
+reflex-django: Reflex dev (Vite + Reflex backend) — browse http://localhost:3000/
+    Django must already be running at http://127.0.0.1:8000 ...
 reflex-django patched .web/vite.config.js for backend proxies (1 upstream group(s)).
-INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-In `reflex_outer`, you also see the Django HTTP worker come up on `:8001`:
-
---8<-- "snippets/reflex_outer_settings.py"
+--8<-- "snippets/proxy_server_settings.py"
 
 ### Commands to avoid for SPA dev
 
@@ -186,13 +165,13 @@ Include both `:3000` and `:8000` in `CSRF_TRUSTED_ORIGINS`, set `USE_X_FORWARDED
 Restart `run_reflex` and hard-refresh. Check the compile log for "frontend stability patches".
 
 **Wrong backend port from `:3000`**
-Confirm `REFLEX_DJANGO_SEPARATE_DEV_PORTS=1` (set automatically in default two-port dev). In `reflex_outer`, list custom API roots in `REFLEX_DJANGO_DJANGO_PREFIX` if auto-detection misses them.
+Confirm `REFLEX_DJANGO_SEPARATE_DEV_PORTS=1` (set automatically in default two-port dev). If admin/API 404, check `django_prefix` and that admin is in `urlpatterns`. List custom API roots in `REFLEX_DJANGO_DJANGO_PREFIX` if auto-detection misses them.
 
 ---
 
 ## What just happened?
 
-Default dev keeps you on `:3000` for the SPA while Vite forwards Django and Reflex backend traffic to the right upstream. In `django_outer`, that upstream is always `:8000`. In `reflex_outer`, Django HTTP goes to `:8001` and Reflex internals stay on `:8000`, but your browser still uses one origin on `:3000`.
+Default dev keeps you on `:3000` for the SPA while Vite forwards all backend traffic to the Reflex backend on `:backend_port`. Django admin and API are served from Django ASGI mounted in that process. Set `RXDJANGO_PROXY_SERVER` only when Django runs separately.
 
 ---
 

@@ -58,11 +58,11 @@ Runs Django middleware for each Reflex event so `self.request.user` works. [WebS
 ### `DjangoUserState`
 Reactive snapshot of user, messages, CSRF, and language for UI binding.
 
-### `DjangoOuterDispatcher`
-Outer ASGI router in **`django_outer`** mode. [Routing](routing.md).
+### `make_dispatcher`
+Path-prefix ASGI transformer attached to `app.api_transformer` during dev. Routes Django URL prefixes to Django ASGI and Reflex reserved paths to Reflex. [Routing](routing.md).
 
-### `django_outer`
-Default routing: Django owns the public port; Reflex handles reserved prefixes.
+### `django_outer` / `reflex_outer`
+**Removed in v3.** Historical routing modes from v1–v2. See [Migrating to mount-only](migration/v3_mount_only.md).
 
 ### `django_prefix`
 URL prefixes Django owns (e.g. `/admin`, `/api`). Auto-detected from `urlpatterns` unless overridden.
@@ -124,10 +124,10 @@ Compile label in `REFLEX_DJANGO_RX_CONFIG`, not necessarily your Django app pack
 Optional URL helper for manual catch-all wiring. [Configuration](configuration.md).
 
 ### `ReflexMountView`
-Django view that serves compiled `index.html` for SPA routes in **`django_outer`**.
+Django view that serves compiled `index.html` for SPA routes in production URLconf.
 
-### `reflex_outer`
-Routing mode where Reflex owns the public port and proxies Django HTTP to a worker (default port **8001**).
+### `RXDJANGO_PROXY_SERVER`
+Optional dev setting. When set, Vite proxies Django URL prefixes to a separate `runserver` process. When unset, Django runs in-process on the Reflex backend. [Local development](local_development.md).
 
 ### `Reserved Reflex prefixes`
 Paths like `/_event`, `/_upload`, `/_health`, `/ping` always handled by Reflex.

@@ -1,21 +1,4 @@
-"""Reflex-Django: run a Django backend alongside a Reflex app.
-
-This package provides an opt-in plugin that mounts a Django ASGI application
-(with Django ORM and Django Admin) on the same ASGI process as a Reflex app.
-The Reflex Starlette + Socket.IO stack is kept unchanged; Django is routed at
-configurable path prefixes (default: ``/admin`` for admin; optional
-``backend_prefix`` for your own Django HTTP routes).
-
-Typical usage in ``rxconfig.py``::
-
-    import reflex as rx
-    from reflex_django import ReflexDjangoPlugin
-
-    config = rx.Config(
-        app_name="myapp",
-        plugins=[ReflexDjangoPlugin(settings_module="myapp.settings")],
-    )
-"""
+"""Reflex-Django: mount a Reflex SPA in Django with a shared event bridge."""
 
 from __future__ import annotations
 
@@ -54,11 +37,6 @@ if TYPE_CHECKING:
     )
     from reflex_django.auth_state import user_snapshot
     from reflex_django.serializers import ReflexDjangoModelSerializer
-    from reflex_django.asgi.entry import (
-        application as asgi_application,
-        build_application as build_asgi_application,
-        build_django_outer_application,
-    )
     from reflex_django.bridge.context import (
         begin_event_request,
         begin_event_response,
@@ -90,16 +68,13 @@ __all__ = [
     "ReflexDjangoModelSerializer",
     "ReflexDjangoPlugin",
     "add_auth_pages",
-    "asgi_application",
     "auth_pages",
     "auth_routes",
     "auser_has_perm",
     "autoload",
     "begin_event_request",
     "begin_event_response",
-    "build_asgi_application",
     "build_django_asgi",
-    "build_django_outer_application",
     "app",
     "configure_django",
     "create_app",
@@ -138,12 +113,6 @@ __all__ = [
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "app": ("reflex_django.runtime.reflex_app", "app"),
-    "asgi_application": ("reflex_django.asgi.entry", "application"),
-    "build_asgi_application": ("reflex_django.asgi.entry", "build_application"),
-    "build_django_outer_application": (
-        "reflex_django.asgi.entry",
-        "build_django_outer_application",
-    ),
     "begin_event_response": ("reflex_django.bridge.context", "begin_event_response"),
     "current_csrf_token": ("reflex_django.bridge.context", "current_csrf_token"),
     "current_messages": ("reflex_django.bridge.context", "current_messages"),

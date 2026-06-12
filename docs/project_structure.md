@@ -29,7 +29,7 @@ myproject/
 ├── config/                       # Django project package
 │   ├── settings.py               # INSTALLED_APPS, MIDDLEWARE, REFLEX_DJANGO_*
 │   ├── urls.py                   # Django routes + import page modules
-│   ├── asgi.py                   # reflex_django.asgi.entry:application
+│   ├── asgi.py                   # get_asgi_application() — plain Django ASGI
 │   └── wsgi.py
 │
 ├── shop/                         # a Django app
@@ -62,7 +62,7 @@ For the mental model behind those three knobs, see [The three knobs](mental_mode
 |:---|:---|
 | `config/settings.py` | Django apps, middleware, database, `REFLEX_DJANGO_*` overrides |
 | `config/urls.py` | Django routes; `import shop.views` to register pages at import time |
-| `config/asgi.py` | One line pointing at `reflex_django.asgi.entry:application` |
+| `config/asgi.py` | Plain Django ASGI: `get_asgi_application()` |
 | `{app}/models.py` | Django ORM models (unchanged) |
 | `{app}/views.py` | `@page`-decorated Reflex pages and `AppState` subclasses |
 | `{app}/serializers.py` | Optional `ReflexDjangoModelSerializer` classes |

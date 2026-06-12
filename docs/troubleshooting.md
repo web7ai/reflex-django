@@ -22,8 +22,8 @@ Start with the symptom below. Each section points to the long guide when you nee
 
 **Likely causes:**
 
-1. Backend on `:8000` is not running yet (Vite started before uvicorn).
-2. Wrong upstream in `reflex_outer` (Django HTTP worker not on `:8001`).
+1. Reflex backend on `:8000` is not running yet (Vite started before the backend).
+2. `RXDJANGO_PROXY_SERVER` points at a Django server that is not running.
 3. Stale or missing proxy block in `.web/vite.config.js` after a compile.
 
 **Fix:**
@@ -34,8 +34,8 @@ Start with the symptom below. Each section points to the long guide when you nee
 python manage.py run_reflex
 ```
 
-2. Wait for both lines in the log: Vite ready on `:3000` and uvicorn on `:8000`.
-3. In `reflex_outer`, confirm the Django HTTP worker is up on `REFLEX_DJANGO_HTTP_PORT` (default `8001`). See [Routing](routing.md#choosing-a-mode-django_outer-vs-reflex_outer).
+2. Wait for both lines in the log: Vite ready on `:3000` and Reflex backend on `:8000`.
+3. If using `RXDJANGO_PROXY_SERVER`, confirm Django is running at that URL.
 4. If proxies disappeared after compile, restart `run_reflex` so `ensure_vite_django_dev_proxy_from_config()` repatches Vite.
 
 **Related:** [Local development](local_development.md), [Routing](routing.md)
@@ -155,7 +155,7 @@ python manage.py run_reflex
 
 **Fix:**
 
-1. Default dev: browse `:3000` and confirm `.web/vite.config.js` lists `/_event` with WebSocket proxy to `:8000` (`django_outer`) or `:8000` Reflex outer (`reflex_outer`).
+1. Default dev: browse `:3000` and confirm `.web/vite.config.js` lists `/_event` with WebSocket proxy to the Reflex backend (`:8000` by default).
 2. Production nginx (example):
 
 ```nginx
@@ -183,7 +183,7 @@ location /_event {
 
 1. Env var misspelled. The real name is `REFLEX_DJANGO_DJANGO_PREFIX`.
 2. Prefix list out of sync with `urlpatterns` (auto-detection skipped a `re_path`).
-3. `reflex_outer`: Django prefixes must include every admin/API root the browser can hit.
+3. Ensure Django prefixes (`/admin`, `/api`, …) are in `urlpatterns` and listed in `django_prefix` (auto-detected or explicit).
 
 **Fix:**
 
@@ -209,7 +209,8 @@ export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/internal"
 | Blank UI on `:8000` in default dev | Open `:3000` for the SPA. `:8000` is backend-only unless you use `--env dev`. |
 | Vite silently on `:3001` | Stop the process holding `:3000`. reflex-django sets `strictPort: true`. |
 | API works on `:8000` but not `:3000` | Confirm two-port mode: `REFLEX_DJANGO_SEPARATE_DEV_PORTS=1` (default for `run_reflex`). |
-| `reflex_outer` admin fails from `:3000` | Django HTTP must run on `REFLEX_DJANGO_HTTP_PORT` (default `:8001`). Do not browse `:8001` directly. |
+| Admin/API 404 from `:3000` or `:8000` | Confirm admin is in `urlpatterns`, `django_prefix` includes `/admin`, and you restarted `run_reflex` after URL changes. |
+| Split-process dev 502 | When using `RXDJANGO_PROXY_SERVER`, confirm Django is running at that URL. |
 
 **Fix:** Use `python manage.py run_reflex` (not bare `runserver` or lone uvicorn) for SPA dev. Override ports with `REFLEX_DJANGO_RX_CONFIG` or `REFLEX_DJANGO_FRONTEND_PORT` / `REFLEX_DJANGO_BACKEND_PORT`.
 

@@ -8,7 +8,6 @@ from unittest import mock
 
 import pytest
 
-from reflex_django.setup.routing import UrlRoutingMode
 from reflex_django.views import mount
 
 
@@ -63,14 +62,11 @@ def test_dev_proxy_target_is_self(
 
 
 def _patch_common(monkeypatch: pytest.MonkeyPatch) -> dict[str, mock.MagicMock]:
-    """Patch the collaborators of ``_handle_django_outer`` and return them."""
+    """Patch the collaborators of ``_handle`` and return them."""
     serve = mock.MagicMock(return_value=_FakeResponse(200))
     monkeypatch.setattr(mount, "_serve_spa_response", serve)
     monkeypatch.setattr(
         mount, "maybe_render_spa_html", lambda _req, resp: resp
-    )
-    monkeypatch.setattr(
-        mount, "resolve_url_routing", lambda: UrlRoutingMode.DJANGO_OUTER
     )
     return {"serve": serve}
 
@@ -89,7 +85,7 @@ def test_self_target_serves_from_disk(
     view = mount.ReflexMountView()
     request = _FakeRequest(port="3000")
 
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     proxy.assert_not_called()
     patched["serve"].assert_called_once_with("/favicon.ico")
@@ -106,7 +102,7 @@ def test_self_loop_disables_dev_proxy_process_wide(
     monkeypatch.setattr(mount, "reverse_proxy_to_vite", mock.AsyncMock())
 
     view = mount.ReflexMountView()
-    asyncio.run(view._handle_django_outer(_FakeRequest(port="3000")))  # type: ignore[arg-type]
+    asyncio.run(view._handle(_FakeRequest(port="3000")))  # type: ignore[arg-type]
 
     assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
     assert mount._dev_proxy_self_loop_handled is True
@@ -126,7 +122,7 @@ def test_proxy_502_falls_back_to_disk(
     view = mount.ReflexMountView()
     request = _FakeRequest(port="8000")  # different port -> not self
 
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     proxy.assert_awaited_once()
     patched["serve"].assert_called_once_with("/favicon.ico")
@@ -147,9 +143,9 @@ def test_second_request_during_cooldown_skips_proxy(
     request = _FakeRequest(port="8000")  # not self
 
     # First request probes Vite (502) and arms the cooldown.
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
     # Second request is inside the cooldown -> no second probe.
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     proxy.assert_awaited_once()
     assert patched["serve"].call_count == 2
@@ -175,8 +171,8 @@ def test_cooldown_logs_warning_only_once(
 
     view = mount.ReflexMountView()
     request = _FakeRequest(port="8000")
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     assert len(warnings) == 1
 
@@ -196,7 +192,7 @@ def test_healthy_proxy_response_is_used(
     view = mount.ReflexMountView()
     request = _FakeRequest(port="8000")
 
-    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    result = asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     proxy.assert_awaited_once()
     patched["serve"].assert_not_called()
@@ -218,7 +214,7 @@ def test_proxy_502_returns_503_when_dev_proxy_forced(
     view = mount.ReflexMountView()
     request = _FakeRequest(port="8000")
 
-    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    result = asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     proxy.assert_awaited_once()
     patched["serve"].assert_not_called()
@@ -236,7 +232,7 @@ def test_separate_ports_returns_plain_not_found(
     view = mount.ReflexMountView()
     request = _FakeRequest(port="8000", path="/login")
 
-    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    result = asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     patched["serve"].assert_not_called()
     assert result.status_code == 404
@@ -258,8 +254,8 @@ def test_cooldown_returns_503_when_dev_proxy_forced(
     view = mount.ReflexMountView()
     request = _FakeRequest(port="8000")
 
-    asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
-    result = asyncio.run(view._handle_django_outer(request))  # type: ignore[arg-type]
+    asyncio.run(view._handle(request))  # type: ignore[arg-type]
+    result = asyncio.run(view._handle(request))  # type: ignore[arg-type]
 
     proxy.assert_awaited_once()
     patched["serve"].assert_not_called()

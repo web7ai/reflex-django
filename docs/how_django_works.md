@@ -165,7 +165,7 @@ myproject/
 ├── config/
 │   ├── settings.py
 │   ├── urls.py
-│   └── asgi.py              # reflex_django.asgi.entry.application
+│   └── asgi.py              # get_asgi_application() (production)
 └── shop/
     ├── models.py
     ├── views.py             # Django views and Reflex pages

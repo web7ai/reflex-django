@@ -13,7 +13,7 @@ def test_resolve_from_build_env_prod_is_true():
     assert resolve_from_build({"env": "prod"}) is True
 
 
-def test_build_run_plan_single_port_dev():
+def test_build_run_plan_default_dev_uses_vite():
     plan = build_run_plan({"env": "dev"})
-    assert plan.is_single_port_dev is True
-    assert plan.serve_from_disk is True
+    assert plan.is_single_port_dev is False
+    assert plan.serve_from_disk is False

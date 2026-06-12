@@ -76,24 +76,27 @@ That is the gap. It is not glamorous. It is just plumbing. (The kind of plumbing
 
 reflex-django is the plumbing. It does three concrete things:
 
-### 1. One process (one port in production, two in default dev)
+### 1. One Reflex backend in dev; Django ASGI in production
 
-In **`django_outer`** (the default), Django is the outer ASGI app. Reflex's internal endpoints (`/_event`, `/_upload`, `/_health`) mount inside Django.
+**Default dev:** `run_reflex` runs Vite on `:3000` and the Reflex backend on `:8000`. Django admin and API are mounted **in-process** inside that backend via `make_dispatcher`. You browse `:3000`; Vite proxies all backend paths.
 
-**Production** (and `--env dev` compile dev): everything on one port:
+**Production:** Django ASGI serves admin, API, static, and the compiled SPA shell. Your edge proxy forwards `/_event` to a Reflex backend (or you serve static export only).
 
 ```text
-  Browser  →  port 8000  →  Django  →  /admin/   → Django admin
-                                    →  /api/     → your API views
-                                    →  /         → Reflex SPA shell
-                                    →  /_event   → Reflex WebSocket
+  Dev — browse :3000
+  Browser  →  Vite  →  Reflex backend (:8000)
+                           ├── /admin, /api  → Django ASGI (in-process)
+                           ├── /_event       → Reflex WebSocket
+                           └── /, /about     → Reflex SPA
+
+  Production
+  Browser  →  edge proxy  →  Django (:8000) for admin, API, SPA shell
+                         →  Reflex backend for /_event
 ```
 
-**Default two-port dev:** `run_reflex` starts Vite on `:3000` and the backend on `:8000`. You browse `:3000`; the SPA calls admin, API, and `/_event` on `:8000` via `env.json`.
+Set `RXDJANGO_PROXY_SERVER` only when Django runs on a separate `runserver`. See [Routing](routing.md).
 
-In **`reflex_outer`**, Reflex owns the public port and proxies Django HTTP (admin, API) to a dedicated worker. Events and the ORM still run in the main process. See [Routing](routing.md).
-
-One process for events. Shared cookies. No CORS.
+One cookie jar in the browser during dev. No CORS for the SPA.
 
 ### 2. Full middleware chain on every Reflex event
 
@@ -137,22 +140,19 @@ You configure Reflex like a Django app, because in your project, it is one. See 
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
-│                  One Python process, port 8000                   │
+│           Reflex backend (dev) or split at edge (prod)           │
 │                                                                  │
-│   HTTP request                                                   │
+│   HTTP (via Vite proxy in dev)                                   │
 │        │                                                         │
 │        ▼                                                         │
-│   Django (outer, django_outer mode)                              │
-│        ├── /admin, /api, /static  →  your Django views           │
-│        └── /, /about, ...         →  serve the Reflex SPA shell  │
+│   make_dispatcher → /admin, /api  →  Django urlpatterns          │
+│                  → /, /about      →  Reflex SPA                  │
 │                                                                  │
-│   WebSocket event (button click)                                 │
+│   WebSocket /_event                                              │
 │        │                                                         │
 │        ▼                                                         │
-│   /_event  →  build synthetic HttpRequest                        │
-│            →  run settings.MIDDLEWARE (the whole chain)          │
-│            →  bind self.request, self.user, self.session, ...   │
-│            →  run your @rx.event handler                         │
+│   DjangoEventBridge → synthetic HttpRequest + MIDDLEWARE         │
+│                    → your @rx.event handler                      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

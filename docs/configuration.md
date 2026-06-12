@@ -136,10 +136,12 @@ Optional tunables in `settings.py`. Defaults are sensible. Most projects change 
 
 | Setting | Default | What it does |
 |:---|:---|:---|
-| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (becomes `"django_outer"`) | Routing mode. Set `"reflex_outer"` when Reflex owns the public port. See [Routing](routing.md). Legacy `reflex_led` / `django_led` were removed in v1.0. |
+| `RXDJANGO_PROXY_SERVER` | `""` | Optional. When set, Vite proxies Django prefixes to this external server during dev. When unset, Django is served from the Reflex backend. |
 | `REFLEX_DJANGO_SERVE_FROM_BUILD` | `False` | When `False`, `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to serve a pre-built SPA from disk. |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `()` | Extra path prefixes always routed to Reflex. |
 | `REFLEX_DJANGO_DEV_PROXY` | `True` in settings; `False` when default Vite mode runs | When `True`, Django reverse-proxies SPA routes to Vite in DEBUG. |
+
+Removed in v3: `REFLEX_DJANGO_URL_ROUTING`, `REFLEX_DJANGO_HTTP_*`. See [Migrating to mount-only](migration/v3_mount_only.md).
 
 For the dev URL (`:8000`), CSRF trusted origins, and optional dev HTTP middleware, see [Local development](local_development.md).
 
@@ -251,8 +253,7 @@ app.add_page(home, route="/")
 | `REFLEX_DJANGO_MOUNT_PREFIX` | SPA mount path (default `/`) |
 | `REFLEX_DJANGO_RX_CONFIG` | Any allowed `rx.Config` field, including **`app_name`** |
 | `REFLEX_DJANGO_PLUGINS` | Reflex plugins |
-| `REFLEX_DJANGO_PLUGIN` | Built-in plugin kwargs (`django_prefix`, and so on) |
-| `REFLEX_DJANGO_URL_ROUTING` | `django_outer` / `reflex_outer` |
+| `REFLEX_DJANGO_PLUGIN` | Legacy plugin kwargs (mostly unused; integration is automatic) |
 | `REFLEX_DJANGO_USE_RXCONFIG_FILE = True` | Merge an on-disk `rxconfig.py` |
 
 ### Level 2: explicit `reflex_mount()`
@@ -286,11 +287,13 @@ reflex_app_module._app = rx.App(theme=rx.theme(accent_color="blue"))
 
 Import `from reflex_django import app` in page modules. It is the same singleton object.
 
-### Level 4: routing escape hatches
+### Level 4: split-process dev (optional)
 
-| Mode | When |
+Set `RXDJANGO_PROXY_SERVER` and run Django with `runserver` in a second terminal when you need Django isolated from the Reflex backend. See [Routing](routing.md).
+
+| Setting | When |
 |:---|:---|
-| `reflex_outer` | Reflex owns the public port; Django HTTP runs in a worker |
+| `RXDJANGO_PROXY_SERVER` | Vite proxies Django prefixes to external Django |
 | `REFLEX_DJANGO_AUTO_MOUNT=False` | API-only Django or a fully custom URL layout |
 
 ---

@@ -82,17 +82,3 @@ def test_reflex_mount_resolves_paths(monkeypatch: pytest.MonkeyPatch) -> None:
 
     match = resolve("/some/spa/route")
     assert match.func.view_class is ReflexMountView
-
-
-@pytest.mark.asyncio
-async def test_reflex_mount_view_returns_501_in_reflex_outer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import django
-
-    django.setup()
-    monkeypatch.setenv("REFLEX_DJANGO_URL_ROUTING", "reflex_outer")
-    request = RequestFactory().get("/about")
-    response = await ReflexMountView.as_view()(request)
-    assert response.status_code == 501
-    assert b"run_reflex" in response.content

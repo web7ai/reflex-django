@@ -40,7 +40,7 @@ Follow the cards in order. Check each box when you are done. Skip the Django or 
 <a href="../how_they_fit/" class="rd-path-card rd-path-card--intermediate">
 <p class="rd-path-card__title">5. How they fit together</p>
 <p class="rd-path-card__meta">~8 minutes</p>
-<p class="rd-path-card__desc">django_outer vs reflex_outer, AppState, and the event bridge in plain English.</p>
+<p class="rd-path-card__desc">Mount-only dev and production routing, AppState, and the event bridge in plain English.</p>
 </a>
 <a href="../installation/" class="rd-path-card rd-path-card--beginner">
 <p class="rd-path-card__title">6. Install</p>
@@ -67,7 +67,7 @@ Follow the cards in order. Check each box when you are done. Skip the Django or 
 - [ ] [Why reflex-django exists](why_reflex_django.md): I understand the HTTP vs WebSocket gap.
 - [ ] [How Django works](how_django_works.md): optional; skipped or done.
 - [ ] [How Reflex works](how_reflex_works.md): optional; skipped or done.
-- [ ] [How they fit together](how_they_fit.md): I can name django_outer, AppState, and the event bridge.
+- [ ] [How they fit together](how_they_fit.md): I can explain default dev (Vite + Reflex backend with Django mounted) and production routing.
 - [ ] [Install](installation.md): reflex-django is in my project.
 - [ ] [Your first app](quickstart.md): I ran `manage.py run_reflex` and saw a page update.
 - [ ] [Configuration](configuration.md): I know where `REFLEX_DJANGO_*` settings live.

@@ -25,13 +25,13 @@ Settings and imports handle pages. Auto-mount handles the catch-all. They run at
 
 ## Three knobs
 
-Most projects only touch **settings** and **pages**. The URL catch-all is automatic in `django_outer` (the default routing mode).
+Most projects only touch **settings** and **pages**. The URL catch-all is automatic when `REFLEX_DJANGO_AUTO_MOUNT=True` (default).
 
 | Knob | Where | What you control |
 |:---|:---|:---|
-| **Settings** | `REFLEX_DJANGO_RX_CONFIG`, `REFLEX_DJANGO_PLUGINS`, ... in `settings.py` | `app_name`, ports, `redis_url`, plugins, routing mode |
+| **Settings** | `REFLEX_DJANGO_RX_CONFIG`, `REFLEX_DJANGO_PLUGINS`, ... in `settings.py` | `app_name`, ports, `redis_url`, plugins |
 | **App** | `from reflex_django import app` | The shared `rx.App()` singleton (`reflex_django.runtime.reflex_app`) |
-| **URLs** | automatic (default) or optional `reflex_mount()` | SPA catch-all only; use `reflex_mount()` when you need prefix overrides |
+| **URLs** | automatic (default) or optional `reflex_mount()` | SPA catch-all and `django_prefix`; use `reflex_mount()` when you need prefix overrides |
 
 ```mermaid
 flowchart TB
@@ -49,8 +49,8 @@ flowchart TB
   Wire --> URLs
 ```
 
-!!! tip "v1 routing modes"
-    reflex-django v1 supports **`django_outer`** (default) and **`reflex_outer`** only. See [How they fit together](how_they_fit.md) for when to pick each.
+!!! tip "v3 mount-only"
+    Legacy **`django_outer`** / **`reflex_outer`** modes were removed. Dev uses `run_reflex` with Django mounted in the Reflex backend. See [Migrating to mount-only](migration/v3_mount_only.md).
 
 ---
 

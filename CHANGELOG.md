@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (breaking)
+
+- Composed ASGI entry `reflex_django.asgi.entry:application` and outer dispatchers (`django_outer`, `reflex_outer`).
+- `REFLEX_DJANGO_URL_ROUTING`, `REFLEX_DJANGO_HTTP_SUBPROCESS`, `REFLEX_DJANGO_HTTP_PORT`, and related HTTP worker settings.
+- `build_django_outer_application`, `asgi_application`, and `build_asgi_application` public exports.
+
+### Added
+
+- `RXDJANGO_PROXY_SERVER` — optional base URL of a separate Django server for Vite dev proxy; when unset, Django is served from the Reflex backend.
+- `docs/migration/v3_mount_only.md` — mount-only migration guide.
+
+### Changed (breaking)
+
+- `manage.py run_reflex` runs Reflex with Vite and the native Reflex backend; Django is mounted in the Reflex backend by default. Set `RXDJANGO_PROXY_SERVER` only when Django runs separately.
+- Production Django ASGI uses plain `get_asgi_application()`; reverse-proxy `/_event` to Reflex.
+
 ## [2.0.0] - 2026-06-12
 
 ### Removed (breaking)

@@ -13,7 +13,6 @@ from reflex_base.config import Config
 
 from reflex_django.setup.conf import configure_django
 from reflex_django.setup.project import RXCONFIG_SYNTHETIC_ATTR, discover_settings_module
-from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 
 _INSTALLED = False
 _ORIGINAL_GET_CONFIG: Callable[..., Config] | None = None
@@ -92,233 +91,6 @@ def _ensure_runtime_event_patches() -> None:
     _patch_basestate_getstate()
 
 
-_DJANGO_OUTER_ASGI_TARGET = "reflex_django.asgi.entry:application"
-_BACKEND_RELOAD_ENV = "REFLEX_DJANGO_BACKEND_RELOAD"
-_FRONTEND_PRESENT_ENV = "REFLEX_DJANGO_FRONTEND_PRESENT"
-
-
-def _backend_reload_enabled() -> bool:
-    """Return whether the patched Reflex dev backend should use uvicorn reload."""
-    env = os.environ.get(_BACKEND_RELOAD_ENV)
-    if env is not None:
-        return str(env).strip().lower() not in {"0", "false", "no"}
-    return True
-
-
-def _django_watch_root() -> str:
-    """Return Django ``BASE_DIR`` for backend reload watching."""
-    try:
-        from django.conf import settings
-
-        base = getattr(settings, "BASE_DIR", None)
-        if base:
-            return str(base)
-    except Exception:  # noqa: BLE001
-        pass
-    return str(os.getcwd())
-
-
-def _spawn_django_outer_backend_subprocess(
-    host: str,
-    port: int,
-    loglevel: Any,
-    *,
-    reload: bool,
-) -> None:
-    """Run the Django-outer backend in a child interpreter (Windows-safe with Vite)."""
-    import subprocess
-
-    cmd = [
-        sys.executable,
-        "-m",
-        "reflex_django.dev.runners.backend",
-        "--host",
-        host,
-        "--port",
-        str(port),
-        "--log-level",
-        str(getattr(loglevel, "value", loglevel)),
-    ]
-    if not reload:
-        cmd.append("--no-reload")
-
-    install_reflex_django_integration()
-    proc = subprocess.Popen(cmd, env={**os.environ})
-    try:
-        proc.wait()
-    except KeyboardInterrupt:
-        from reflex_django.dev.process_utils import terminate_process
-
-        terminate_process(proc, timeout=5.0, use_sigint=False)
-
-
-def _patch_reflex_run_backend() -> None:
-    """Point ``reflex run`` at the Django-outer ASGI entry in ``DJANGO_OUTER`` mode."""
-    if resolve_url_routing() != UrlRoutingMode.DJANGO_OUTER:
-        return
-
-    try:
-        import reflex.utils.exec as exec_module
-    except ImportError:
-        return
-
-    if getattr(exec_module, "_reflex_django_run_backend_patched", False):
-        return
-
-    from reflex_base.constants.base import LogLevel
-
-    original_run_backend = exec_module.run_backend
-    original_run_uvicorn = exec_module.run_uvicorn_backend
-    original_run_granian = exec_module.run_granian_backend
-    original_run_uvicorn_prod = exec_module.run_uvicorn_backend_prod
-    original_run_granian_prod = exec_module.run_granian_backend_prod
-
-    def _django_outer_run_uvicorn_backend(
-        host: str, port: int, loglevel: LogLevel
-    ) -> None:
-        reload = _backend_reload_enabled()
-        frontend_present = os.environ.get(_FRONTEND_PRESENT_ENV) == "1"
-
-        # Reflex runs Vite concurrently on Windows while ``run_backend`` blocks
-        # the main thread. In-process ``uvicorn.run(..., reload=True)`` in that
-        # layout often never binds :8000; delegate to a child interpreter.
-        if frontend_present or (reload and sys.platform == "win32"):
-            _spawn_django_outer_backend_subprocess(
-                host, port, loglevel, reload=reload
-            )
-            return
-
-        import uvicorn
-
-        from reflex.utils.exec import get_reload_paths
-
-        from reflex_django.dev.watch import (
-            BACKEND_RELOAD_DELAY_S,
-            backend_reload_excludes,
-        )
-
-        run_kwargs: dict[str, Any] = {
-            "app": _DJANGO_OUTER_ASGI_TARGET,
-            "factory": False,
-            "host": host,
-            "port": port,
-            "log_level": loglevel.value,
-            "reload": reload,
-            "ws": "auto",
-        }
-        if reload:
-            watch_root = _django_watch_root()
-            reflex_paths = list(map(str, get_reload_paths()))
-            run_kwargs["reload_dirs"] = (
-                [watch_root, *reflex_paths]
-                if watch_root not in reflex_paths
-                else reflex_paths or [watch_root]
-            )
-            run_kwargs["reload_delay"] = BACKEND_RELOAD_DELAY_S
-        install_reflex_django_integration()
-        uvicorn.run(**run_kwargs)
-
-    def _django_outer_run_granian_backend(
-        host: str, port: int, loglevel: LogLevel
-    ) -> None:
-        from granian.constants import Interfaces
-        from granian.log import LogLevels
-        from granian.server import Server as Granian
-        from reflex.utils.exec import HOTRELOAD_IGNORE_PATTERNS, get_reload_paths
-        from reflex_base.environment import _load_dotenv_from_env
-
-        reload = _backend_reload_enabled()
-        granian_kwargs: dict[str, Any] = {
-            "target": _DJANGO_OUTER_ASGI_TARGET,
-            "factory": False,
-            "address": host,
-            "port": port,
-            "interface": Interfaces.ASGI,
-            "log_level": LogLevels(loglevel.value),
-            "reload": reload,
-            "reload_ignore_worker_failure": True,
-            "reload_ignore_patterns": HOTRELOAD_IGNORE_PATTERNS,
-            "reload_tick": 100,
-            "workers_kill_timeout": 2,
-        }
-        if reload:
-            granian_kwargs["reload_paths"] = get_reload_paths()
-        granian_app = Granian(**granian_kwargs)
-        if reload:
-            granian_app.on_reload(_load_dotenv_from_env)
-        granian_app.serve()
-
-    def _django_outer_run_backend(
-        host: str,
-        port: int,
-        loglevel: Any = None,
-        frontend_present: bool = False,
-    ) -> None:
-        from reflex.utils.exec import get_web_dir, notify_backend, should_use_granian
-
-        if loglevel is None:
-            from reflex_base.constants.base import LogLevel as LL
-
-            loglevel = LL.ERROR
-
-        web_dir = get_web_dir()
-        if web_dir.exists():
-            from reflex_base import constants
-
-            (web_dir / constants.NOCOMPILE_FILE).touch()
-
-        if frontend_present:
-            os.environ[_FRONTEND_PRESENT_ENV] = "1"
-        else:
-            os.environ.pop(_FRONTEND_PRESENT_ENV, None)
-            notify_backend(host)
-
-        if should_use_granian():
-            import reflex.app  # noqa: F401
-
-            if frontend_present or (sys.platform == "win32" and _backend_reload_enabled()):
-                _spawn_django_outer_backend_subprocess(
-                    host, port, loglevel, reload=_backend_reload_enabled()
-                )
-            else:
-                _django_outer_run_granian_backend(host, port, loglevel)
-        else:
-            _django_outer_run_uvicorn_backend(host, port, loglevel)
-
-    def _django_outer_run_uvicorn_backend_prod(
-        host: str,
-        port: int,
-        loglevel: LogLevel,
-        app_target: str | None = None,
-    ) -> None:
-        original_run_uvicorn_prod(
-            host,
-            port,
-            loglevel,
-            app_target=app_target or _DJANGO_OUTER_ASGI_TARGET,
-        )
-
-    def _django_outer_run_granian_backend_prod(
-        host: str,
-        port: int,
-        loglevel: LogLevel,
-        app_target: str | None = None,
-    ) -> None:
-        original_run_granian_prod(
-            host,
-            port,
-            loglevel,
-            app_target=app_target or _DJANGO_OUTER_ASGI_TARGET,
-        )
-
-    exec_module.run_backend = _django_outer_run_backend
-    exec_module.run_uvicorn_backend = _django_outer_run_uvicorn_backend
-    exec_module.run_granian_backend = _django_outer_run_granian_backend
-    exec_module.run_uvicorn_backend_prod = _django_outer_run_uvicorn_backend_prod
-    exec_module.run_granian_backend_prod = _django_outer_run_granian_backend_prod
-    exec_module._reflex_django_run_backend_patched = True
-
-
 def install_reflex_django_integration() -> None:
     """Bootstrap reflex-django for the current process (idempotent)."""
     global _INSTALLED
@@ -326,7 +98,6 @@ def install_reflex_django_integration() -> None:
     _ensure_settings_env()
     configure_django()
     _ensure_runtime_event_patches()
-    _patch_reflex_run_backend()
 
     if _INSTALLED:
         _refresh_django_runtime()
@@ -754,6 +525,9 @@ def _patch_reflex_compile() -> None:
 
         prepare_pages_for_compile()
         app = load_app_factory()
+        from reflex_django.bootstrap.app_setup import apply_reflex_plugins_to_app
+
+        apply_reflex_plugins_to_app(app)
         expected = expected_dispatch_keys_from_app(app)
         if missing_frontend_dispatchers(expected_keys=expected, app=app):
             invalidate_stale_context_js()

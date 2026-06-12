@@ -1,17 +1,7 @@
 """Catch-all Django view that serves the Reflex SPA shell.
 
-In :class:`~reflex_django.setup.routing.UrlRoutingMode.DJANGO_OUTER` (the default),
-this view is the entry point Django uses for every non-Reflex, non-Django
-request:
-
-- ``DEBUG=True``: reverse-proxy to the Vite dev server so users only see one
-  port even though Vite still runs on its own for hot-module reload.
-- ``DEBUG=False``: serve the SPA bundle compiled by ``reflex export`` and
-  collected into ``STATIC_ROOT`` by ``manage.py collectstatic``.
-
-In the legacy Reflex-led modes, the ASGI dispatcher forwards SPA requests
-to Reflex directly; this view should not normally be hit. It returns a
-helpful 501 in that case for visibility.
+When ``DEBUG=True``, optionally reverse-proxies to the Vite dev server when
+``REFLEX_DJANGO_DEV_PROXY=1``. Otherwise serves the compiled SPA from disk.
 """
 
 from __future__ import annotations
@@ -44,7 +34,6 @@ from reflex_django.mount.spa_paths import (
     resolve_spa_index as _resolve_spa_index_impl,
     spa_root_candidates as _spa_root_candidates_impl,
 )
-from reflex_django.setup.routing import UrlRoutingMode, resolve_url_routing
 from reflex_django.mount.spa_template import maybe_render_spa_html
 
 if TYPE_CHECKING:
@@ -308,17 +297,13 @@ def _dev_proxy_target_is_self(request: HttpRequest, target: str) -> bool:
 class ReflexMountView(View):
     """Catch-all view for Reflex-owned URL space served by Django.
 
-    Behavior depends on the active :class:`UrlRoutingMode`:
-
-    - :attr:`UrlRoutingMode.DJANGO_OUTER` (default): dev mode reverse-proxies
-      to Vite; prod mode serves the compiled SPA from staticfiles.
-    - Other modes (Reflex-led): Django should not be handling this path; we
-      return 501 to make misconfiguration obvious.
+    Dev mode may reverse-proxy to Vite; prod mode serves the compiled SPA
+    from staticfiles.
     """
 
     http_method_names = ["get", "head", "options"]
 
-    async def _handle_django_outer(
+    async def _handle(
         self,
         request: HttpRequest,
     ) -> HttpResponse:
@@ -364,16 +349,7 @@ class ReflexMountView(View):
         **kwargs: object,
     ) -> HttpResponse:
         del args, kwargs
-        if resolve_url_routing() == UrlRoutingMode.DJANGO_OUTER:
-            return await self._handle_django_outer(request)
-        return HttpResponse(
-            "This URL is served by the Reflex application. "
-            "Use `python manage.py run_reflex` for local development "
-            "or switch to REFLEX_DJANGO_URL_ROUTING='django_outer' for "
-            "the single-port architecture.",
-            status=501,
-            content_type="text/plain",
-        )
+        return await self._handle(request)
 
     async def head(  # type: ignore[override]
         self,
