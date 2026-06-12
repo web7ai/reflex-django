@@ -147,7 +147,7 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 | `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
 | `install_auth_pages` | Default `False`. When `True`, attempts `reflex_django.auth.autoload()` (prefer explicit `add_auth_pages(app)` in the app module). |
 
-**Static files:** If `django.contrib.staticfiles` is in `INSTALLED_APPS` and `STATIC_URL` is a **path** (not `://` CDN URL), the plugin adds that URL as a forwarded prefix so Django can serve statics (`_static_prefixes` in `plugin.py`).
+**Static files:** If `django.contrib.staticfiles` is in `INSTALLED_APPS` and `STATIC_URL` is a **path** (not `://` CDN URL), the plugin adds that URL as a forwarded prefix so Django can serve statics (`_static_prefixes` in `setup/plugin.py`).
 
 ---
 
@@ -259,7 +259,7 @@ Human docs: `docs/authentication.md`.
 
 ## Reflex + Django ORM
 
-- Optional abstract base **`Model`** (`src/reflex_django/model.py`): subclass for tables; run migrations through the CLI below. Importing `reflex_django.django.model` calls `configure_django()`.
+- Optional abstract base **`Model`** (`src/reflex_django/django/model.py`): subclass for tables; run migrations through the CLI below. Importing `reflex_django.django.model` calls `configure_django()`.
 - Registered **serializer** turns Django `Model` instances into JSON-friendly dicts (includes PK) for Reflex wire format.
 
 ---

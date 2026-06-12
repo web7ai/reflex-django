@@ -25,6 +25,10 @@ reflex-django v1.0 optimizes for four properties:
 3. **Real Django requests in handlers.** Every `@rx.event` runs after middleware populated a synthetic `HttpRequest`.
 4. **Predictable routing.** Two modes only: `django_outer` and `reflex_outer`. No legacy dual-stack aliases.
 
+### Package layout (v2)
+
+Since v2.0, source modules live in domain subpackages under `src/reflex_django/` (`asgi/`, `runtime/`, `bridge/`, `django/`, `dev/`, `setup/`, `mount/`, …). The package root keeps only `__init__.py` plus `auth_state.py` (canonical home of `DjangoUserState`). See [v2 module path migration](migration/v2_module_paths.md) for import updates.
+
 ---
 
 ## Boot sequence

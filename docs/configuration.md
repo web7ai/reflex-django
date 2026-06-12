@@ -136,7 +136,7 @@ Optional tunables in `settings.py`. Defaults are sensible. Most projects change 
 
 | Setting | Default | What it does |
 |:---|:---|:---|
-| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (becomes `"django_outer"`) | Routing mode. Set `"reflex_outer"` when Reflex owns the public port. See [Routing](routing.md). Legacy aliases `"reflex_led"` and `"django_led"` still work. |
+| `REFLEX_DJANGO_URL_ROUTING` | `"auto"` (becomes `"django_outer"`) | Routing mode. Set `"reflex_outer"` when Reflex owns the public port. See [Routing](routing.md). Legacy `reflex_led` / `django_led` were removed in v1.0. |
 | `REFLEX_DJANGO_SERVE_FROM_BUILD` | `False` | When `False`, `run_reflex` runs Vite for HMR. Set `True` (or pass `--from-build`) to serve a pre-built SPA from disk. |
 | `REFLEX_DJANGO_RESERVED_REFLEX_PREFIXES` | `()` | Extra path prefixes always routed to Reflex. |
 | `REFLEX_DJANGO_DEV_PROXY` | `True` in settings; `False` when default Vite mode runs | When `True`, Django reverse-proxies SPA routes to Vite in DEBUG. |

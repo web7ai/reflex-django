@@ -11,6 +11,7 @@ EM_DASH = "\u2014"
 DEPRECATED_TERMS = ("django_led_app", "ReflexDjangoPlugin")
 MIGRATION_ALLOWLIST = {
     "migration/v1_migration.md",
+    "migration/v2_module_paths.md",
     "migration/v0-to-v1.md",
     "migration_django_outer.md",
     "whats_new.md",

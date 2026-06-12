@@ -78,6 +78,35 @@ Restart `run_reflex` and hard-refresh the browser.
 
 ---
 
+## `KeyError: No registered handler found for event`
+
+**Symptoms:** Server log shows `KeyError` with a long handler name containing segments like `reflex_django___auth_state___` or other old module paths after upgrading reflex-django.
+
+**Likely causes:**
+
+1. Stale compiled frontend in `.web/` from before a v2 upgrade (handler keys baked in at compile time).
+2. Backend restarted but Vite still serving an old client bundle.
+
+**Fix:**
+
+1. Stop `run_reflex` / uvicorn and Vite.
+2. Delete the compiled frontend cache and recompile:
+
+```bash
+rmdir /s /q .web
+python manage.py run_reflex
+```
+
+On Linux/macOS: `rm -rf .web` then `python manage.py run_reflex`.
+
+3. Hard-refresh the browser (or open a private window).
+
+If you only changed Python code and are on reflex-django 2.0+, restarting the backend is usually enough when `DjangoUserState` still resolves under `reflex_django.auth_state`.
+
+**Related:** [v2 module path migration](migration/v2_module_paths.md)
+
+---
+
 ## Django admin 404 on `:3000` or `:8000`
 
 **Symptoms:** `/admin/` returns 404, or the SPA catch-all serves HTML instead of Django admin.

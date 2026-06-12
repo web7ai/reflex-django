@@ -196,7 +196,7 @@ Once your project boots cleanly, top-of-file imports often work. The inside-hand
 
 ---
 
-## Optional `reflex_django.model.Model` base
+## Optional `reflex_django.django.model.Model` base
 
 Plain `django.db.models.Model` works fine. reflex-django also ships an optional base:
 

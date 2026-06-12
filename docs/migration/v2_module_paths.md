@@ -33,7 +33,7 @@ from reflex_django.asgi.entry import application
 ### Django URLs and app config
 
 ```python
-# settings.py — Before (v1)
+# settings.py (before v1)
 ROOT_URLCONF = "reflex_django.urls"
 INSTALLED_APPS = [..., "reflex_django.apps.ReflexDjangoConfig"]
 
@@ -65,8 +65,8 @@ INSTALLED_APPS = [..., "reflex_django.django.apps.ReflexDjangoConfig"]
 | `reflex_django.integration` | `reflex_django.runtime.integration` |
 | `reflex_django.app_factory` | `reflex_django.runtime.app_factory` |
 | `reflex_django.reflex_app` | `reflex_django.runtime.reflex_app` |
-| `reflex_django.django_led_app` | **removed** — use `reflex_django.runtime.reflex_app` |
-| `reflex_django.auth_state` | `reflex_django.auth_state` (unchanged — also available as `reflex_django.states.auth`) |
+| `reflex_django.django_led_app` | **removed**; use `reflex_django.runtime.reflex_app` |
+| `reflex_django.auth_state` | `reflex_django.auth_state` (unchanged; also available as `reflex_django.states.auth`) |
 | `reflex_django.i18n_state` | `reflex_django.states.i18n` |
 | `reflex_django.mount_config` | `reflex_django.mount.config` |
 | `reflex_django.auto_mount` | `reflex_django.mount.auto` |
@@ -107,6 +107,7 @@ reflex_django/
   django/        # apps, urls, admin, model
   cli/           # console entry
   states/        # public State classes
+  auth_state.py  # DjangoUserState (canonical for event handler keys)
   serializers/   # model serializers
   state/         # internal model-state framework
   auth/          # auth pages and decorators
@@ -116,5 +117,5 @@ reflex_django/
 
 ## Next up
 
-- [Configuration](../configuration.md) — settings keys unchanged
-- [Deployment](../deployment.md) — update `asgi.py` import
+- [Configuration](../configuration.md): settings keys unchanged
+- [Deployment](../deployment.md): update `asgi.py` import
