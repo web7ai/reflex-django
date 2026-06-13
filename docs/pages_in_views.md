@@ -169,6 +169,28 @@ Explicit `import shop.views` (or `REFLEX_DJANGO_PAGE_PACKAGES`) loads these modu
 
 ---
 
+## Entry module (`{app_name}/{app_name}.py`)
+
+Reflex also loads your project's entry module (for example `core/core.py` when `app_name` is `"core"`). It is executed on startup and supports the same registration styles as `views.py`:
+
+```python
+from reflex_django import app
+import reflex as rx
+from reflex_django.pages.decorators import page
+
+@page(route="/about")
+def about() -> rx.Component:
+    return rx.text("About")
+
+app.add_page(other_page, route="/other")
+```
+
+Pages registered here use the same pre-compile pipeline as `@page` in `views.py`, so they appear on **cold start** without needing an extra save.
+
+**Dynamic routes** use Reflex bracket syntax (`/items/[id]`, catch-all `[...splat]`). Register dynamic routes before static routes that share the same prefix. See [Reflex dynamic routing](https://reflex.dev/docs/pages/dynamic-routing/).
+
+---
+
 ## Pre-built auth pages
 
 When `REFLEX_DJANGO_AUTH["ENABLED"]` is true (default), login, register, and password-reset pages register automatically during page preparation. No `views.py` boilerplate required.
@@ -240,9 +262,10 @@ class HomeState(AppState):
 **Page does not show up after adding it**
 
 1. Is the page module imported in `urls.py` (or listed in `REFLEX_DJANGO_PAGE_PACKAGES`)?
-2. If you rely on auto-discover: is the app in `INSTALLED_APPS`?
-3. Did you save the file? The SPA rebuild can take a few seconds.
-4. Restart `run_reflex`. If still missing, delete `.web/` and run again.
+2. If the page is in `{app_name}/{app_name}.py`, restart `run_reflex` once (cold start) — it should not require a second save after restart.
+3. If you rely on auto-discover: is the app in `INSTALLED_APPS`?
+4. Did you save the file? The SPA rebuild can take a few seconds.
+5. Restart `run_reflex`. If still missing, delete `.web/` and run again.
 
 ---
 

@@ -15,6 +15,7 @@ _CONTRIB_APP_PREFIX = "django."
 
 _APP_INSTANCE: Any | None = None
 _IMPORTED_VIEW_MODULES: set[str] = set()
+_ENTRY_MODULE_PENDING_PAGES: list[tuple[Any, dict[str, Any]]] = []
 
 _REFLEX_APP_MODULE = "reflex_django.runtime.reflex_app"
 _APP_MODULE_STUB_MARKER = "reflex-django Django-first app module stub"
@@ -73,15 +74,19 @@ def get_or_create_app() -> Any:
         return _APP_INSTANCE
 
     user_app = _resolve_user_create_app()
-    app = user_app if user_app is not None else create_app()
-
+    created = user_app if user_app is not None else create_app()
+    if reflex_app_module._app is not None:
+        app = reflex_app_module._app
+    else:
+        app = created
+    reflex_app_module._app = app
+    _APP_INSTANCE = app
     from reflex_django.mount.config import resolve_app_name
 
     app_name = resolve_app_name()
     ensure_reflex_app_module_stub(app_name=app_name)
-    reflex_app_module._app = app
-    _APP_INSTANCE = app
     import_app_entry_module(app_name=app_name)
+    _flush_pending_entry_module_pages(app)
     register_reflex_app_module(app_name, app)
     _apply_django_integration_to_app(app)
     return app
@@ -189,6 +194,10 @@ def import_app_entry_module(*, app_name: str | None = None) -> types.ModuleType:
     A synthetic placeholder in ``sys.modules`` (no ``__file__``) is removed first
     so Python runs the on-disk entry module on cold start instead of returning an
     empty cached module.
+
+    While the singleton app exists, ``app.add_page`` calls are queued and flushed
+    via :func:`_flush_pending_entry_module_pages` so entry-module routes register
+    on the same pre-compile path as ``@page`` in ``views.py``.
     """
     from reflex_django.mount.config import resolve_app_name
 
@@ -200,7 +209,92 @@ def import_app_entry_module(*, app_name: str | None = None) -> types.ModuleType:
     if cached is not None and not getattr(cached, "__file__", None):
         del sys.modules[module_name]
 
-    return importlib.import_module(module_name)
+    import reflex_django.runtime.reflex_app as reflex_app_module
+
+    app = reflex_app_module._app
+    original_add_page = None
+    if app is not None and hasattr(app, "add_page"):
+        original_add_page = app.add_page
+
+        def queued_add_page(component: Any, **kwargs: Any) -> None:
+            _ENTRY_MODULE_PENDING_PAGES.append((component, dict(kwargs)))
+
+        app.add_page = queued_add_page  # type: ignore[method-assign]
+
+    try:
+        return importlib.import_module(module_name)
+    finally:
+        if app is not None and original_add_page is not None:
+            app.add_page = original_add_page  # type: ignore[method-assign]
+
+
+def _route_registration_rank(route: str | None) -> tuple[int, int, str]:
+    """Return a sort key where lower values register first (dynamic before static)."""
+    if not route:
+        return (2, 0, "")
+    route_str = str(route)
+    if "[..." in route_str or "[[..." in route_str:
+        kind = 1
+    elif "[" in route_str:
+        kind = 0
+    else:
+        kind = 2
+    return (kind, -len(route_str), route_str)
+
+
+def _sort_page_entries(
+    entries: list[tuple[Any, dict[str, Any]]],
+) -> list[tuple[Any, dict[str, Any]]]:
+    return sorted(
+        entries,
+        key=lambda item: _route_registration_rank(item[1].get("route")),
+    )
+
+
+def clear_entry_module_pending_pages() -> None:
+    """Clear the entry-module page queue (tests only)."""
+    _ENTRY_MODULE_PENDING_PAGES.clear()
+
+
+def _flush_pending_entry_module_pages(app: Any) -> None:
+    """Register queued entry-module ``app.add_page`` calls on *app*."""
+    if not _ENTRY_MODULE_PENDING_PAGES or not hasattr(app, "add_page"):
+        clear_entry_module_pending_pages()
+        return
+
+    from reflex.utils import format as route_format
+
+    unevaluated = getattr(app, "_unevaluated_pages", {})
+    for render, kwargs in _sort_page_entries(list(_ENTRY_MODULE_PENDING_PAGES)):
+        route = kwargs.get("route")
+        if route is not None:
+            formatted = route_format.format_route(str(route))
+            if formatted in unevaluated:
+                continue
+        app.add_page(render, **kwargs)
+        unevaluated = getattr(app, "_unevaluated_pages", {})
+    clear_entry_module_pending_pages()
+
+
+def _apply_decorated_pages_to_app(
+    app: Any,
+    *,
+    app_name: str,
+    decorated_pages: Any,
+) -> None:
+    """Apply ``DECORATED_PAGES[app_name]`` in Reflex route registration order."""
+    from reflex.utils import format as route_format
+
+    unevaluated = getattr(app, "_unevaluated_pages", {})
+    entries = _sort_page_entries(list(decorated_pages.get(app_name, ())))
+    for render, kwargs in entries:
+        route = kwargs.get("route")
+        if route is not None:
+            formatted = route_format.format_route(str(route))
+            if formatted in unevaluated:
+                continue
+        app.add_page(render, **kwargs)
+        unevaluated = getattr(app, "_unevaluated_pages", {})
 
 
 def _page_module_name(app_label: str, module_suffix: str) -> str:
@@ -323,11 +417,8 @@ def prepare_pages_for_compile() -> None:
     ``post_compile`` hooks) does not emit ``Page X is being redefined with
     the same component.`` warnings from :meth:`reflex.app.App.add_page`.
     """
-    from reflex.utils import format as route_format
-
     from reflex_django.mount.config import resolve_app_name
 
-    import_app_entry_module()
     migrate_decorated_pages_app_name(resolve_app_name())
     _ensure_runtime_state_classes_registered()
     from reflex_django.auth.registry import ensure_auth_pages_registered
@@ -335,21 +426,18 @@ def prepare_pages_for_compile() -> None:
     ensure_auth_pages_registered()
     import_page_packages()
     app = load_app_factory()
+    import_app_entry_module()
+    _flush_pending_entry_module_pages(app)
     app_name = migrate_decorated_pages_app_name(resolve_app_name())
     if hasattr(app, "add_page"):
         try:
             from reflex.page import DECORATED_PAGES
         except ImportError:
             DECORATED_PAGES = None  # type: ignore[assignment]
-        unevaluated = getattr(app, "_unevaluated_pages", {})
         if DECORATED_PAGES is not None:
-            for render, kwargs in DECORATED_PAGES.get(app_name, ()):
-                route = kwargs.get("route")
-                if route is not None:
-                    formatted = route_format.format_route(str(route))
-                    if formatted in unevaluated:
-                        continue
-                app.add_page(render, **kwargs)
+            _apply_decorated_pages_to_app(
+                app, app_name=app_name, decorated_pages=DECORATED_PAGES
+            )
         apply_page_registry_to_app(app)
         app._reflex_django_decorated_pages_applied = True  # type: ignore[attr-defined]
     sync_page_load_events(app)
@@ -408,7 +496,13 @@ def apply_page_registry_to_app(app: Any) -> None:
     from reflex.utils import format as route_format
     from reflex_django.pages.decorators import PAGE_REGISTRY
 
-    for registration in PAGE_REGISTRY:
+    registrations = sorted(
+        PAGE_REGISTRY,
+        key=lambda registration: _route_registration_rank(
+            registration.route or registration.kwargs.get("route")
+        ),
+    )
+    for registration in registrations:
         route = registration.route or registration.kwargs.get("route")
         if route:
             formatted = route_format.format_route(str(route))
@@ -595,6 +689,7 @@ def reset_app_factory_cache() -> None:
             delattr(_APP_INSTANCE, "_reflex_django_decorated_pages_applied")
     _APP_INSTANCE = None
     _IMPORTED_VIEW_MODULES.clear()
+    clear_entry_module_pending_pages()
     import reflex_django.runtime.reflex_app as reflex_app
 
     reflex_app._app = None

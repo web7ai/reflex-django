@@ -72,7 +72,12 @@ When you run the default command (no extra flags):
 
 Hot reload watches your Django project tree (`settings.BASE_DIR`), not the installed `reflex-django` package. On first run, reflex-django creates a thin `{app_name}/{app_name}.py` stub (for example `core/core.py`) if missing; it is **not** rewritten on later reloads, so your edits are kept.
 
-That entry module is **executed on startup** (cold start and compile), so you can register pages there with `app.add_page` or `@rx.page`. For most apps, prefer `views.py` and `@page`; both paths are loaded before the first compile.
+That entry module is **executed on startup** (cold start and compile). Register pages there the same way as in `views.py`:
+
+- `app.add_page(..., route="/about")` or `@page` / `@rx.page`
+- Dynamic routes use bracket syntax, e.g. `/post/[pid]` ([Reflex dynamic routing](https://reflex.dev/docs/pages/dynamic-routing/)); register dynamic routes before static routes that share the same prefix.
+
+Entry-module pages are applied on the same pre-compile path as `@page` in `views.py`, so new routes work on cold start without an extra save. For larger apps, prefer `views.py` and `@page`.
 
 Set `RXDJANGO_PROXY_SERVER` only when Django runs on a separate HTTP server.
 
