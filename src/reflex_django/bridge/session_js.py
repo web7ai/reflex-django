@@ -134,32 +134,47 @@ def browser_auth_cookies_clear_js() -> str:
     return f"{session_cookie_clear_js()} {csrf_cookie_clear_js()}"
 
 
-def browser_session_storage_clear_js() -> str:
-    """Clear ``sessionStorage`` (Reflex client ``token``, router scroll cache, etc.)."""
+# Reflex WebSocket client id (see ``.web/utils/state.js`` ``TOKEN_KEY``).
+_REFLEX_CLIENT_TOKEN_KEY = "token"
+
+
+def browser_reflex_token_clear_js() -> str:
+    """Remove Reflex's websocket client id from ``sessionStorage`` only."""
+    key = _REFLEX_CLIENT_TOKEN_KEY.replace("\\", "\\\\").replace("'", "\\'")
     return (
-        "try{if(typeof sessionStorage!=='undefined')sessionStorage.clear();}"
+        f"try{{if(typeof sessionStorage!=='undefined')"
+        f"sessionStorage.removeItem('{key}');}}"
         "catch(e){}"
     )
 
 
+def browser_session_storage_clear_js() -> str:
+    """Clear Reflex websocket ``token`` in ``sessionStorage`` before auth navigation."""
+    return browser_reflex_token_clear_js()
+
+
 def browser_client_storage_clear_js() -> str:
-    """Clear ``sessionStorage`` and ``localStorage`` for this origin."""
+    """Clear Reflex ``token`` and all ``localStorage`` for this origin.
+
+    Prefer :func:`browser_auth_logout_clear_js` for logout; this helper remains
+    for callers that intentionally wipe all client storage.
+    """
     return (
-        f"{browser_session_storage_clear_js()} "
+        f"{browser_reflex_token_clear_js()} "
         "try{if(typeof localStorage!=='undefined')localStorage.clear();}"
         "catch(e){}"
     )
 
 
 def browser_auth_logout_clear_js() -> str:
-    """Expire auth cookies and wipe browser storage before post-logout navigation.
+    """Expire auth cookies and drop Reflex websocket ``token`` before navigation.
 
     Reflex persists the websocket client id in ``sessionStorage`` under ``token``.
     After logout, a stale token can reconnect to server state that still looks
     authenticated while cookies are empty, causing a ``/`` ↔ ``/login`` loop until
-    storage is cleared manually.
+    storage is cleared manually. Non-auth ``localStorage`` (theme, etc.) is preserved.
     """
-    return f"{browser_auth_cookies_clear_js()} {browser_client_storage_clear_js()}"
+    return f"{browser_auth_cookies_clear_js()} {browser_reflex_token_clear_js()}"
 
 
 def auth_cookie_names() -> frozenset[str]:
@@ -337,6 +352,7 @@ __all__ = [
     "browser_auth_cookies_clear_js",
     "browser_auth_logout_clear_js",
     "browser_client_storage_clear_js",
+    "browser_reflex_token_clear_js",
     "browser_session_storage_clear_js",
     "clear_auth_cookies_from_state_tree",
     "csrf_cookie_clear_js",

@@ -172,9 +172,11 @@ rx.plugins.RadixThemesPlugin(
 | `panel_background` | `translucent` | `solid`, `translucent` | Card/panel fill style |
 | `has_background` | `true` | bool | Apply theme background to root |
 
-### Dark mode (session-persisted)
+### Dark mode (localStorage or session)
 
-reflex-django does not ship a theme toggle UI, but `AppState.session` persists arbitrary keys in the Django session. Store the user’s preference and drive `appearance`:
+reflex-django does not ship a theme toggle UI. For preferences that must **survive logout**, store them in **`localStorage`** or a non-auth cookie — built-in logout clears auth cookies and the Reflex websocket `token` only, not `localStorage`.
+
+For server-backed prefs (shared across tabs), use `AppState.session`. Keys listed in `REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS` (default: `("theme",)`) are copied before `alogout` and restored on the new anonymous session:
 
 ```python
 from reflex_django.states import AppState

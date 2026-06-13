@@ -82,6 +82,16 @@ def test_session_auth_logout_handler_calls_auth_bridge() -> None:
     assert "await self.logout()" not in src
 
 
+def test_defer_nav_uses_location_replace() -> None:
+    import inspect
+
+    from reflex_django.mixins import session_auth as mod
+
+    src = inspect.getsource(mod._defer_nav_js)
+    assert "window.location.replace" in src
+    assert "window.location.href" not in src
+
+
 def test_mixins_package_reexports_session_auth() -> None:
     from reflex_django.mixins import SessionAuthConfig as SAC
     from reflex_django.mixins import session_auth_mixin as sam

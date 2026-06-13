@@ -22,6 +22,7 @@ from reflex_django.bridge.session_js import (  # noqa: E402
     browser_auth_cookies_clear_js,
     browser_auth_logout_clear_js,
     browser_client_storage_clear_js,
+    browser_reflex_token_clear_js,
     browser_session_storage_clear_js,
     clear_auth_cookies_from_state_tree,
     merge_session_cookie_into_router_data,
@@ -99,22 +100,30 @@ def test_browser_auth_cookies_clear_js_includes_session_and_csrf() -> None:
     assert "max-age=0" in js
 
 
+def test_browser_reflex_token_clear_js() -> None:
+    js = browser_reflex_token_clear_js()
+    assert "sessionStorage.removeItem('token')" in js
+    assert "sessionStorage.clear()" not in js
+
+
 def test_browser_session_storage_clear_js() -> None:
     js = browser_session_storage_clear_js()
-    assert "sessionStorage.clear()" in js
+    assert "sessionStorage.removeItem('token')" in js
+    assert "sessionStorage.clear()" not in js
 
 
 def test_browser_client_storage_clear_js() -> None:
     js = browser_client_storage_clear_js()
-    assert "sessionStorage.clear()" in js
+    assert "sessionStorage.removeItem('token')" in js
     assert "localStorage.clear()" in js
 
 
 def test_browser_auth_logout_clear_js_includes_cookies_and_storage() -> None:
     js = browser_auth_logout_clear_js()
     assert "sessionid" in js
-    assert "sessionStorage.clear()" in js
-    assert "localStorage.clear()" in js
+    assert "sessionStorage.removeItem('token')" in js
+    assert "localStorage.clear()" not in js
+    assert "sessionStorage.clear()" not in js
 
 
 def test_logout_strips_request_cookies_after_alogout() -> None:
@@ -159,6 +168,51 @@ def test_logout_strips_request_cookies_after_alogout() -> None:
             assert "sessionid" not in state.router_data.get("headers", {}).get(
                 "cookie", ""
             )
+
+    _run_in_fresh_context(_go)
+
+
+def test_logout_preserves_configured_session_keys() -> None:
+    bridge = DjangoEventBridge()
+    state = AppState()
+    event = _StubEvent(
+        router_data={
+            "headers": {"cookie": "sessionid=abc"},
+            "ip": "127.0.0.1",
+            "pathname": "/",
+        }
+    )
+
+    async def _go() -> None:
+        async def _alogout_side_effect(request: Any) -> None:
+            for key in list(request.session.keys()):
+                del request.session[key]
+
+        with mock.patch(
+            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+            new=mock.AsyncMock(),
+        ), mock.patch(
+            "reflex_django.state.auth_bridge.alogout",
+            new=mock.AsyncMock(side_effect=_alogout_side_effect),
+        ) as alogout_mock, mock.patch(
+            "reflex_django.state.auth_bridge.session_async_save",
+            new=mock.AsyncMock(),
+        ), mock.patch(
+            "reflex_django.states.auth.apply_auth_snapshot_to_state",
+            new=mock.AsyncMock(),
+        ):
+            await bridge.preprocess(
+                app=mock.Mock(), state=state, event=cast(Any, event)
+            )
+            request = state.request
+            request.session["theme"] = "dark"
+            request.session["secret"] = "wipe-me"
+
+            await state.logout()
+
+            alogout_mock.assert_awaited_once()
+            assert request.session.get("theme") == "dark"
+            assert "secret" not in request.session
 
     _run_in_fresh_context(_go)
 

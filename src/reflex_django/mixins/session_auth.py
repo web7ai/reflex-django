@@ -26,7 +26,7 @@ _NAV_DELAY_MS = 150
 def _defer_nav_js(path: str) -> str:
     href = json.dumps(path)
     return (
-        f"setTimeout(function(){{ window.location.href = {href}; }}, {_NAV_DELAY_MS});"
+        f"setTimeout(function(){{ window.location.replace({href}); }}, {_NAV_DELAY_MS});"
     )
 
 

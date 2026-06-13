@@ -287,6 +287,15 @@ STATIC_ROOT = os.environ.get(
 
 SECRET_KEY = os.environ.get("REFLEX_DJANGO_SECRET_KEY") or secrets.token_urlsafe(50)
 
+# Reflex login/logout sync ``sessionid`` via ``document.cookie`` because WebSocket
+# events do not deliver Django ``Set-Cookie`` to the browser. Apps that require
+# HttpOnly session cookies should use a dedicated HTTP cookie-sync view instead.
+SESSION_COOKIE_HTTPONLY = False
+
+# Session keys copied before ``alogout`` and restored on the new anonymous session
+# (e.g. ``self.session["theme"]``). Does not affect ``localStorage`` preferences.
+REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS: tuple[str, ...] = ("theme",)
+
 DEBUG = os.environ.get("REFLEX_DJANGO_DEBUG", "1") not in {"0", "false", "False"}
 
 ALLOWED_HOSTS = os.environ.get("REFLEX_DJANGO_ALLOWED_HOSTS", "*").split(",")

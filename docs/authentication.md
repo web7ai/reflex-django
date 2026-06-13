@@ -268,6 +268,43 @@ async def submit(self):
     return _sync_session_cookie_then_nav(current_request(), "/")
 ```
 
+### Cookie sync after logout
+
+Use the built-in `DjangoAuthState.logout` event, or pair `await self.logout()` with `_sync_session_cookie_then_nav(..., clear_cookie=True)`. Bare `rx.redirect("/login")` after logout can leave stale `sessionid` cookies and a stale Reflex websocket `token`, causing a `/` ↔ `/login` redirect loop.
+
+```python
+from reflex_django.bridge.context import current_request
+from reflex_django.mixins.session_auth import _sync_session_cookie_then_nav
+
+@rx.event
+async def sign_out(self):
+    await self.logout()
+    return _sync_session_cookie_then_nav(current_request(), "/login", clear_cookie=True)
+```
+
+---
+
+## Browser storage: Django `sessionid` vs Reflex `token`
+
+Django session auth uses the **`sessionid` cookie** (backed by the `django_session` table and `request.user`). Reflex stores a separate per-tab UUID in **`sessionStorage` under key `token`** (`router.session.client_token`) for WebSocket state identity — it is **not** login state.
+
+| Storage | Cleared on logout? | Notes |
+|:---|:---|:---|
+| `sessionid` / `csrftoken` cookies | Yes | Expired via `document.cookie` (requires `SESSION_COOKIE_HTTPONLY = False` in reflex-django defaults, or an HTTP cookie-sync view) |
+| `sessionStorage.token` | Yes | Removed so the next page load gets a fresh websocket client id |
+| `localStorage` | **No** | Theme and other app prefs are preserved |
+| Non-auth cookies (e.g. `theme=dark`) | **No** | Only auth cookie names are stripped |
+
+Built-in login/logout navigation clears the Reflex `token`, syncs `sessionid`, and uses `window.location.replace(...)` for a clean document load. Custom handlers that skip `_sync_session_cookie_then_nav` may need manual DevTools cookie/storage clears to recover.
+
+Bundled defaults set `SESSION_COOKIE_HTTPONLY = False` because Reflex WebSocket events do not deliver Django `Set-Cookie` headers to the browser. Production apps that require HttpOnly session cookies should expose a small HTTP view that sets cookies and reloads the SPA.
+
+Configure session keys to keep across logout (server-side prefs only):
+
+```python
+REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS = ("theme",)
+```
+
 ---
 
 ## Navbar auth: `DjangoAuthState`

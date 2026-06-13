@@ -264,7 +264,23 @@ class AuthBridgeMixin:
 
         request = current_request()
         if request is not None:
+            from django.conf import settings as django_settings
+
+            preserve_keys = getattr(
+                django_settings,
+                "REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS",
+                ("theme",),
+            )
+            session = getattr(request, "session", None)
+            preserved: dict[str, Any] = {}
+            if session is not None and preserve_keys:
+                for key in preserve_keys:
+                    if key in session:
+                        preserved[key] = session[key]
             await alogout(request)
+            if preserved and session is not None:
+                for key, value in preserved.items():
+                    session[key] = value
             strip_auth_cookies_from_request(request)
             await session_async_save(request)
         clear_auth_cookies_from_state_tree(self)
