@@ -31,6 +31,36 @@ async def session_async_save(request: Any) -> None:
     session.save()
 
 
+async def _prepare_fresh_session_for_login(request: Any, state: Any) -> None:
+    """Drop stale auth cookies and rotate to a clean session before ``alogin``."""
+    from django.conf import settings as django_settings
+
+    from reflex_django.bridge.session_js import (
+        clear_auth_cookies_from_state_tree,
+        strip_auth_cookies_from_request,
+    )
+
+    preserve_keys = getattr(
+        django_settings,
+        "REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS",
+        ("theme",),
+    )
+    session = getattr(request, "session", None)
+    preserved: dict[str, Any] = {}
+    if session is not None and preserve_keys:
+        for key in preserve_keys:
+            if key in session:
+                preserved[key] = session[key]
+
+    strip_auth_cookies_from_request(request)
+    clear_auth_cookies_from_state_tree(state)
+
+    if session is not None:
+        await sync_to_async(session.flush)()
+        for key, value in preserved.items():
+            session[key] = value
+
+
 class SessionProxy:
     """Proxy for :func:`current_session` with dict-like access and persistence."""
 
@@ -224,6 +254,7 @@ class AuthBridgeMixin:
         if request is None:
             await self.on_auth_failed()
             return False
+        await _prepare_fresh_session_for_login(request, self)
         fields = login_fields if login_fields is not None else DEFAULT_LOGIN_FIELDS
         user = await aauthenticate_login_fields(
             request,

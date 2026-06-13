@@ -98,6 +98,15 @@ def test_browser_auth_cookies_clear_js_includes_session_and_csrf() -> None:
     assert "sessionid" in js
     assert "csrftoken" in js
     assert "max-age=0" in js
+    assert "document.cookie" in js
+
+
+def test_session_cookie_clear_js_uses_multiple_expire_attempts() -> None:
+    from reflex_django.bridge.session_js import session_cookie_clear_js
+
+    js = session_cookie_clear_js()
+    assert js.count("max-age=0") >= 2
+    assert "document.cookie" in js
 
 
 def test_browser_reflex_token_clear_js() -> None:
@@ -268,3 +277,52 @@ def test_resolve_router_data_finds_session_after_login_mirror() -> None:
     request = _build_request_from_router_data(merged)
     assert request.COOKIES.get("sessionid") == "mirrored_session"
     assert request.COOKIES.get("theme") == "dark"
+
+
+def test_login_strips_stale_auth_cookies_before_alogin() -> None:
+    bridge = DjangoEventBridge()
+    state = AppState()
+    event = _StubEvent(
+        router_data={
+            "headers": {"cookie": "sessionid=stale; csrftoken=oldcsrf"},
+            "ip": "127.0.0.1",
+            "pathname": "/login",
+        }
+    )
+
+    async def _go() -> None:
+        with mock.patch(
+            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+            new=mock.AsyncMock(),
+        ), mock.patch(
+            "reflex_django.state.auth_bridge.aauthenticate_login_fields",
+            new=mock.AsyncMock(return_value=mock.Mock(is_authenticated=True)),
+        ), mock.patch(
+            "reflex_django.state.auth_bridge.alogin",
+            new=mock.AsyncMock(),
+        ) as alogin_mock, mock.patch(
+            "reflex_django.state.auth_bridge.session_async_save",
+            new=mock.AsyncMock(),
+        ), mock.patch(
+            "reflex_django.states.auth.apply_auth_snapshot_to_state",
+            new=mock.AsyncMock(),
+        ):
+            await bridge.preprocess(
+                app=mock.Mock(), state=state, event=cast(Any, event)
+            )
+            request = state.request
+            state.router_data = dict(event.router_data)
+            request.session["stale"] = "value"
+
+            ok = await state.login("user", "pass")
+
+            assert ok is True
+            alogin_mock.assert_awaited_once()
+            assert "sessionid" not in request.COOKIES
+            assert "csrftoken" not in request.COOKIES
+            assert "stale" not in request.session
+            assert "sessionid" not in state.router_data.get("headers", {}).get(
+                "cookie", ""
+            )
+
+    _run_in_fresh_context(_go)

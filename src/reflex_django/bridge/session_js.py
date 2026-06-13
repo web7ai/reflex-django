@@ -7,6 +7,7 @@ reload the Reflex app.
 
 from __future__ import annotations
 
+import json
 from http.cookies import SimpleCookie
 from typing import Any
 
@@ -27,6 +28,72 @@ def _cookie_clear_js(
         f"document.cookie = '{safe_name}=; path={path}; max-age=0; "
         f"expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite={samesite}"
         f"{secure_part}{domain_part}';"
+    )
+
+
+def _cookie_clear_variants_js(
+    name: str,
+    *,
+    path: str,
+    domain: str | None,
+    samesite: str,
+    secure: bool,
+) -> str:
+    """Expire a cookie using several path/domain/secure combinations.
+
+    Browsers keep cookies that were set with different attributes than a single
+    ``max-age=0`` write uses, which is why logout sometimes leaves ``sessionid``.
+    """
+    attempts: list[str] = []
+    seen: set[str] = set()
+
+    def add(*, cookie_path: str, cookie_domain: str | None, cookie_secure: bool) -> None:
+        js = _cookie_clear_js(
+            name,
+            path=cookie_path,
+            domain=cookie_domain,
+            samesite=samesite,
+            secure=cookie_secure,
+        )
+        if js not in seen:
+            seen.add(js)
+            attempts.append(js)
+
+    add(cookie_path=path, cookie_domain=domain, cookie_secure=secure)
+    add(cookie_path=path, cookie_domain=domain, cookie_secure=False)
+    add(cookie_path="/", cookie_domain=domain, cookie_secure=secure)
+    add(cookie_path="/", cookie_domain=domain, cookie_secure=False)
+    add(cookie_path=path, cookie_domain=None, cookie_secure=secure)
+    add(cookie_path=path, cookie_domain=None, cookie_secure=False)
+    add(cookie_path="/", cookie_domain=None, cookie_secure=secure)
+    add(cookie_path="/", cookie_domain=None, cookie_secure=False)
+    if domain:
+        dotted = domain if domain.startswith(".") else f".{domain.lstrip('.')}"
+        if dotted != domain:
+            add(cookie_path=path, cookie_domain=dotted, cookie_secure=secure)
+            add(cookie_path="/", cookie_domain=dotted, cookie_secure=False)
+    return " ".join(attempts)
+
+
+def _document_auth_cookies_scan_clear_js() -> str:
+    """Scan ``document.cookie`` and expire every visible auth cookie name."""
+    names = json.dumps(sorted(auth_cookie_names()))
+    return (
+        "(function(){"
+        f"var names={names};"
+        "var expire='; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';"
+        "try{"
+        "(document.cookie||'').split(';').forEach(function(raw){"
+        "var eq=raw.indexOf('=');"
+        "var n=(eq<0?raw:raw.slice(0,eq)).trim();"
+        "if(names.indexOf(n)<0)return;"
+        "document.cookie=n+'='+expire+'; path=/';"
+        "document.cookie=n+'='+expire+'; path=/; samesite=Lax';"
+        "document.cookie=n+'='+expire+'; path=/; secure; samesite=Lax';"
+        "document.cookie=n+'='+expire+'; path=/; secure';"
+        "});"
+        "}catch(e){}"
+        "})();"
     )
 
 
@@ -89,11 +156,11 @@ def session_cookie_set_js(session_key: str) -> str:
 def session_cookie_clear_js() -> str:
     """JavaScript snippet that expires the session cookie in the browser.
 
-    Uses the same path/domain attributes as :func:`session_cookie_set_js` so a stale
-    ``sessionid`` is removed before writing a new key after login.
+    Uses several path/domain/secure combinations plus a ``document.cookie`` scan
+    so stale ``sessionid`` values are removed even when attribute sets differ.
 
     Returns:
-        A one-line JS expression suitable for ``rx.call_script``.
+        JS suitable for ``rx.call_script``.
     """
     name, _ = session_cookie_name_and_suffix()
     from django.conf import settings as django_settings
@@ -102,12 +169,17 @@ def session_cookie_clear_js() -> str:
     domain = getattr(django_settings, "SESSION_COOKIE_DOMAIN", None)
     samesite = getattr(django_settings, "SESSION_COOKIE_SAMESITE", "Lax") or "Lax"
     secure = bool(getattr(django_settings, "SESSION_COOKIE_SECURE", False))
-    return _cookie_clear_js(
-        name,
-        path=path,
-        domain=domain,
-        samesite=samesite,
-        secure=secure,
+    return " ".join(
+        (
+            _cookie_clear_variants_js(
+                name,
+                path=path,
+                domain=domain,
+                samesite=samesite,
+                secure=secure,
+            ),
+            _document_auth_cookies_scan_clear_js(),
+        )
     )
 
 
@@ -120,7 +192,7 @@ def csrf_cookie_clear_js() -> str:
     domain = getattr(django_settings, "CSRF_COOKIE_DOMAIN", None)
     samesite = getattr(django_settings, "CSRF_COOKIE_SAMESITE", "Lax") or "Lax"
     secure = bool(getattr(django_settings, "CSRF_COOKIE_SECURE", False))
-    return _cookie_clear_js(
+    return _cookie_clear_variants_js(
         name,
         path=path,
         domain=domain,

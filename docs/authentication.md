@@ -297,6 +297,8 @@ Django session auth uses the **`sessionid` cookie** (backed by the `django_sessi
 
 Built-in login/logout navigation clears the Reflex `token`, syncs `sessionid`, and uses `window.location.replace(...)` for a clean document load. Custom handlers that skip `_sync_session_cookie_then_nav` may need manual DevTools cookie/storage clears to recover.
 
+The built-in login page runs `on_load_login` for anonymous visitors: it expires any visible stale `sessionid` / `csrftoken` cookies (including variants with different path/domain attributes). Submitting the login form also rotates to a fresh Django session server-side before `alogin`, so a leftover browser cookie cannot reuse the pre-logout session row.
+
 Bundled defaults set `SESSION_COOKIE_HTTPONLY = False` because Reflex WebSocket events do not deliver Django `Set-Cookie` headers to the browser. Production apps that require HttpOnly session cookies should expose a small HTTP view that sets cookies and reloads the SPA.
 
 Configure session keys to keep across logout (server-side prefs only):

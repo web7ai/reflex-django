@@ -20,7 +20,7 @@ from reflex_django.state.auth_bridge import AuthBridgeMixin, session_async_save
 _session_async_save = session_async_save
 
 
-_NAV_DELAY_MS = 150
+_NAV_DELAY_MS = 200
 
 
 def _defer_nav_js(path: str) -> str:
@@ -120,11 +120,12 @@ def populate_session_auth_state(
     ns[e_var] = ""
 
     async def on_load_impl(self: Any) -> Any:
+        from reflex_django.bridge.session_js import browser_auth_cookies_clear_js
         from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
 
         await _sync_auth_snapshots_in_tree(self)
         if when_auth is None or not self.is_authenticated:
-            return None
+            return rx.call_script(browser_auth_cookies_clear_js())
         request = current_request()
         if request is None:
             return rx.call_script(_defer_nav_js(when_auth))
