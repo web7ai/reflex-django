@@ -220,22 +220,9 @@ def _resolve_watch_paths() -> list[Path]:
     :func:`_start_watch_thread`), so watching the project root does not loop on
     the ``.web`` (``.js``) output that the recompile itself writes.
     """
-    roots: list[Path] = []
+    from reflex_django.dev.watch import resolve_dev_watch_roots
 
-    try:
-        from django.conf import settings
-
-        base = getattr(settings, "BASE_DIR", None)
-        if base:
-            roots.append(Path(str(base)).resolve())
-    except Exception:  # noqa: BLE001
-        pass
-
-    cwd = Path.cwd().resolve()
-    if cwd not in roots:
-        roots.append(cwd)
-
-    return roots
+    return resolve_dev_watch_roots()
 
 
 def _recompile_in_subprocess(port: int, *, compile_and_build: bool = False) -> None:

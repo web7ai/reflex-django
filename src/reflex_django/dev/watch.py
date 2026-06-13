@@ -13,6 +13,8 @@ These helpers split responsibilities:
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 _UI_DIR_MARKERS: tuple[str, ...] = (
@@ -36,6 +38,71 @@ WATCH_DEBOUNCE_MS = 200
 
 # uvicorn ``reload_delay`` (seconds) before restarting the worker.
 BACKEND_RELOAD_DELAY_S = 0.12
+
+
+def resolve_dev_watch_roots() -> list[Path]:
+    """Return Django project roots to watch for dev reload/recompile.
+
+    Uses ``settings.BASE_DIR`` with ``Path.cwd()`` as fallback so host-project
+    edits are detected even when Reflex ``config.module`` points at reflex-django.
+    """
+    roots: list[Path] = []
+
+    try:
+        from django.conf import settings
+
+        base = getattr(settings, "BASE_DIR", None)
+        if base:
+            roots.append(Path(str(base)).resolve())
+    except Exception:  # noqa: BLE001
+        pass
+
+    cwd = Path.cwd().resolve()
+    if cwd not in roots:
+        roots.append(cwd)
+
+    return roots
+
+
+def django_first_reload_paths() -> Sequence[Path]:
+    """Return Reflex backend ``reload_dirs`` for Django-first projects."""
+    from reflex_base import constants
+    from reflex_base.environment import environment
+
+    include_dirs = tuple(
+        map(Path.absolute, environment.REFLEX_HOT_RELOAD_INCLUDE_PATHS.get())
+    )
+    exclude_dirs = tuple(
+        map(Path.absolute, environment.REFLEX_HOT_RELOAD_EXCLUDE_PATHS.get())
+    )
+
+    def is_excluded_by_default(path: Path) -> bool:
+        if path.is_dir():
+            if path.name.startswith("."):
+                return True
+            if path.name.startswith("__"):
+                return True
+        return path.name in (
+            ".gitignore",
+            "uploaded_files",
+            constants.Bun.ROOT_LOCKFILE_DIR,
+        )
+
+    reload_paths: tuple[Path, ...] = tuple(
+        path.absolute()
+        for root in resolve_dev_watch_roots()
+        for path in root.iterdir()
+        if not is_excluded_by_default(path)
+    ) + include_dirs
+
+    if exclude_dirs:
+        reload_paths = tuple(
+            path
+            for path in reload_paths
+            if all(not path.samefile(exclude) for exclude in exclude_dirs)
+        )
+
+    return reload_paths
 
 
 def _norm_path(path: str) -> str:
@@ -132,6 +199,8 @@ __all__ = [
     "backend_reload_excludes",
     "build_backend_watch_filter",
     "build_frontend_watch_filter",
+    "django_first_reload_paths",
     "is_backend_reload_path",
     "is_frontend_recompile_path",
+    "resolve_dev_watch_roots",
 ]

@@ -55,11 +55,14 @@ def test_load_app_factory() -> None:
     assert app is not None
 
 
-def test_ensure_django_led_app_ready_does_not_materialize_app_module(
+def test_ensure_django_led_app_ready_materializes_app_module_stub(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from reflex_django.runtime.app_factory import ensure_django_led_app_ready
+    from reflex_django.runtime.app_factory import (
+        _APP_MODULE_STUB_MARKER,
+        ensure_django_led_app_ready,
+    )
 
     manage = tmp_path / "manage.py"
     manage.write_text(
@@ -72,7 +75,34 @@ def test_ensure_django_led_app_ready_does_not_materialize_app_module(
 
     ensure_django_led_app_ready()
 
-    assert not (tmp_path / "demo" / "demo.py").is_file()
+    stub = tmp_path / "demo" / "demo.py"
+    assert stub.is_file()
+    assert _APP_MODULE_STUB_MARKER in stub.read_text(encoding="utf-8")
+
+
+def test_ensure_reflex_app_module_stub_does_not_overwrite_existing_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from reflex_django.runtime.app_factory import ensure_reflex_app_module_stub
+
+    package = tmp_path / "demo"
+    package.mkdir()
+    stub = package / "demo.py"
+    custom = "# user edit\nfrom reflex_django.runtime.reflex_app import app\n"
+    stub.write_text(custom, encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    register_mount_rx_config(app_name="demo")
+
+    from django.conf import settings
+
+    monkeypatch.setattr(settings, "BASE_DIR", tmp_path, raising=False)
+
+    ensure_reflex_app_module_stub(app_name="demo")
+    ensure_reflex_app_module_stub(app_name="demo")
+
+    assert stub.read_text(encoding="utf-8") == custom
 
 
 def test_ensure_django_led_app_ready_installs_event_bridge(

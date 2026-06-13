@@ -7,6 +7,7 @@ import importlib.util
 import sys
 import types
 import warnings
+from pathlib import Path
 from typing import Any
 
 _SKIP_PAGE_APP_LABELS = frozenset({"reflex_django"})
@@ -16,6 +17,7 @@ _APP_INSTANCE: Any | None = None
 _IMPORTED_VIEW_MODULES: set[str] = set()
 
 _REFLEX_APP_MODULE = "reflex_django.runtime.reflex_app"
+_APP_MODULE_STUB_MARKER = "reflex-django Django-first app module stub"
 
 
 def _django_settings() -> Any:
@@ -75,7 +77,9 @@ def get_or_create_app() -> Any:
 
     from reflex_django.mount.config import resolve_app_name
 
-    register_reflex_app_module(resolve_app_name(), app)
+    app_name = resolve_app_name()
+    register_reflex_app_module(app_name, app)
+    ensure_reflex_app_module_stub(app_name=app_name)
     reflex_app_module._app = app
     _APP_INSTANCE = app
     _apply_django_integration_to_app(app)
@@ -97,7 +101,9 @@ def reflex_app_module_name(app_name: str) -> str:
 
 def reflex_app_module_import() -> str:
     """Dotted import path Reflex uses for ``app`` in Django-first mode."""
-    return _REFLEX_APP_MODULE
+    from reflex_django.mount.config import resolve_app_name
+
+    return reflex_app_module_name(resolve_app_name())
 
 
 def django_led_app_module_import() -> str:
@@ -122,6 +128,58 @@ def register_reflex_app_module(app_name: str, app: Any) -> str:
         sys.modules[module_name] = module
     module.app = app  # type: ignore[attr-defined]
     return module_name
+
+
+def _format_app_module_stub() -> str:
+    return f'''"""Reflex app entry for Django-first projects (auto-maintained by reflex-django).
+
+Pages and state belong in Django ``views.py`` modules. Do not add UI logic here.
+"""
+# {_APP_MODULE_STUB_MARKER}
+
+from reflex_django.runtime.reflex_app import app
+
+__all__ = ["app"]
+'''
+
+
+def ensure_reflex_app_module_stub(*, app_name: str | None = None) -> Path | None:
+    """Materialize ``{app_name}/{app_name}.py`` so Reflex can import the app module.
+
+    Reflex validates ``app_module_import`` with :func:`reflex.utils.misc.get_module_path`,
+    which requires a file on disk. Django-first projects use a thin stub that re-exports
+    the shared :data:`reflex_django.runtime.reflex_app.app` singleton.
+
+    User-owned ``{app_name}/{app_name}.py`` files are never overwritten once they exist.
+    """
+    from reflex_django.mount.config import resolve_app_name
+
+    name = (app_name or resolve_app_name()).strip()
+    if not name:
+        return None
+
+    module_name = reflex_app_module_name(name)
+    package, _, module_file = module_name.partition(".")
+    if not module_file or package != module_file:
+        return None
+
+    settings = _django_settings()
+    base = getattr(settings, "BASE_DIR", None)
+    root = Path(str(base)).resolve() if base else Path.cwd().resolve()
+
+    package_dir = root / package
+    target = package_dir / f"{module_file}.py"
+    body = _format_app_module_stub()
+
+    if target.is_file():
+        return target
+
+    package_dir.mkdir(parents=True, exist_ok=True)
+    init_py = package_dir / "__init__.py"
+    if not init_py.is_file():
+        init_py.write_text("", encoding="utf-8")
+    target.write_text(body, encoding="utf-8")
+    return target
 
 
 def _page_module_name(app_label: str, module_suffix: str) -> str:

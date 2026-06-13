@@ -70,6 +70,8 @@ When you run the default command (no extra flags):
 3. **Mounts** Django ASGI inside the Reflex backend for configured URL prefixes
 4. **Delegates** to `reflex run` (Vite + native Reflex backend on `:backend_port`)
 
+Hot reload watches your Django project tree (`settings.BASE_DIR`), not the installed `reflex-django` package. On first run, reflex-django creates a thin `{app_name}/{app_name}.py` stub (for example `core/core.py`) if missing; it is **not** rewritten on later reloads, so your edits are kept.
+
 Set `RXDJANGO_PROXY_SERVER` only when Django runs on a separate HTTP server.
 
 You should see a banner like:

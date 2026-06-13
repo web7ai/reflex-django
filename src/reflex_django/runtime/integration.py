@@ -16,6 +16,9 @@ from reflex_django.setup.project import RXCONFIG_SYNTHETIC_ATTR, discover_settin
 
 _INSTALLED = False
 _ORIGINAL_GET_CONFIG: Callable[..., Config] | None = None
+_ORIGINAL_GET_RELOAD_PATHS: Callable[[], Any] | None = None
+_ORIGINAL_CHECK_APP_NAME: Callable[..., Any] | None = None
+_ORIGINAL_GET_APP_FILE: Callable[[], Any] | None = None
 
 # Per-event attributes bound on :class:`reflex.state.BaseState` instances by
 # the Django-outer bridge that must NEVER reach :mod:`dill`/:mod:`pickle`.
@@ -84,6 +87,73 @@ def _rebind_get_config_imports(patched_get_config: Callable[..., Config]) -> Non
             module.get_config = patched_get_config  # type: ignore[attr-defined]
 
 
+def _patch_reload_paths() -> None:
+    """Watch Django ``BASE_DIR`` instead of reflex-django's runtime module path."""
+    global _ORIGINAL_GET_RELOAD_PATHS
+    try:
+        import reflex.utils.exec as exec_module
+    except ImportError:
+        return
+
+    if _ORIGINAL_GET_RELOAD_PATHS is not None:
+        return
+
+    _ORIGINAL_GET_RELOAD_PATHS = exec_module.get_reload_paths
+
+    def patched_get_reload_paths() -> Any:
+        from reflex_django.dev.watch import django_first_reload_paths
+
+        return django_first_reload_paths()
+
+    exec_module.get_reload_paths = patched_get_reload_paths  # type: ignore[assignment]
+
+
+def _patch_prerequisites_app_module() -> None:
+    """Ensure Django-first ``{app_name}/{app_name}.py`` exists before Reflex validates it."""
+    global _ORIGINAL_CHECK_APP_NAME, _ORIGINAL_GET_APP_FILE
+    try:
+        import reflex.utils.exec as exec_module
+        import reflex.utils.prerequisites as prerequisites
+    except ImportError:
+        return
+
+    if _ORIGINAL_CHECK_APP_NAME is not None:
+        return
+
+    _ORIGINAL_CHECK_APP_NAME = prerequisites._check_app_name
+    _ORIGINAL_GET_APP_FILE = exec_module.get_app_file
+
+    def patched_check_app_name(config: Config) -> None:
+        from reflex_django.mount.config import resolve_app_name
+        from reflex_django.runtime.app_factory import (
+            ensure_reflex_app_module_stub,
+            reflex_app_module_name,
+        )
+
+        if config.module == reflex_app_module_name(resolve_app_name()):
+            ensure_reflex_app_module_stub()
+        return _ORIGINAL_CHECK_APP_NAME(config)
+
+    def patched_get_app_file() -> Any:
+        from reflex_base.config import get_config
+
+        from reflex_django.mount.config import resolve_app_name
+        from reflex_django.runtime.app_factory import (
+            ensure_reflex_app_module_stub,
+            reflex_app_module_name,
+        )
+
+        config = get_config()
+        if config.module == reflex_app_module_name(resolve_app_name()):
+            stub = ensure_reflex_app_module_stub()
+            if stub is not None and stub.is_file():
+                return stub
+        return _ORIGINAL_GET_APP_FILE()
+
+    prerequisites._check_app_name = patched_check_app_name  # type: ignore[assignment]
+    exec_module.get_app_file = patched_get_app_file  # type: ignore[assignment]
+
+
 def _ensure_runtime_event_patches() -> None:
     """Apply hooks so ``self.request`` works on handler substates (idempotent)."""
     _patch_process_event()
@@ -104,17 +174,21 @@ def install_reflex_django_integration() -> None:
         return
 
     _patch_get_config()
+    _patch_reload_paths()
+    _patch_prerequisites_app_module()
     _patch_vite_dev_dependency()
     _patch_state_dispatcher_template()
 
     from reflex_django.cli.layout import ensure_reflex_cli_layout
     from reflex_django.mount.config import ensure_mount_config_loaded
+    from reflex_django.runtime.app_factory import get_or_create_app
     from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
     ensure_mount_config_loaded()
     from reflex_django.mount.auto import maybe_auto_mount
 
     maybe_auto_mount()
+    get_or_create_app()
     ensure_reflex_cli_layout()
     ensure_rxconfig_from_django()
     from reflex_django.bootstrap.patches.registry import apply_post_rxconfig_patches
@@ -558,11 +632,29 @@ def _patch_reflex_compile() -> None:
 
 def reset_integration_for_tests() -> None:
     """Restore unpatched ``get_config`` (tests only)."""
-    global _INSTALLED, _ORIGINAL_GET_CONFIG
+    global _INSTALLED, _ORIGINAL_GET_CONFIG, _ORIGINAL_GET_RELOAD_PATHS
+    global _ORIGINAL_CHECK_APP_NAME, _ORIGINAL_GET_APP_FILE
     if _ORIGINAL_GET_CONFIG is not None:
         import reflex_base.config as config_module
 
         config_module.get_config = _ORIGINAL_GET_CONFIG
+    if _ORIGINAL_GET_RELOAD_PATHS is not None:
+        try:
+            import reflex.utils.exec as exec_module
+
+            exec_module.get_reload_paths = _ORIGINAL_GET_RELOAD_PATHS
+        except ImportError:
+            pass
+    if _ORIGINAL_CHECK_APP_NAME is not None:
+        try:
+            import reflex.utils.exec as exec_module
+            import reflex.utils.prerequisites as prerequisites
+
+            prerequisites._check_app_name = _ORIGINAL_CHECK_APP_NAME
+            if _ORIGINAL_GET_APP_FILE is not None:
+                exec_module.get_app_file = _ORIGINAL_GET_APP_FILE
+        except ImportError:
+            pass
     try:
         import reflex.utils.prerequisites as prerequisites
 
@@ -616,3 +708,6 @@ def reset_integration_for_tests() -> None:
         pass
     _INSTALLED = False
     _ORIGINAL_GET_CONFIG = None
+    _ORIGINAL_GET_RELOAD_PATHS = None
+    _ORIGINAL_CHECK_APP_NAME = None
+    _ORIGINAL_GET_APP_FILE = None
