@@ -78,10 +78,11 @@ def get_or_create_app() -> Any:
     from reflex_django.mount.config import resolve_app_name
 
     app_name = resolve_app_name()
-    register_reflex_app_module(app_name, app)
     ensure_reflex_app_module_stub(app_name=app_name)
     reflex_app_module._app = app
     _APP_INSTANCE = app
+    import_app_entry_module(app_name=app_name)
+    register_reflex_app_module(app_name, app)
     _apply_django_integration_to_app(app)
     return app
 
@@ -180,6 +181,26 @@ def ensure_reflex_app_module_stub(*, app_name: str | None = None) -> Path | None
         init_py.write_text("", encoding="utf-8")
     target.write_text(body, encoding="utf-8")
     return target
+
+
+def import_app_entry_module(*, app_name: str | None = None) -> types.ModuleType:
+    """Import and execute ``{app_name}/{app_name}.py`` from disk.
+
+    A synthetic placeholder in ``sys.modules`` (no ``__file__``) is removed first
+    so Python runs the on-disk entry module on cold start instead of returning an
+    empty cached module.
+    """
+    from reflex_django.mount.config import resolve_app_name
+
+    name = (app_name or resolve_app_name()).strip()
+    module_name = reflex_app_module_name(name)
+    ensure_reflex_app_module_stub(app_name=name)
+
+    cached = sys.modules.get(module_name)
+    if cached is not None and not getattr(cached, "__file__", None):
+        del sys.modules[module_name]
+
+    return importlib.import_module(module_name)
 
 
 def _page_module_name(app_label: str, module_suffix: str) -> str:
@@ -306,6 +327,7 @@ def prepare_pages_for_compile() -> None:
 
     from reflex_django.mount.config import resolve_app_name
 
+    import_app_entry_module()
     migrate_decorated_pages_app_name(resolve_app_name())
     _ensure_runtime_state_classes_registered()
     from reflex_django.auth.registry import ensure_auth_pages_registered
@@ -576,6 +598,13 @@ def reset_app_factory_cache() -> None:
     import reflex_django.runtime.reflex_app as reflex_app
 
     reflex_app._app = None
+    try:
+        from reflex_django.mount.config import resolve_app_name
+
+        module_name = reflex_app_module_name(resolve_app_name())
+        sys.modules.pop(module_name, None)
+    except Exception:  # noqa: BLE001 — test cleanup only.
+        pass
     from reflex_django.mount.auto import clear_auto_mount_state
 
     clear_auto_mount_state()
