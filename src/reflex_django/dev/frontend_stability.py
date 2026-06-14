@@ -6,9 +6,9 @@ Vite loads duplicate React copies), that throws:
 
 ``TypeError: useContext is not a function or its return value is not iterable``
 
-These patches run from :meth:`reflex_django.setup.plugin.ReflexDjangoPlugin.post_compile`,
-:func:`apply_frontend_stability_after_compile` (after every compile in dev/export),
-and from :func:`reflex_django.dev.vite_proxy.patch_vite_config` (React dedupe only).
+These patches run from :func:`apply_frontend_stability_after_compile` (after every
+compile in dev/export) and from :func:`reflex_django.dev.vite_proxy.patch_vite_config`
+(React dedupe only).
 
 Documentation: https://web7ai.github.io/reflex-django/local_development/
 """

@@ -330,42 +330,22 @@ def mirror_auth_cookies_to_state_tree(state: Any, session_key: str) -> None:
     """Mirror ``sessionid`` into ``router_data`` on every node in the state tree.
 
     Inverse of :func:`clear_auth_cookies_from_state_tree` after login so
-    :func:`~reflex_django.bridge.django_event._resolve_router_data` can fall back to
+    :func:`~reflex_django.bridge.event.router_data._resolve_router_data` can fall back to
     persisted cookies when events omit ``router_data`` headers.
     """
     if not session_key:
         return
 
-    from unittest.mock import Mock
+    from reflex_django.bridge.state_tree import walk_substates_dfs
 
-    if state is None or isinstance(state, Mock):
-        return
-
-    try:
-        root = state._get_root_state()  # noqa: SLF001
-    except (AttributeError, TypeError):
-        root = state
-
-    if isinstance(root, Mock):
-        return
-
-    seen: set[int] = set()
-
-    def visit(node: Any) -> None:
-        if node is None or isinstance(node, Mock) or id(node) in seen:
-            return
-        seen.add(id(node))
+    def _mirror(node: Any) -> None:
         raw = getattr(node, "router_data", None)
         if isinstance(raw, dict):
             merged = merge_session_cookie_into_router_data(raw, session_key)
             if merged is not raw:
                 node.router_data = merged
-        substates = getattr(node, "substates", None) or {}
-        if isinstance(substates, dict):
-            for child in substates.values():
-                visit(child)
 
-    visit(root)
+    walk_substates_dfs(state, _mirror)
 
 
 def strip_auth_cookies_from_request(request: Any) -> None:
@@ -384,39 +364,16 @@ def strip_auth_cookies_from_request(request: Any) -> None:
 
 def clear_auth_cookies_from_state_tree(state: Any) -> None:
     """Strip persisted session cookies from ``router_data`` on the Reflex state tree."""
-    if state is None:
-        return
+    from reflex_django.bridge.state_tree import walk_substates_dfs
 
-    from unittest.mock import Mock
-
-    if isinstance(state, Mock):
-        return
-
-    try:
-        root = state._get_root_state()  # noqa: SLF001
-    except (AttributeError, TypeError):
-        root = state
-
-    if isinstance(root, Mock):
-        return
-
-    seen: set[int] = set()
-
-    def visit(node: Any) -> None:
-        if node is None or isinstance(node, Mock) or id(node) in seen:
-            return
-        seen.add(id(node))
+    def _clear(node: Any) -> None:
         raw = getattr(node, "router_data", None)
         if isinstance(raw, dict):
             stripped = strip_auth_cookies_from_router_data(raw)
             if stripped is not raw:
                 node.router_data = stripped
-        substates = getattr(node, "substates", None) or {}
-        if isinstance(substates, dict):
-            for child in substates.values():
-                visit(child)
 
-    visit(root)
+    walk_substates_dfs(state, _clear)
 
 
 __all__ = [

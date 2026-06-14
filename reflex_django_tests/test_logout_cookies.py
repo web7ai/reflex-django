@@ -13,8 +13,8 @@ configure_django()
 
 from django.http import HttpRequest  # noqa: E402
 
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
-from reflex_django.bridge.django_event import (  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import (  # noqa: E402
     _build_request_from_router_data,
     _resolve_router_data,
 )

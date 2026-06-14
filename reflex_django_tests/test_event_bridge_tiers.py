@@ -12,7 +12,7 @@ from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
 from reflex_django.bridge.registry import reset_bridge_resolver_cache  # noqa: E402
 from reflex_django.bridge.tier import resolve_bridge_tier  # noqa: E402
 
@@ -107,7 +107,7 @@ def test_preprocess_skips_middleware_for_none_tier() -> None:
 
     async def _go() -> None:
         with mock.patch(
-            "reflex_django.bridge.django_event.bridge_request_for_state",
+            "reflex_django.bridge.event.preprocess.bridge_request_for_state",
             new=mock.AsyncMock(),
         ) as bridge_call:
             result = await bridge.preprocess(
@@ -138,7 +138,7 @@ def test_preprocess_runs_bridge_for_app_state_in_smart_mode() -> None:
 
     async def _go() -> None:
         with mock.patch(
-            "reflex_django.bridge.django_event.bridge_request_for_state",
+            "reflex_django.bridge.event.preprocess.bridge_request_for_state",
             new=mock.AsyncMock(return_value=(mock.Mock(), None)),
         ) as bridge_call, mock.patch(
             "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",

@@ -613,18 +613,3 @@ def ensure_vite_django_dev_proxy_from_config(*, force: bool = False) -> bool:
     strips bidirectional Vite proxy rules to avoid request loops.
     """
     return finalize_web_dev_layout(force=force)
-
-
-# Backwards-compatible alias
-def ensure_vite_dev_proxy_file(
-    vite_config_path: Path,
-    *,
-    target: str,
-    prefixes: tuple[str, ...],
-) -> bool:
-    """Patch ``vite.config.js`` and sibling proxy plugin under the same directory."""
-    return ensure_vite_django_dev_proxy(
-        vite_config_path.parent,
-        target=target,
-        prefixes=prefixes,
-    )

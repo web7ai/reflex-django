@@ -13,10 +13,8 @@ from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from django.contrib.auth.models import User  # noqa: E402
-
 from reflex_django.bridge.context import current_session  # noqa: E402
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
 from reflex_django.state.auth_bridge import SessionProxy  # noqa: E402
 from reflex_django.states import AppState  # noqa: E402
 
@@ -31,7 +29,7 @@ def _run_in_fresh_context(coro_factory):
         return await coro_factory()
 
     ctx = contextvars.copy_context()
-    return ctx.run(asyncio.run, _wrapped)
+    return ctx.run(asyncio.run, _wrapped())
 
 
 class _DashboardState(AppState):
@@ -40,8 +38,10 @@ class _DashboardState(AppState):
 
 def test_ac1_app_state_user_property_reflects_authenticated_user() -> None:
     state = _DashboardState()
-    user = User(username="alice", email="alice@example.com")
-    user.is_authenticated = True  # type: ignore[attr-defined]
+    user = mock.Mock()
+    user.username = "alice"
+    user.email = "alice@example.com"
+    user.is_authenticated = True
 
     with mock.patch("reflex_django.state.auth_bridge.current_user", return_value=user):
         assert state.user.username == "alice"
@@ -116,8 +116,9 @@ def test_ac5_auto_sync_refreshes_app_state_snapshot() -> None:
     from reflex_django.state.auth_bridge import maybe_sync_app_state_auth
 
     state = _DashboardState()
-    user = User(username="bob")
-    user.is_authenticated = True  # type: ignore[attr-defined]
+    user = mock.Mock()
+    user.username = "bob"
+    user.is_authenticated = True
 
     async def _go() -> None:
         with mock.patch(

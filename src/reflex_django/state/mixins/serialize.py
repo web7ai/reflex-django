@@ -32,6 +32,8 @@ class SerializeMixin(PaginationMixin, QuerySetMixin):
         qs = self.get_scoped_queryset()
         total = await self.get_queryset_count(qs)
         self.update_pagination_meta(total)
+        if total == 0:
+            return []
         page_qs = self.paginate_queryset(qs)
         serializer = self.get_serializer(page_qs, many=True)
         return await serializer.adata()  # type: ignore[return-value]

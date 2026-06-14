@@ -4,6 +4,7 @@ Task-focused pages for building features. Each guide assumes you finished [Getti
 
 | Guide | When to open it |
 |:---|:---|
+| [App entry and pages](app_entry_and_pages.md) | Understand `{app_name}/{app_name}.py`, `{app_name}/views.py`, and `RX_PAGE_PACKAGES` |
 | [Pages](pages.md) | Add routes with `@page` and wire `urls.py` imports |
 | [State](state.md) | Use `AppState`, `ModelState`, or plain `rx.State` |
 | [Database](database.md) | Async ORM patterns inside event handlers |

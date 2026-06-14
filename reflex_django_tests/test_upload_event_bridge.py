@@ -13,7 +13,7 @@ from reflex_django.setup.conf import configure_django
 configure_django()
 
 from reflex_django.bridge.context import current_request, current_user  # noqa: E402
-from reflex_django.bridge.django_event import (  # noqa: E402
+from reflex_django.bridge.event import (  # noqa: E402
     DjangoEventBridge,
     _resolve_router_data,
     _router_data_from_starlette_request,

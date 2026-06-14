@@ -11,7 +11,7 @@ from reflex_django.setup.conf import configure_django
 
 configure_django()
 
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:
@@ -52,7 +52,7 @@ def test_smart_mode_invokes_bridge_fewer_times_than_full() -> None:
             return mock.Mock(), None
 
         with override_settings(RX_EVENT_BRIDGE_MODE=mode), mock.patch(
-            "reflex_django.bridge.django_event.bridge_request_for_state",
+            "reflex_django.bridge.event.preprocess.bridge_request_for_state",
             side_effect=_counting_bridge,
         ), mock.patch(
             "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",

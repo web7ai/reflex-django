@@ -86,6 +86,16 @@ class BaseModelState(ABC):
         object.__setattr__(self, "_rd_request", None)
         object.__setattr__(self, "_rd_django_request", None)
 
+    def _resolve_action_request(self) -> Any | None:
+        """Return a bridged request when one is bound to the current event."""
+        from reflex_django.bridge.context import current_request
+        from reflex_django.state.request import DjangoStateRequest
+
+        http = current_request()
+        if http is None:
+            return None
+        return DjangoStateRequest(http)
+
     def build_context(self, action: str, **kwargs: Any) -> ActionContext:
         pk = kwargs.get("pk")
         if pk is not None:
@@ -102,7 +112,7 @@ class BaseModelState(ABC):
             pk=pk,
             options=self.get_options(),
             backend=self.get_backend(),
-            request=self.request,
+            request=self._resolve_action_request(),
         )
 
     def handle_exception(self, ctx: ActionContext, exc: BaseException) -> None:

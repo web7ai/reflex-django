@@ -16,10 +16,6 @@ from reflex_django.states.auth import DjangoUserState
 from reflex_django.bridge.context import current_request
 from reflex_django.state.auth_bridge import AuthBridgeMixin, session_async_save
 
-# Backward compatibility for modules that imported the private name.
-_session_async_save = session_async_save
-
-
 _NAV_DELAY_MS = 200
 
 

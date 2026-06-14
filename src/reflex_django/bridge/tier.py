@@ -10,6 +10,28 @@ if TYPE_CHECKING:
     from reflex_base.event import Event
 
 _VALID_TIERS = frozenset({"full", "auth_only", "none"})
+_BRIDGE_MODE_SETTINGS_KEY: str | None = None
+_BRIDGE_MODE = "full"
+
+
+def _global_bridge_mode() -> str:
+    global _BRIDGE_MODE_SETTINGS_KEY, _BRIDGE_MODE
+    try:
+        from django.conf import settings
+
+        settings_key = str(getattr(settings, "SETTINGS_MODULE", "") or "")
+        if settings_key != _BRIDGE_MODE_SETTINGS_KEY:
+            mode_raw = getattr(settings, "RX_EVENT_BRIDGE_MODE", "full")
+            _BRIDGE_MODE = (
+                str(mode_raw).strip().lower()
+                if isinstance(mode_raw, str)
+                else "full"
+            )
+            _BRIDGE_MODE_SETTINGS_KEY = settings_key
+    except Exception:
+        _BRIDGE_MODE = "full"
+        _BRIDGE_MODE_SETTINGS_KEY = ""
+    return _BRIDGE_MODE
 
 
 def _normalize_tier(value: object) -> BridgeTier | None:
@@ -113,13 +135,7 @@ def resolve_bridge_tier(
             return _raise_minimum_tier(class_tier, "auth_only")
         return class_tier
 
-    try:
-        from django.conf import settings
-
-        mode_raw = getattr(settings, "RX_EVENT_BRIDGE_MODE", "full")
-        mode = str(mode_raw).strip().lower() if isinstance(mode_raw, str) else "full"
-    except Exception:
-        mode = "full"
+    mode = _global_bridge_mode()
 
     if mode == "full":
         tier: BridgeTier = "full"

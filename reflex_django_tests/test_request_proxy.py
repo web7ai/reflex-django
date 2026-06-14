@@ -14,7 +14,7 @@ from django.http import QueryDict  # noqa: E402
 
 from reflex_django import request  # noqa: E402
 from reflex_django.bridge.context import end_event_request  # noqa: E402
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:
@@ -82,7 +82,7 @@ def test_request_proxy_after_preprocess() -> None:
 
 
 def test_request_get_from_pathname_query_only() -> None:
-    from reflex_django.bridge.django_event import _build_request_from_event
+    from reflex_django.bridge.event import _build_request_from_event
 
     event = _StubEvent(
         router_data={

@@ -1,5 +1,8 @@
 # Migrating to mount-only architecture (v3)
 
+!!! warning "Archived — see v3 migration guide"
+    This page is archived. For the current v3.0 breaking changes checklist, read **[Migrating to v3](../../reference/migration/v3_cleanup.md)**.
+
 reflex-django v3 removes composed ASGI routing modes (`django_outer`, `reflex_outer`) and the `reflex_django.asgi.entry:application` entry point. Production Django uses plain `get_asgi_application()` with `reflex_mount()` in URLconf. Dev uses `manage.py run_reflex`, which runs Vite plus the native Reflex backend with Django mounted in-process.
 
 ## Summary

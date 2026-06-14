@@ -10,8 +10,8 @@ from reflex_django.bridge.context import (
 )
 from reflex_django.state.request import DjangoStateRequest
 
-REQUEST_WRAPPER_ATTR = "_django_led_request_wrapper"
-RESPONSE_ATTR = "_django_led_response"
+REQUEST_WRAPPER_ATTR = "_rx_request_wrapper"
+RESPONSE_ATTR = "_rx_response"
 
 _PROXY_TYPE_NAMES = frozenset({"StateProxy", "ReadOnlyStateProxy"})
 
@@ -31,7 +31,7 @@ def bind_request_on_state(
 ) -> None:
     """Store :class:`~reflex_django.state.request.DjangoStateRequest` on *state*.
 
-    Reflex runs :meth:`~reflex_django.bridge.django_event.DjangoEventBridge.preprocess` on
+    Reflex runs :meth:`~reflex_django.bridge.event.DjangoEventBridge.preprocess` on
     the root state, then resolves the handler substate (e.g. ``HomeState``) in
     :func:`reflex_base.event.processor.base_state_processor.process_event`.
     Context variables alone are not always visible on that substate instance;

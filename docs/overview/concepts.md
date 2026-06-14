@@ -70,6 +70,8 @@ Most projects only change **settings** and **pages**. The catch-all URL is autom
 
     Settings and imports handle Job 1. Auto-mount handles Job 2. They run at different times. That is normal.
 
+    **Entry module vs page hub:** Reflex also expects `{app_name}/{app_name}.py` on disk (keep it thin). Your page imports usually live in `{app_name}/views.py`. See [App entry module and page registration](../guides/app_entry_and_pages.md).
+
 ## Development vs production
 
 === "Development"
@@ -114,6 +116,7 @@ If you omit it, reflex-django uses the folder name next to `manage.py` (hyphens 
 
 ## See also
 
+- [App entry module and page registration](../guides/app_entry_and_pages.md)
 - [Your first app](../getting-started/quickstart.md)
 - [Project structure](../getting-started/project_structure.md)
 - [Architecture](../internals/architecture.md) (full request and event flow)

@@ -9,7 +9,7 @@
 
 For narrative setup, see [Configuration](../getting-started/configuration.md) and [The three knobs](../overview/concepts.md).
 
-Most projects change zero settings. The defaults are tuned for v1.0.
+Most projects change zero settings. Upgrading from 2.x? See [Migrating to v3](migration/v3_cleanup.md).
 
 ---
 
@@ -179,10 +179,10 @@ Upload events always run at least `"auth_only"`. Full scaling guide: [Scaling an
 | `RX_MIRROR_MESSAGES` | `True` | Mirror django.contrib.messages. |
 | `RX_MIRROR_CSRF` | `True` | Mirror CSRF token to UI state. |
 | `RX_AUTH_AUTO_SYNC` | `True` | Refresh user snapshot on each event. |
-| `RX_AUTO_DISCOVER_PAGES` | `True` | Import `{app}.views` (deprecated; prefer explicit imports). |
-| `RX_PAGE_PACKAGES` | `[]` | Explicit page modules (disables auto-discover when set). |
-| `RX_LOGIN_URL` | `"/login"` | Redirect target for `@login_required`. |
-| `RX_AUTH` | dict | Built-in auth pages config. See [Authentication](../guides/authentication.md). |
+| `RX_PAGE_PACKAGES` | `[]` | Explicit page modules. When empty, only `{app_name}.views` is imported at compile time. |
+| `RX_PAGE_MODULE` | `"views"` | Submodule per app (`{app}.{RX_PAGE_MODULE}`). |
+| `RX_PAGE_APPS` | `None` | Unused in v3; import modules in `urls.py` instead. |
+| `RX_AUTH` | dict | Built-in auth pages config, including `LOGIN_URL` (default `"/login"`). See [Authentication](../guides/authentication.md). |
 
 ---
 

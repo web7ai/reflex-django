@@ -15,6 +15,7 @@ from reflex_django.auth_state import (
     _mark_auth_snapshot_dirty_subtree,
     _mark_auth_ui_dirty,
     _mark_inherited_auth_snapshot_dirty,
+    _sync_django_auth_substates,
 )
 
 __all__ = [
@@ -22,7 +23,7 @@ __all__ = [
     "_auth_snapshot_owner",
     "_mark_auth_snapshot_dirty_subtree",
     "_mark_auth_ui_dirty",
-    "_mark_inherited_auth_snapshot_dirty",
+    "_sync_django_auth_substates",
     "apply_auth_snapshot_for_event_handler",
     "apply_auth_snapshot_to_state",
     "user_snapshot",

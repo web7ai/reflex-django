@@ -59,7 +59,7 @@ def _ensure_django_api_transformer(app: App) -> None:
 
 
 def _ensure_event_bridge(app: Any) -> None:
-    from reflex_django.bridge.django_event import DjangoEventBridge
+    from reflex_django.bridge.event import DjangoEventBridge
 
     middlewares = getattr(app, "_middlewares", ())
     if any(type(m).__name__ == "DjangoEventBridge" for m in middlewares):

@@ -45,7 +45,7 @@ def test_bind_request_on_state_attaches_wrapper() -> None:
 
 
 def test_preprocess_binds_handler_substate() -> None:
-    from reflex_django.bridge.django_event import DjangoEventBridge
+    from reflex_django.bridge.event import DjangoEventBridge
 
     bridge = DjangoEventBridge()
     child = HomeState()
@@ -84,7 +84,7 @@ def test_preprocess_binds_handler_substate() -> None:
 
 
 def test_bind_django_request_for_handler_state_without_preprocess() -> None:
-    from reflex_django.bridge.django_event import bind_django_request_for_handler_state
+    from reflex_django.bridge.event import bind_django_request_for_handler_state
 
     state = HomeState()
     rd = {

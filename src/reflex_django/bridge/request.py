@@ -1,6 +1,6 @@
 """Django-style ``request`` proxy for Reflex event handlers.
 
-Use inside ``@rx.event`` handlers after :class:`~reflex_django.bridge.django_event.DjangoEventBridge`
+Use inside ``@rx.event`` handlers after :class:`~reflex_django.bridge.event.DjangoEventBridge`
 has bound the synthetic :class:`django.http.HttpRequest`::
 
     from reflex_django import request
@@ -184,7 +184,7 @@ class RequestProxy:
             return getattr(http, name)
         msg = (
             f"No active Reflex event request (attribute {name!r}). "
-            "Ensure ReflexDjangoPlugin.install_event_bridge is enabled."
+            "Ensure install_reflex_django_integration() is enabled (via manage.py run_reflex)."
         )
         raise AttributeError(msg)
 

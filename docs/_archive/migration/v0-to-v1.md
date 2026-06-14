@@ -1,5 +1,8 @@
 # Migrating from reflex-django 0.x to 1.0
 
+!!! warning "Archived — see v3 migration guide"
+    This page is archived. For current v3.0 breaking changes, read **[Migrating to v3](../../reference/migration/v3_cleanup.md)**.
+
 **What you will learn:** Where to find the full v1.0 migration guide.
 
 **When you need this:**

@@ -1,4 +1,4 @@
-"""Tests for reflex_django.bridge.django_event.DjangoEventBridge."""
+"""Tests for reflex_django.bridge.event.DjangoEventBridge."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from reflex_django.bridge.context import (  # noqa: E402
     current_session,
     current_user,
 )
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:

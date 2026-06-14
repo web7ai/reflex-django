@@ -130,6 +130,7 @@ nav:
     - Existing Reflex project: getting-started/existing_reflex_project.md
   - Guides:
     - guides/index.md
+    - App entry and pages: guides/app_entry_and_pages.md
     - Pages: guides/pages.md
     - State: guides/state.md
     - Database: guides/database.md
@@ -155,6 +156,7 @@ nav:
   - Reference:
     - reference/index.md
     - Settings: reference/settings.md
+    - "Migration: v3 cleanup": reference/migration/v3_cleanup.md
     - "Migration: RX settings": reference/migration/rx_settings_rename.md
     - Public API: reference/api.md
     - FAQ: reference/faq.md

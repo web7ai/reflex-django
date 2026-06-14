@@ -106,8 +106,8 @@ def _bootstrap_reflex_integration_for_django_mode() -> None:
     ``manage.py run_reflex`` calls :func:`~reflex_django.runtime.integration.install_reflex_django_integration`
     in the parent process, but Granian reload workers re-import the app module with a
     fresh interpreter and only run :func:`configure_django` (via ``create_app``). Without
-    this hook, ``ReflexDjangoPlugin.post_compile`` never runs and ``/admin`` is handled by
-    Reflex (404) instead of Django.
+    this hook, frontend stability patches and Django prefix routing may not apply in
+    reload workers, and ``/admin`` can 404 inside the Reflex backend.
     """
     try:
         from reflex_django.runtime.integration import install_reflex_django_integration

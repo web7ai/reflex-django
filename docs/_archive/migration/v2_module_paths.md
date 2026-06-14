@@ -1,5 +1,8 @@
 # v2 module path migration
 
+!!! warning "Archived — see v3 migration guide"
+    This page is archived. For current v3.0 breaking changes, read **[Migrating to v3](../../reference/migration/v3_cleanup.md)**.
+
 !!! note "v3 ASGI update"
     v3 removed `reflex_django.asgi.entry`. Production uses plain `get_asgi_application()`. Dev uses `run_reflex` with `make_dispatcher`. See **[Migrating to mount-only](v3_mount_only.md)** before applying v2 ASGI snippets below.
 

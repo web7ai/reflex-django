@@ -1,11 +1,11 @@
-"""Tests for django_led_app.app page registration."""
+"""Tests for reflex_app page registration."""
 
 from __future__ import annotations
 
 import pytest
 
 from reflex_django.runtime.app_factory import (
-    ensure_django_led_app_ready,
+    ensure_reflex_app_ready,
     get_or_create_app,
     reset_app_factory_cache,
 )
@@ -35,7 +35,7 @@ def test_get_or_create_app_singleton() -> None:
     assert reflex_app.app is first
 
 
-def test_add_page_on_django_led_app() -> None:
+def test_add_page_on_reflex_app() -> None:
     import reflex as rx
     import reflex_django.runtime.reflex_app as reflex_app
 
@@ -46,7 +46,7 @@ def test_add_page_on_django_led_app() -> None:
         return rx.text("hello")
 
     app.add_page(sample_page, route="/sample-led")
-    ready = ensure_django_led_app_ready()
+    ready = ensure_reflex_app_ready()
     assert ready is app
     unevaluated = getattr(app, "_unevaluated_pages", {})
     assert "sample-led" in unevaluated or "/sample-led" in unevaluated or any(
@@ -54,22 +54,22 @@ def test_add_page_on_django_led_app() -> None:
     )
 
 
-def test_lazy_app_export_matches_django_led_app() -> None:
-    import reflex_django.runtime.reflex_app as django_led
+def test_lazy_app_export_matches_reflex_app() -> None:
+    import reflex_django.runtime.reflex_app as reflex_app_module
 
-    django_led._app = None
+    reflex_app_module._app = None
     from reflex_django import app as exported
 
-    assert exported is django_led.app
+    assert exported is reflex_app_module.app
 
 
 def test_page_decorator_and_add_page_share_singleton() -> None:
     import reflex as rx
-    import reflex_django.runtime.reflex_app as django_led
+    import reflex_django.runtime.reflex_app as reflex_app_module
     from reflex_django.pages.decorators import page
 
-    django_led._app = None
-    app = django_led.app
+    reflex_app_module._app = None
+    app = reflex_app_module.app
 
     @page(route="/decorated", title="Decorated")
     def decorated_page() -> rx.Component:
@@ -79,7 +79,7 @@ def test_page_decorator_and_add_page_share_singleton() -> None:
         return rx.text("added")
 
     app.add_page(added_page, route="/added")
-    ready = ensure_django_led_app_ready()
+    ready = ensure_reflex_app_ready()
     assert ready is app
     unevaluated = getattr(app, "_unevaluated_pages", {})
     routes = {str(k).lstrip("/") for k in unevaluated}

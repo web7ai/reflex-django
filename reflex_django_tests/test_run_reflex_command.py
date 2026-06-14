@@ -236,7 +236,7 @@ def test_run_uvicorn_passes_import_string_when_reload_enabled(
     mock_module = mock.MagicMock()
     mock_module.application = mock.MagicMock()
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.importlib.import_module",
+        "reflex_django.management.commands.run_reflex.asgi_helpers.importlib.import_module",
         lambda name: mock_module,
     )
     monkeypatch.setattr(

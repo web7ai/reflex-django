@@ -20,13 +20,12 @@ from reflex_django.runtime.integration import install_reflex_django_integration
 
 
 def _load_rxconfig() -> None:
-    """Import the user's ``rxconfig`` so plugin side-effects run.
+    """Import the user's Reflex config so Django settings resolve before CLI commands.
 
-    ``ReflexDjangoPlugin.__post_init__`` exports ``DJANGO_SETTINGS_MODULE``
-    and the API/admin path prefixes into the environment when the plugin is
-    instantiated. Loading ``rxconfig`` triggers that instantiation so
-    subsequent calls to :func:`configure_django` see the user's settings
-    module — without this step, the CLI would fall back to
+    Loading the active :class:`reflex.config.Config` triggers reflex-django's
+    rxconfig bridge, which exports ``DJANGO_SETTINGS_MODULE`` and related env
+    vars when settings-based integration is configured. Subsequent calls to
+    :func:`configure_django` then see the user's settings module instead of
     :mod:`reflex_django.setup.default_settings`.
 
     Failures are swallowed so the standalone ``reflex-django`` console

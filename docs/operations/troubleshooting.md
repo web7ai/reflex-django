@@ -78,6 +78,46 @@ Restart `run_reflex` and hard-refresh the browser.
 
 ---
 
+## Blank SPA or missing home route {#blank-spa-or-missing-home-route}
+
+**Symptoms:** Browser shows a blank page at `/`, or the console reports `dispatch is not a function`. The dev server runs but no Reflex routes appear in the compiled bundle.
+
+**Likely causes:**
+
+1. A `@page` module was never imported before compile (common after v3 removed INSTALLED_APPS scanning).
+2. Pages live in another app (e.g. `blog.views`) but `{app_name}/views.py` does not import them.
+3. `RX_PAGE_PACKAGES` lists a module that does not re-import all page submodules.
+4. Missing `import {app_name}.views` in `urls.py`.
+
+**Fix:**
+
+1. Use one **page registry hub** in `{app_name}/views.py` that imports every `@page` module:
+
+```python
+# shop/views.py  ({app_name}/views.py)
+import blog.views  # noqa: F401
+import frontend.pages.home  # noqa: F401
+```
+
+2. Import the hub from `urls.py`:
+
+```python
+import shop.views  # noqa: F401
+```
+
+3. Optionally document compile imports in settings:
+
+```python
+RX_PAGE_PACKAGES = ["shop.views"]
+```
+
+4. Keep `{app_name}/{app_name}.py` as a thin entry stub (do not rely on it alone for multi-app pages).
+5. Restart `run_reflex`. If still broken, delete `.web/` and run again.
+
+**Related:** [App entry module and page registration](../guides/app_entry_and_pages.md), [Pages in views.py](../guides/pages.md)
+
+---
+
 ## `KeyError: No registered handler found for event`
 
 **Symptoms:** Server log shows `KeyError` with a long handler name containing segments like `reflex_django___auth_state___` or other old module paths after upgrading reflex-django.
@@ -117,7 +157,7 @@ If you only changed Python code and are on reflex-django 2.0+, restarting the ba
 2. Custom API route registered **after** the SPA catch-all (catch-all wins).
 3. Browsing `:8000` in default two-port mode expecting the Vite shell (admin still works on `:8000`, but `/` may not be the SPA).
 4. `RX_DJANGO_PREFIX` omits `/admin`, so Vite proxies admin to the wrong upstream.
-5. **After saving a Reflex page**, Vite restarted on a stripped ``vite.config.js`` before the proxy plugin was re-applied (fixed in recent releases — restart ``run_reflex`` if you still see this on an older build).
+5. **After saving a Reflex page**, Vite restarted on a stripped ``vite.config.js`` before the proxy plugin was re-applied (fixed in recent releases - restart ``run_reflex`` if you still see this on an older build).
 
 **Fix:**
 

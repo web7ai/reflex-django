@@ -9,6 +9,7 @@ This file orients coding agents and LLMs: how reflex-django fits Reflex + Django
 | Item | Value |
 |------|--------|
 | Package | `reflex-django` (import: `reflex_django`) |
+| Version | 3.0+ |
 | Purpose | Run Django (ORM, admin, sessions, auth) alongside Reflex. **Dev:** `manage.py run_reflex` → Vite + Reflex backend with Django mounted in-process via `make_dispatcher`. **Production:** plain `get_asgi_application()` + `reflex_mount()`. |
 | Python | `>=3.12,<4.0` |
 | Django | `>=6.0,<7.0` |
@@ -55,9 +56,9 @@ Browser → edge proxy → Django ASGI (admin, API, SPA shell via reflex_mount)
                     → Reflex backend for /_event, /_upload
 ```
 
-- **HTTP bridge (dev):** `make_dispatcher` in `src/reflex_django/asgi/app.py`, wired from `runtime/app_factory.py` and `bootstrap/app_setup.py`.
-- **Event bridge:** `DjangoEventBridge` in `src/reflex_django/bridge/django_event.py`; tiers in `bridge/tier.py`, cache in `bridge/cache.py`. See `docs/operations/scaling.md`.
-- **Removed in v3:** `django_outer`, `reflex_outer`, `reflex_django.asgi.entry`. `ReflexDjangoPlugin` is deprecated.
+- **HTTP bridge (dev):** `make_dispatcher` in `src/reflex_django/asgi/app.py` (import: `from reflex_django.asgi.app import make_dispatcher`).
+- **Event bridge:** `DjangoEventBridge` in `src/reflex_django/bridge/event/`; tiers in `bridge/tier.py`, cache in `bridge/cache.py`. See `docs/operations/scaling.md`.
+- **Removed in v3:** `ReflexDjangoPlugin`, `setup/plugin.py`, `RX_AUTO_DISCOVER_PAGES`, `RX_LOGIN_URL`, `RX_I18N_EVENT_BRIDGE`, `reflex_page` alias, `reflex_mount(app_name=...)`, `django_plugin=`, top-level `make_dispatcher`.
 
 ---
 
@@ -67,9 +68,8 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 
 | Area | Symbols |
 |------|---------|
-| Plugin | `ReflexDjangoPlugin` (**deprecated** — use Django settings + `run_reflex`) |
 | Django init | `configure_django` |
-| ASGI | `build_django_asgi`, `make_dispatcher` |
+| ASGI | `build_django_asgi`; `make_dispatcher` from `reflex_django.asgi.app` only |
 | Per-event context | **`request`** (`request.user`, `request.session`, `request.GET`, `request.headers`), `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
 | Event middleware | `DjangoEventBridge`, `resolve_bridge_tier`, `invalidate_event_cache` |
 | Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState` |
@@ -119,24 +119,9 @@ Populated from `event.router_data`: `pathname` (+ `?query`), `query` dict, `head
 
 Many public attributes are resolved via **PEP 562** `__getattr__` so submodules that touch the Django ORM, admin, or HTTP stack are not imported until **after** `django.setup()`-compatible initialization.
 
-**Do:** Import `from reflex_django import …` in application code after `rxconfig` / plugin construction in normal Reflex startup. Prefer the package root for documented names.
+**Do:** Import `from reflex_django import …` in application code after Django settings load in normal `run_reflex` startup. Prefer the package root for documented names.
 
-**Avoid:** Import patterns that pull Django models or heavy `reflex_django` submodules at **import time before** settings and `configure_django()` have run (e.g. circular imports from models imported at the top of modules that load before `rxconfig`). If tests need a request binding, use `begin_event_request` / `end_event_request` carefully (see tests under `reflex_django_tests/`).
-
----
-
-## `ReflexDjangoPlugin` configuration
-
-| Argument | Role |
-|----------|------|
-| `settings_module` | Dotted path (e.g. `"backend.settings"`). Sets `DJANGO_SETTINGS_MODULE` via `setdefault` and runs `configure_django`. |
-| `backend_prefix` | Optional prefix for **your** Django HTTP routes (e.g. `"/api"`). Exported to env as `RX_API_PREFIX` when non-empty. |
-| `admin_prefix` | Django admin mount (default `"/admin"`). Sets `RX_ADMIN_PREFIX`. |
-| `django_prefix` | Django-owned URL prefixes (auto-detected from `urlpatterns` by default; override via `reflex_mount(django_prefix=...)`). |
-| `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
-| `install_auth_pages` | Default `False`. When `True`, attempts `reflex_django.auth.autoload()` (prefer explicit `add_auth_pages(app)` in the app module). |
-
-**Static files:** If `django.contrib.staticfiles` is in `INSTALLED_APPS` and `STATIC_URL` is a **path** (not `://` CDN URL), the plugin adds that URL as a forwarded prefix so Django can serve statics (`_static_prefixes` in `setup/plugin.py`).
+**Avoid:** Import patterns that pull Django models or heavy `reflex_django` submodules at **import time before** settings and `configure_django()` have run.
 
 ---
 
@@ -146,15 +131,13 @@ Consolidated from `src/reflex_django/setup/default_settings.py` and related modu
 
 | Setting | Meaning |
 |---------|---------|
-| `RX_AUTO_SETTINGS` | `True` in bundled defaults; plugin **warns** that you should use your own settings + stable `SECRET_KEY` for production. |
-| `reflex_mount(admin_prefix=...)` | Admin URL prefix in ``urls.py`` (default ``/admin``); exported to env for workers. |
-| `RX_LOGIN_URL` | Redirect target for `login_required` on event handlers when anonymous. Legacy fallback for `RX_AUTH["LOGIN_URL"]`. |
-| `RX_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
+| `RX_AUTO_SETTINGS` | `True` in bundled defaults; library warns that you should use your own settings + stable `SECRET_KEY` for production. |
+| `RX_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, `LOGIN_URL`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
 | `EMAIL_BACKEND` / `DEFAULT_FROM_EMAIL` | Required for password-reset emails (console backend OK in dev). |
 | `RX_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
 | `RX_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
 | `RX_AUTH_AUTO_SYNC` | When `True` (default), `DjangoEventBridge` refreshes `AppState` auth snapshot vars on every event. |
-| `RX_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`bridge/django_event.py`). |
+| `RX_PAGE_PACKAGES` | Explicit page module paths. When empty, compile imports `{RX_CONFIG["app_name"]}.views` only. Import modules in `urls.py` at startup. |
 | `RX_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
 | `RX_CONFIG` | Dict of `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, etc. |
 | `RX_PROXY_SERVER` | Optional. When set, Vite proxies Django URL prefixes to separate `runserver`. When unset, Django runs in-process on Reflex backend. |
@@ -502,7 +485,8 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 
 | Mistake | Why it fails |
 |---------|----------------|
-| Plugin prefixes do not match `ROOT_URLCONF` | Django returns 404 or Reflex handles paths unexpectedly. |
+| Missing `import myapp.views` in `urls.py` | Pages never register; blank UI or missing routes. Use `RX_PAGE_PACKAGES` for nonstandard module paths. |
+| Using `from reflex_django import make_dispatcher` | Removed in v3; use `from reflex_django.asgi.app import make_dispatcher`. |
 | Using `DjangoUserState` for authorization | Client-visible; can be stale or tampered with—use `current_user()` / permissions on the server. |
 | Putting non-JSON values into Reflex state or explicit context processors | Serialization errors or subtle runtime failures. |
 | `install_event_bridge=False` but still expecting `current_user()` from sessions | No synthetic request / session binding from the bridge. |
@@ -516,6 +500,7 @@ permission_classes = (IsAuthenticated,)  # on ModelCRUDView subclass Meta or cla
 ## Pointers for deeper reading
 
 - `README.md` — full architecture, examples for states, bridges, context processors.
+- `docs/reference/migration/v3_cleanup.md` — v3 breaking changes.
 - `CHANGELOG.md` — version-to-version changes.
 - `RELEASING.md` — maintainer release process.
-- Source: `src/reflex_django/` — domain packages: `asgi/`, `runtime/`, `bridge/`, `django/`, `dev/`, `setup/`, `mount/`, `auth/`, `auth_state.py`, `states/`, `state/`, `cli/`. See `docs/reference/api.md` for import paths.
+- Source: `src/reflex_django/` — domain packages: `asgi/`, `runtime/integration/`, `bridge/event/`, `django/`, `dev/`, `setup/`, `mount/`, `auth/`, `states/`, `state/assembly/`, `management/commands/run_reflex/`, `cli/`. See `docs/reference/api.md` for import paths.

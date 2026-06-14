@@ -87,6 +87,8 @@ with your **API token** as the password.
    uv run pytest reflex_django_tests -q
    ```
 
+   CI runs the same suite via `.github/workflows/test.yml`.
+
 4. **Build** — From the same directory:
 
    ```bash

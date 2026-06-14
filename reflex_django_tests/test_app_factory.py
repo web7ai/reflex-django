@@ -55,13 +55,13 @@ def test_load_app_factory() -> None:
     assert app is not None
 
 
-def test_ensure_django_led_app_ready_materializes_app_module_stub(
+def test_ensure_reflex_app_ready_materializes_app_module_stub(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     from reflex_django.runtime.app_factory import (
         _APP_MODULE_STUB_MARKER,
-        ensure_django_led_app_ready,
+    ensure_reflex_app_ready,
     )
 
     manage = tmp_path / "manage.py"
@@ -73,7 +73,7 @@ def test_ensure_django_led_app_ready_materializes_app_module_stub(
     monkeypatch.chdir(tmp_path)
     register_mount_rx_config(app_name="demo")
 
-    ensure_django_led_app_ready()
+    ensure_reflex_app_ready()
 
     stub = tmp_path / "demo" / "demo.py"
     assert stub.is_file()
@@ -105,18 +105,18 @@ def test_ensure_reflex_app_module_stub_does_not_overwrite_existing_file(
     assert stub.read_text(encoding="utf-8") == custom
 
 
-def test_ensure_django_led_app_ready_installs_event_bridge(
+def test_ensure_reflex_app_ready_installs_event_bridge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import django
 
     django.setup()
-    from reflex_django.runtime.app_factory import ensure_django_led_app_ready
-    from reflex_django.bridge.django_event import DjangoEventBridge
+    from reflex_django.runtime.app_factory import ensure_reflex_app_ready
+    from reflex_django.bridge.event import DjangoEventBridge
     from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
     ensure_rxconfig_from_django()
-    app = ensure_django_led_app_ready()
+    app = ensure_reflex_app_ready()
     assert any(isinstance(m, DjangoEventBridge) for m in app._middlewares)
 
 
@@ -130,7 +130,15 @@ def test_discover_page_modules_skips_contrib_apps() -> None:
     assert discover_page_modules() == []
 
 
-def test_discover_page_modules_finds_views_in_installed_apps(
+def test_discover_page_modules_returns_primary_app_views(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    register_mount_rx_config(app_name="reflex_django_tests.fixtures.pages_app")
+    packages = discover_page_modules()
+    assert packages == ["reflex_django_tests.fixtures.pages_app.views"]
+
+
+def test_discover_page_modules_does_not_scan_installed_apps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -142,8 +150,9 @@ def test_discover_page_modules_finds_views_in_installed_apps(
         ],
         raising=False,
     )
+    register_mount_rx_config(app_name="demo")
     packages = discover_page_modules()
-    assert "reflex_django_tests.fixtures.pages_app.views" in packages
+    assert packages == []
 
 
 def test_discover_page_modules_prefers_primary_app_first(
@@ -175,10 +184,9 @@ def test_resolve_page_packages_explicit_override(
     assert resolve_page_packages() == ["reflex_django_tests.fixtures.factory_app"]
 
 
-def test_resolve_page_packages_legacy_single_app_when_auto_off(
+def test_resolve_page_packages_primary_app_views(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "RX_AUTO_DISCOVER_PAGES", False, raising=False)
     register_mount_rx_config(app_name="myapp")
     monkeypatch.delattr(settings, "RX_PAGE_PACKAGES", raising=False)
     assert resolve_page_packages() == ["myapp.views"]
@@ -192,15 +200,7 @@ def test_import_page_packages_auto_discovers_template_pages(
     import reflex_django_tests.fixtures.pages_app.views as views_mod
 
     importlib.reload(views_mod)
-    monkeypatch.setattr(
-        settings,
-        "INSTALLED_APPS",
-        [
-            *settings.INSTALLED_APPS,
-            "reflex_django_tests.fixtures.pages_app",
-        ],
-        raising=False,
-    )
+    register_mount_rx_config(app_name="reflex_django_tests.fixtures.pages_app")
     monkeypatch.delattr(settings, "RX_PAGE_PACKAGES", raising=False)
     imported = import_page_packages()
     assert "reflex_django_tests.fixtures.pages_app.views" in imported

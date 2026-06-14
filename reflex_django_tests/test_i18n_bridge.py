@@ -11,7 +11,7 @@ configure_django()
 
 from django.conf import settings  # noqa: E402
 from django.utils import translation  # noqa: E402
-from reflex_django.bridge.django_event import DjangoEventBridge  # noqa: E402
+from reflex_django.bridge.event import DjangoEventBridge  # noqa: E402
 
 
 class _StubEvent:

@@ -15,8 +15,7 @@ class MountTestPlugin(Plugin):
 
 urlpatterns = [
     reflex_mount(
-        app_name="testfrontend",
         plugins=[MountTestPlugin()],
-        rx_config={"frontend_port": 3100},
+        rx_config={"app_name": "testfrontend", "frontend_port": 3100},
     ),
 ]

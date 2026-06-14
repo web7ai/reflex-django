@@ -145,9 +145,12 @@ Full site: **https://web7ai.github.io/reflex-django/**
 
 | | Version |
 |:---|:---|
+| reflex-django | 3.0+ |
 | Python | 3.12+ |
 | Django | 6.0+ |
 | Reflex | 0.9.4+ |
+
+Upgrading from 2.x? See the [v3 migration guide](https://web7ai.github.io/reflex-django/reference/migration/v3_cleanup/).
 
 ---
 

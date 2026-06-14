@@ -7,29 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-06-14
+
 ### Removed (breaking)
 
-- All `REFLEX_DJANGO_*` Django settings and environment variables. Use `RX_*` instead (`REFLEX_DJANGO_RX_CONFIG` → `RX_CONFIG`, `RXDJANGO_PROXY_SERVER` → `RX_PROXY_SERVER`). No deprecated aliases. See [RX settings rename](docs/reference/migration/rx_settings_rename.md).
-- State bridge override `_reflex_django_bridge` → `_rx_bridge`.
-- `REFLEX_DJANGO_HTTP_UPSTREAM` / `RX_HTTP_UPSTREAM` (use `RX_PROXY_SERVER`).
-- Composed ASGI entry `reflex_django.asgi.entry:application` and outer dispatchers (`django_outer`, `reflex_outer`).
-- `RX_URL_ROUTING`, `RX_HTTP_SUBPROCESS`, `RX_HTTP_PORT`, and related HTTP worker settings.
-- `build_django_outer_application`, `asgi_application`, and `build_asgi_application` public exports.
-
-### Added
-
-- `RX_PROXY_SERVER` — optional base URL of a separate Django server for Vite dev proxy; when unset, Django is served from the Reflex backend.
-- `docs/migration/v3_mount_only.md` — mount-only migration guide.
-- **Tiered event bridge** — `RX_EVENT_BRIDGE_MODE` (`full` / `smart` / `none`), per-State `_rx_bridge`, optional `RX_EVENT_BRIDGE_RESOLVER`.
-- **Event cache** — Django `CACHES`-backed write-only auth metadata cache (`RX_EVENT_CACHE`, TTL, `invalidate_event_cache()`).
-- **`RX_PERFORMANCE_PRESET = "lean"`** — trims mirror/auth-sync defaults when still at library defaults.
-- **`RX_EVENT_METRICS`** — opt-in DEBUG timing logs for bridge phases.
-- `docs/scaling.md` — settings-first scaling guide for Django + realtime UI.
+- `ReflexDjangoPlugin` and `reflex_django.setup.plugin` — use Django settings + `install_reflex_django_integration()`.
+- `RX_AUTO_DISCOVER_PAGES` — import page modules in `urls.py` or set `RX_PAGE_PACKAGES`.
+- `RX_LOGIN_URL` — use `RX_AUTH["LOGIN_URL"]`.
+- `RX_I18N_EVENT_BRIDGE` — locale on events follows middleware when `USE_I18N`.
+- `reflex_page` decorator alias — use `@page` from `reflex_django.pages.decorators`.
+- `reflex_mount(app_name=...)` and `django_plugin=` kwargs — use `RX_CONFIG["app_name"]` and settings.
+- Top-level `make_dispatcher` export — import from `reflex_django.asgi.app`.
+- `RX_PLUGIN`, `RX_AUTO_PLUGIN` settings.
+- Dependencies `dill` and `reflex-components-markdown`.
 
 ### Changed (breaking)
 
-- `manage.py run_reflex` runs Reflex with Vite and the native Reflex backend; Django is mounted in the Reflex backend by default. Set `RX_PROXY_SERVER` only when Django runs separately.
+- `ensure_django_led_app_ready` → `ensure_reflex_app_ready`.
+- State pickle attrs `_django_led_request_wrapper` / `_django_led_response` → `_rx_request_wrapper` / `_rx_response`.
+- Module splits: `runtime/integration/`, `bridge/event/`, `state/assembly/`, `management/commands/run_reflex/`.
+
+### Added
+
+- `docs/reference/migration/v3_cleanup.md` — v3 breaking-change guide.
+- `[tool.ruff]` minimal lint config in `pyproject.toml`.
+- `.github/workflows/test.yml` — pytest CI workflow.
+- Docs style check expanded `DEPRECATED_TERMS` for v3 terminology.
+
+### Changed
+
+- All `REFLEX_DJANGO_*` Django settings and environment variables removed in favor of `RX_*` (see `docs/reference/migration/rx_settings_rename.md`).
+- State bridge override `_reflex_django_bridge` → `_rx_bridge`.
+- `manage.py run_reflex` runs Reflex with Vite and the native Reflex backend; Django is mounted in the Reflex backend by default.
 - Production Django ASGI uses plain `get_asgi_application()`; reverse-proxy `/_event` to Reflex.
+- `RX_PROXY_SERVER` — optional base URL of a separate Django server for Vite dev proxy.
+- Tiered event bridge (`RX_EVENT_BRIDGE_MODE`), event cache, `RX_PERFORMANCE_PRESET`, `RX_EVENT_METRICS`.
+- Composed ASGI entry `reflex_django.asgi.entry:application` and outer dispatchers (`django_outer`, `reflex_outer`) removed.
+
+## [2.0.1] - 2026-06-13
+
+Patch release (documentation and tooling fixes).
 
 ## [2.0.0] - 2026-06-12
 

@@ -142,18 +142,13 @@ def test_maybe_auto_mount_infers_django_prefix(
     assert "api" in regex
 
 
-def test_reflex_mount_app_name_deprecation_warning() -> None:
+def test_reflex_mount_rejects_removed_app_name_kwarg() -> None:
     import django
-    import warnings
 
     django.setup()
     from reflex_django.django.urls import reflex_mount
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+    import pytest
+
+    with pytest.raises(TypeError, match="app_name"):
         reflex_mount(app_name="legacy")
-    assert any(
-        issubclass(w.category, DeprecationWarning)
-        and "app_name" in str(w.message)
-        for w in caught
-    )

@@ -88,10 +88,6 @@ def page(
     return decorator
 
 
-# Backward compatibility (removed in a future release).
-reflex_page = page
-
-
 def reflex_template(
     template_fn: Callable[[Callable[..., Any]], Callable[..., Any]],
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -129,6 +125,5 @@ __all__ = [
     "clear_page_registry",
     "get_breadcrumbs_for_route",
     "page",
-    "reflex_page",
     "reflex_template",
 ]

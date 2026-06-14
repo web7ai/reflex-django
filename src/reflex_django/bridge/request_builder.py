@@ -1,6 +1,6 @@
 """Build synthetic HttpRequest objects from Reflex events."""
 
-from reflex_django.bridge.django_event import (
+from reflex_django.bridge.event.request_builder import (
     _attach_anonymous_user,
     _build_request_from_event,
     _build_request_from_router_data,

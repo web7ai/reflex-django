@@ -7,6 +7,11 @@ from typing import Any
 
 from django.core.cache import caches
 
+_CACHE_SETTINGS_KEY: str | None = None
+_CACHE_ALIAS = "default"
+_CACHE_TTL = 60
+_CACHE_KEY_PREFIX = "rx:event:"
+
 
 @dataclass(frozen=True)
 class CachedEventContext:
@@ -16,37 +21,40 @@ class CachedEventContext:
     is_authenticated: bool
 
 
-def _cache_alias() -> str:
+def _refresh_cache_config() -> None:
+    global _CACHE_SETTINGS_KEY, _CACHE_ALIAS, _CACHE_TTL, _CACHE_KEY_PREFIX
     try:
         from django.conf import settings
 
+        settings_key = str(getattr(settings, "SETTINGS_MODULE", "") or "")
+        if settings_key == _CACHE_SETTINGS_KEY:
+            return
         alias = getattr(settings, "RX_EVENT_CACHE", "default")
-        if isinstance(alias, str) and alias.strip():
-            return alias.strip()
+        _CACHE_ALIAS = alias.strip() if isinstance(alias, str) and alias.strip() else "default"
+        _CACHE_TTL = int(getattr(settings, "RX_EVENT_CACHE_TTL", 60))
+        prefix = getattr(settings, "RX_EVENT_CACHE_KEY_PREFIX", "rx:event:")
+        _CACHE_KEY_PREFIX = prefix if isinstance(prefix, str) and prefix else "rx:event:"
+        _CACHE_SETTINGS_KEY = settings_key
     except Exception:
-        pass
-    return "default"
+        _CACHE_ALIAS = "default"
+        _CACHE_TTL = 60
+        _CACHE_KEY_PREFIX = "rx:event:"
+        _CACHE_SETTINGS_KEY = ""
+
+
+def _cache_alias() -> str:
+    _refresh_cache_config()
+    return _CACHE_ALIAS
 
 
 def _cache_ttl() -> int:
-    try:
-        from django.conf import settings
-
-        return int(getattr(settings, "RX_EVENT_CACHE_TTL", 60))
-    except Exception:
-        return 60
+    _refresh_cache_config()
+    return _CACHE_TTL
 
 
 def _key_prefix() -> str:
-    try:
-        from django.conf import settings
-
-        prefix = getattr(settings, "RX_EVENT_CACHE_KEY_PREFIX", "rx:event:")
-        if isinstance(prefix, str) and prefix:
-            return prefix
-    except Exception:
-        pass
-    return "rx:event:"
+    _refresh_cache_config()
+    return _CACHE_KEY_PREFIX
 
 
 def _cache_key(session_key: str) -> str:

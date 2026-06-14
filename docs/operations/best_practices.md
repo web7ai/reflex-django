@@ -15,6 +15,8 @@ These are defaults that work well for most projects, not hard rules.
 
 **Put pages in `{app}/views.py`.** Keeping pages next to their models is the biggest readability win.
 
+**Use one page registry hub.** Import every `@page` module from `{app_name}/views.py` (or list them in `RX_PAGE_PACKAGES`). Keep `{app_name}/{app_name}.py` as a thin entry stub. See [App entry module and page registration](../guides/app_entry_and_pages.md).
+
 **One settings module with env overrides.** Use environment variables for secrets and host-specific values.
 
 **Group state classes with the page that uses them.**

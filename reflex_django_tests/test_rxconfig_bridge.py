@@ -10,7 +10,6 @@ from reflex_base.config import Config
 
 from reflex_django.setup.rxconfig_bridge import (
     _apply_built_with_reflex_default,
-    ensure_reflex_django_plugin,
     merge_rx_config,
 )
 
@@ -34,12 +33,6 @@ def test_merge_rx_config_fill_missing() -> None:
         override=False,
     )
     assert merged.frontend_port == 3000
-
-
-def test_ensure_reflex_django_plugin_is_noop() -> None:
-    base = Config(app_name="app", plugins=(), _skip_plugins_checks=True)
-    merged = ensure_reflex_django_plugin(base)
-    assert not merged.plugins
 
 
 def test_invalid_rx_config_key_raises() -> None:

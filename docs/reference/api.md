@@ -7,7 +7,7 @@
 - You know what you want to do but not which module to import from.
 - You are scanning the package surface without rereading tutorials.
 
-This page is an index only. For walkthroughs, follow the links.
+This page is an index only. For walkthroughs, follow the links. Upgrading from 2.x? See [Migrating to v3](migration/v3_cleanup.md).
 
 ---
 
@@ -27,24 +27,34 @@ from reflex_django.bridge.context import begin_event_request, end_event_request
 from reflex_django.bridge import resolve_bridge_tier, invalidate_event_cache
 ```
 
+`make_dispatcher` is **not** re-exported from the top-level `reflex_django` package in v3. Import it from `reflex_django.asgi.app`.
+
 Most projects import little beyond this list. Full paths are in the tables below.
 
 ---
 
-## Package layout (v2)
+## Package layout (v3)
 
 ```text
 reflex_django/
-  asgi/          build_django_asgi, make_dispatcher
-  runtime/       app factory, integration, reflex_app
-  bridge/        request bridge, event middleware, context
-  django/        apps, urls, admin, model
-  dev/           dev proxy, Vite, internal runners
-  setup/         conf, routing, rxconfig bridge
-  states/        public State classes (AppState, …)
-  auth_state.py  DjangoUserState (canonical for event handler keys)
-  state/         internal model-state framework
-  auth/          auth pages and decorators
+  asgi/                    build_django_asgi, make_dispatcher
+  runtime/
+    app_factory.py         ensure_reflex_app_ready, prepare_pages_for_compile
+    integration/           install_reflex_django_integration, compile patches
+  bridge/
+    event/                 DjangoEventBridge, request builder (re-export at bridge.event)
+    context.py             begin_event_request, current_*
+  django/                  apps, urls, admin, model
+  dev/                     Vite proxy, frontend stability patches
+  setup/                   configure_django, rxconfig bridge
+  mount/                   reflex_mount, auto-mount
+  states/                  AppState, ModelState, DjangoUserState
+  state/
+    assembly/              ModelCRUDView mixin assembly
+    mixins/                CRUD and auth mixins
+  management/commands/
+    run_reflex/            dev/prod run modes
+  auth/                    auth pages and decorators
 ```
 
 ---
@@ -60,12 +70,12 @@ reflex_django/
 | **Auth** | `add_auth_pages`, `login_required`, `permission_required`, auth page classes | [Authentication](../guides/authentication.md), [Auth branding](../guides/authentication.md#make-it-yours) |
 | **Request access** | `self.request`, `request` proxy, `current_*` helpers | [State management](../guides/state.md#reading-the-request) |
 | **Testing** | `begin_event_request`, `end_event_request` | [Testing](../operations/testing.md) |
-| **ASGI / bootstrap** | `application`, `build_application`, `install_reflex_django_integration` | [Architecture](../internals/architecture.md), [Deployment](../operations/deployment.md) |
+| **ASGI / bootstrap** | `build_django_asgi`, `make_dispatcher`, `install_reflex_django_integration` | [Architecture](../internals/architecture.md), [Deployment](../operations/deployment.md) |
 | **Middleware** | `AsyncStreamingMiddleware`, `DEFAULT_DEV_MIDDLEWARE` | [Middleware in events](../guides/middleware.md), [Local development](../getting-started/local_development.md) |
 | **Performance** | `RX_EVENT_BRIDGE_MODE`, `resolve_bridge_tier`, `invalidate_event_cache` | [Scaling and performance](../operations/scaling.md) |
 | **CLI** | `run_reflex`, `export_reflex`, `reflex django ...` | [CLI reference](../operations/cli.md) |
 | **Settings** | All `RX_*` keys | [Settings reference](settings.md) |
-| **Routing** | `UrlRoutingMode`, `resolve_url_routing` | [Routing](../internals/routing.md) |
+| **Routing** | `RX_DJANGO_PREFIX`, reserved prefixes | [Routing](../internals/routing.md) |
 | **Uploads / media** | `rx.upload`, Django `FileField` | [File uploads](../guides/uploads.md), [Media files](../guides/media.md) |
 | **i18n** | `DjangoI18nState` | [i18n](../guides/i18n.md) |
 | **Admin** | `register_admin` | Django admin docs + [Configuration](../getting-started/configuration.md) |
@@ -80,7 +90,7 @@ The top-level `reflex_django` package uses PEP 562 lazy access so importing it d
 import reflex_django
 
 reflex_django.add_auth_pages
-reflex_django.ReflexDjangoPlugin  # deprecated in v1.0; use settings-based config
+reflex_django.request
 ```
 
 State classes and page decorators live in dedicated modules (see typical imports above).
@@ -103,4 +113,4 @@ You got a map from feature area to import names and the right deep-dive page, wi
 
 ## Next up
 
-[FAQ →](faq.md)
+[FAQ →](faq.md)

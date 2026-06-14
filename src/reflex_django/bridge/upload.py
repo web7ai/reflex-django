@@ -1,7 +1,7 @@
 """Inject ``router_data`` into Reflex upload handler events.
 
 Reflex's ``/_upload`` endpoint builds handler :class:`~reflex_base.event.Event`
-objects without ``router_data``, so :class:`~reflex_django.bridge.django_event.DjangoEventBridge`
+objects without ``router_data``, so :class:`~reflex_django.bridge.event.DjangoEventBridge`
 cannot read session cookies. This module patches the upload helpers once to
 attach cookies and routing metadata from the Starlette upload request at
 enqueue time (reliable even when the handler event is processed on a worker task).
@@ -14,7 +14,7 @@ import dataclasses
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
-from reflex_django.bridge.django_event import _router_data_from_starlette_request
+from reflex_django.bridge.event.router_data import _router_data_from_starlette_request
 
 if TYPE_CHECKING:
     from reflex_base.event import Event

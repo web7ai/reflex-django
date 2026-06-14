@@ -556,21 +556,6 @@ def build_frontend_disk_bundle(*, compile_first: bool = True) -> None:
     build_frontend_client_bundle()
 
 
-def run_client_build() -> None:
-    """Backward-compatible alias for :func:`build_frontend_client_bundle`."""
-    build_frontend_client_bundle()
-
-
-def run_vite_client_build(*, watch: bool = False) -> subprocess.Popen[bytes] | None:
-    """Backward-compatible alias for :func:`build_frontend_client_bundle`."""
-    if watch:
-        raise RuntimeError(
-            "compile-dev watch rebuilds via --compile-and-build, not a watch subprocess."
-        )
-    build_frontend_client_bundle()
-    return None
-
-
 def start_compile_dev_watch() -> threading.Thread | None:
     """Watch ``.py`` files and recompile ``.web/`` (no ``react-router build``)."""
     try:

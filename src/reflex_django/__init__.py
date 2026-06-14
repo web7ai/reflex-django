@@ -8,8 +8,6 @@ from reflex_django.asgi.app import build_django_asgi
 from reflex_django.cli import django_cli
 from reflex_django.setup.conf import configure_django
 from reflex_django.runtime.app_factory import create_app
-from reflex_django.setup.plugin import ReflexDjangoPlugin, make_dispatcher
-
 if TYPE_CHECKING:
     from reflex_django.django.admin import register as register_admin
     from reflex_django.auth import (
@@ -52,7 +50,7 @@ if TYPE_CHECKING:
     )
     from reflex_django.bridge.event_handler import run_middleware_chain
     from reflex_django.bridge.request import RequestProxy, request
-    from reflex_django.bridge.django_event import DjangoEventBridge
+    from reflex_django.bridge.event import DjangoEventBridge
     from reflex_django.django.model import Model
     from reflex_django.bridge.session_js import (
         session_cookie_clear_js,
@@ -66,7 +64,6 @@ __all__ = [
     "Model",
     "ReflexDjangoAuthError",
     "ReflexDjangoModelSerializer",
-    "ReflexDjangoPlugin",
     "add_auth_pages",
     "auth_pages",
     "auth_routes",
@@ -89,7 +86,6 @@ __all__ = [
     "end_event_request",
     "end_event_response",
     "get_auth_settings",
-    "make_dispatcher",
     "register_admin",
     "login_required",
     "permission_required",
@@ -126,7 +122,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
         "reflex_django.serializers",
         "ReflexDjangoModelSerializer",
     ),
-    "DjangoEventBridge": ("reflex_django.bridge.django_event", "DjangoEventBridge"),
+    "DjangoEventBridge": ("reflex_django.bridge.event", "DjangoEventBridge"),
     "Model": ("reflex_django.django.model", "Model"),
     "ReflexDjangoAuthError": ("reflex_django.auth.shortcuts", "ReflexDjangoAuthError"),
     "auser_has_perm": ("reflex_django.auth.shortcuts", "auser_has_perm"),
