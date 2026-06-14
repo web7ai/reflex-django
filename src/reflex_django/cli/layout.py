@@ -29,9 +29,26 @@ def ensure_reflex_cli_layout() -> None:
     prerequisites.ensure_reflex_installation_id()
 
     web_dir = prerequisites.get_web_dir()
+    try:
+        from django.conf import settings
+        is_debug = settings.DEBUG
+    except Exception:
+        is_debug = True
+
+    if not is_debug:
+        import sys
+        args = [arg.lower() for arg in sys.argv]
+        is_build = any(
+            x in args
+            for x in ("export", "export_reflex", "deploy", "build", "compile")
+        )
+        if not is_build:
+            return
+
     if not web_dir.exists():
         prerequisites.initialize_frontend_dependencies()
         return
 
     if not prerequisites._is_app_compiled_with_same_reflex_version():
         prerequisites.initialize_frontend_dependencies()
+
