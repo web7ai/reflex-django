@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 _URLCONF_IMPORTED = False
+_URLCONF_IMPORT_DEFERRED = False
+_URLCONF_IMPORTED_BEFORE_ADMIN = False
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,32 @@ def default_app_name_from_project() -> str:
         # Running from the library checkout must not import ``reflex_django.reflex_django``.
         return "web"
     return name
+
+
+def register_mount_from_plugin(plugin: Any) -> None:
+    """Register mount config from a :class:`~reflex_django.plugins.ReflexDjangoPlugin`."""
+    from reflex_django.plugins.reflex_django import is_reflex_django_plugin
+    from reflex_django.setup.rxconfig_bridge import _coerce_rx_config_dict
+
+    if not is_reflex_django_plugin(plugin):
+        return
+
+    cfg = getattr(plugin, "config", None) or {}
+    django_prefix = cfg.get("django_prefix")
+    coerced_django: tuple[str, ...] | None = None
+    if django_prefix is not None:
+        if isinstance(django_prefix, str):
+            coerced_django = (django_prefix,) if django_prefix.strip() else ()
+        else:
+            coerced_django = tuple(str(p) for p in django_prefix if str(p).strip())
+
+    rx_config_raw = cfg.get("rx_config") or {}
+    register_mount_rx_config(
+        django_plugin=dict(cfg),
+        django_prefix=coerced_django,
+        mount_prefix=cfg.get("mount_prefix"),
+        rx_config=_coerce_rx_config_dict(dict(rx_config_raw)),
+    )
 
 
 def register_mount_rx_config(
@@ -175,18 +203,66 @@ def has_mount_rx_config() -> bool:
 
 def clear_mount_rx_config() -> None:
     """Clear mount-time config (tests only)."""
-    global _URLCONF_IMPORTED
+    global _URLCONF_IMPORTED, _URLCONF_IMPORT_DEFERRED, _URLCONF_IMPORTED_BEFORE_ADMIN
     from reflex_django.mount.auto import clear_auto_mount_state
 
     _REGISTRATIONS.clear()
     _URLCONF_IMPORTED = False
+    _URLCONF_IMPORT_DEFERRED = False
+    _URLCONF_IMPORTED_BEFORE_ADMIN = False
     clear_auto_mount_state()
+
+
+def urlconf_was_imported_before_admin() -> bool:
+    """Return whether ``ROOT_URLCONF`` was evaluated before admin autodiscover."""
+    return _URLCONF_IMPORTED_BEFORE_ADMIN
+
+
+def load_root_urlconf(*, reload_module: bool = False) -> None:
+    """Import (or reload) ``ROOT_URLCONF`` and clear Django's URL resolver cache."""
+    global _URLCONF_IMPORTED, _URLCONF_IMPORTED_BEFORE_ADMIN
+    try:
+        from django.conf import settings
+    except Exception:
+        return
+    if not getattr(settings, "configured", False):
+        return
+    urlconf = getattr(settings, "ROOT_URLCONF", None)
+    if not isinstance(urlconf, str) or not urlconf.strip():
+        return
+    from importlib import import_module, reload
+    import sys
+
+    from django.contrib import admin
+    from django.urls import clear_url_caches
+
+    from reflex_django.mount.auto import should_defer_urlconf_import
+
+    registry_empty = len(admin.site._registry) == 0
+    try:
+        if reload_module and urlconf in sys.modules:
+            import_module(urlconf)
+            reload(sys.modules[urlconf])
+        else:
+            import_module(urlconf)
+        if registry_empty and should_defer_urlconf_import():
+            _URLCONF_IMPORTED_BEFORE_ADMIN = True
+        _URLCONF_IMPORTED = True
+        clear_url_caches()
+    except Exception:
+        pass
 
 
 def ensure_mount_config_loaded() -> None:
     """Import ``ROOT_URLCONF`` and ensure mount config is registered from settings."""
-    global _URLCONF_IMPORTED
+    global _URLCONF_IMPORT_DEFERRED
     if _URLCONF_IMPORTED:
+        if not has_mount_rx_config():
+            from reflex_django.mount.auto import register_mount_from_settings
+
+            register_mount_from_settings()
+        return
+    if _URLCONF_IMPORT_DEFERRED:
         if not has_mount_rx_config():
             from reflex_django.mount.auto import register_mount_from_settings
 
@@ -198,16 +274,19 @@ def ensure_mount_config_loaded() -> None:
         return
     if not getattr(settings, "configured", False):
         return
-    urlconf = getattr(settings, "ROOT_URLCONF", None)
-    if not urlconf:
+    if not getattr(settings, "ROOT_URLCONF", None):
         return
-    try:
-        from importlib import import_module
 
-        import_module(urlconf)
-        _URLCONF_IMPORTED = True
-    except Exception:
-        pass
+    from reflex_django.mount.auto import (
+        admin_autodiscover_complete,
+        should_defer_urlconf_import,
+    )
+
+    if should_defer_urlconf_import() and not admin_autodiscover_complete():
+        _URLCONF_IMPORT_DEFERRED = True
+    else:
+        load_root_urlconf(reload_module=False)
+
     if not has_mount_rx_config():
         from reflex_django.mount.auto import register_mount_from_settings
 

@@ -17,17 +17,30 @@ def _as_api_transformer_sequence(value: Any) -> tuple[Any, ...]:
     return (value,)
 
 
+def apply_django_integration(app: App) -> None:
+    """Mount Django ASGI dispatch and the event bridge on *app*."""
+    _ensure_django_api_transformer(app)
+    _ensure_event_bridge(app)
+
+
 def apply_reflex_plugins_to_app(app: App) -> None:
     """Install Django ASGI dispatch, event bridge, and user plugin hooks."""
     from reflex_base.config import get_config
 
+    from reflex_django.plugins.reflex_django import is_reflex_django_plugin
+    from reflex_django.runtime.integration.modes import (
+        IntegrationMode,
+        get_active_integration_mode,
+    )
     from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
-    ensure_rxconfig_from_django()
-    _ensure_django_api_transformer(app)
-    _ensure_event_bridge(app)
+    if get_active_integration_mode() == IntegrationMode.DJANGO_FIRST:
+        ensure_rxconfig_from_django()
+    apply_django_integration(app)
 
     for plugin in get_config().plugins or ():
+        if is_reflex_django_plugin(plugin):
+            continue
         post_compile = getattr(plugin, "post_compile", None)
         if callable(post_compile):
             post_compile(app=app)
@@ -67,4 +80,4 @@ def _ensure_event_bridge(app: Any) -> None:
     app.add_middleware(DjangoEventBridge())
 
 
-__all__ = ["apply_reflex_plugins_to_app"]
+__all__ = ["apply_django_integration", "apply_reflex_plugins_to_app"]

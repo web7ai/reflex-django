@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ReflexDjangoPlugin`** (`reflex_django.plugins`) — Reflex-first integration for existing Reflex projects. Add to `rxconfig.py` `plugins` with `ReflexDjangoPlugin(config={...})` (alias `RXDJANGOPLUGIN`). Enables `reflex run`, `reflex export`, and `reflex deploy` while mounting Django in-process via `api_transformer`. See `docs/getting-started/existing_reflex_project_plugin.md`.
+- **Dual integration modes** — smart `get_config` wrapper detects Reflex-first (plugin) vs Django-first (settings) vs plain Reflex.
+- **`register_mount_from_plugin`** — plugin config registers into the mount registry (`django_plugin` field).
+
+### Changed
+
+- **CLI bootstrap** (`.pth`) — installs only the deferred `get_config` wrapper; mode-specific bootstrap runs when `rxconfig` loads.
+- **`get_or_create_app`** — re-applies Django integration when returning a cached app (fixes dispatcher attach after URLconf import).
+
 ## [3.0.0] - 2026-06-14
 
 ### Removed (breaking)

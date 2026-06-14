@@ -11,8 +11,8 @@
 You already run Django. reflex-django lets you build the UI in [Reflex](https://reflex.dev) without a separate frontend repo. One process in production, shared session cookies, and `request.user` inside button handlers.
 
 - **Same origin** - admin, API, and SPA on one host in production
-- **Django-first** - settings, ORM, auth, and middleware stay familiar
-- **One dev command** - `python manage.py run_reflex` starts Vite and the backend
+- **Django-first or Reflex-first** - settings-driven default, or `ReflexDjangoPlugin` in `rxconfig.py`
+- **One dev command** - `python manage.py run_reflex` (Django-first) or `reflex run` (plugin path)
 
 ## Start here
 
@@ -26,6 +26,16 @@ You already run Django. reflex-django lets you build the UI in [Reflex](https://
 <p class="rd-card__desc">Pages, state, auth, CRUD, uploads, and more.</p>
 </a>
 </div>
+
+## Already have a project?
+
+| You already have | Guide | Dev command |
+|:---|:---|:---|
+| **Django** project | [Existing Django project](getting-started/existing_django_project.md) | `python manage.py run_reflex` |
+| **Reflex** project (settings path) | [Existing Reflex project](getting-started/existing_reflex_project.md) | `python manage.py run_reflex` |
+| **Reflex** project (keep `rxconfig.py`) | [Plugin path](getting-started/existing_reflex_project_plugin.md) | `reflex run` |
+
+See [Brownfield integration](getting-started/index.md#brownfield-integration) for a full comparison.
 
 ## The three files you touch most
 
@@ -53,6 +63,8 @@ In dev, Vite listens on `:3000` and proxies to the backend on `:8000`. See [Loca
 |:---|:---|
 | See how Django and Reflex fit | [How it fits](overview/concepts.md) |
 | Add Reflex to my Django project | [Existing Django project](getting-started/existing_django_project.md) |
+| Add Django to my Reflex project | [Existing Reflex project](getting-started/existing_reflex_project.md) |
+| Keep `rxconfig.py` and `reflex run` | [Plugin path](getting-started/existing_reflex_project_plugin.md) |
 | Read `request.user` in a handler | [State](guides/state.md) |
 | Deploy to one container | [Deployment](operations/deployment.md) |
 | Look up a setting | [Settings reference](reference/settings.md) |

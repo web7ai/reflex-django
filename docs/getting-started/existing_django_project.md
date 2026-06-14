@@ -14,9 +14,9 @@ tags: [integration, django]
 
 Good news: you add reflex-django like any other Django app. Your models stay put. Your API stays put. You drop `@page` functions into an app's `views.py`.
 
-**Coming from plain Reflex?** See [Add to an existing Reflex project](existing_reflex_project.md).
+**Coming from plain Reflex?** See [Add to an existing Reflex project](existing_reflex_project.md) (settings path) or [Plugin path](existing_reflex_project_plugin.md) (keep `rxconfig.py` and `reflex run`).
 
-**Not sure which guide?** See [Integration guides](index.md).
+**Not sure which guide?** See [Getting started — brownfield](index.md#brownfield-integration).
 
 ---
 
@@ -215,4 +215,4 @@ You treated reflex-django as another Django app: installed it, pointed ASGI at t
 
 ---
 
-**Next up:** [Project structure](project_structure.md)
+**Next up:** [Add to an existing Reflex project](existing_reflex_project.md) · [Project structure](project_structure.md)

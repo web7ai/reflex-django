@@ -15,6 +15,7 @@ logger = logging.getLogger("reflex_django.mount.auto")
 _MOUNT_BOOT_COMPLETED = False
 _MOUNT_HANDLE: ReflexMountHandle | None = None
 _SETTINGS_MOUNT_REGISTERED = False
+_ADMIN_AUTODISCOVER_COMPLETE = False
 
 
 class ReflexMountHandle:
@@ -282,6 +283,45 @@ def _reflex_before_admin_in_installed_apps() -> bool:
         return False
 
 
+def admin_autodiscover_complete() -> bool:
+    """Return whether ``django.contrib.admin`` autodiscover has finished."""
+    return _ADMIN_AUTODISCOVER_COMPLETE
+
+
+def mark_admin_autodiscover_complete() -> None:
+    """Record that admin autodiscover finished (internal)."""
+    global _ADMIN_AUTODISCOVER_COMPLETE
+    _ADMIN_AUTODISCOVER_COMPLETE = True
+
+
+def should_defer_urlconf_import() -> bool:
+    """Return whether ``ROOT_URLCONF`` must wait for admin autodiscover."""
+    try:
+        from django.conf import settings
+    except Exception:
+        return False
+    if "django.contrib.admin" not in getattr(settings, "INSTALLED_APPS", ()):
+        return False
+    return _reflex_before_admin_in_installed_apps()
+
+
+def refresh_urlconf_after_admin() -> None:
+    """Load or reload ``ROOT_URLCONF`` once admin models are registered."""
+    from reflex_django.mount import config as mount_config
+    from reflex_django.mount.config import (
+        load_root_urlconf,
+        urlconf_was_imported_before_admin,
+    )
+
+    mark_admin_autodiscover_complete()
+    needs_reload = urlconf_was_imported_before_admin()
+    if mount_config._URLCONF_IMPORT_DEFERRED or needs_reload:
+        load_root_urlconf(reload_module=needs_reload)
+        mount_config._URLCONF_IMPORT_DEFERRED = False
+    elif not mount_config._URLCONF_IMPORTED:
+        load_root_urlconf(reload_module=False)
+
+
 def schedule_auto_mount_after_admin() -> None:
     """Schedule :func:`maybe_auto_mount` once admin autodiscover has finished.
 
@@ -308,6 +348,7 @@ def schedule_auto_mount_after_admin() -> None:
 
     def ready_with_auto_mount(self: AdminConfig, *args: Any, **kwargs: Any) -> None:
         original_ready(self, *args, **kwargs)
+        refresh_urlconf_after_admin()
         maybe_auto_mount()
 
     AdminConfig.ready = ready_with_auto_mount  # type: ignore[method-assign]
@@ -398,9 +439,11 @@ def maybe_auto_mount() -> ReflexMountHandle | None:
 def clear_auto_mount_state() -> None:
     """Reset auto-mount module state (tests only)."""
     global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE, _SETTINGS_MOUNT_REGISTERED
+    global _ADMIN_AUTODISCOVER_COMPLETE
     _MOUNT_BOOT_COMPLETED = False
     _MOUNT_HANDLE = None
     _SETTINGS_MOUNT_REGISTERED = False
+    _ADMIN_AUTODISCOVER_COMPLETE = False
     try:
         from django.contrib.admin.apps import AdminConfig
 
@@ -412,11 +455,14 @@ def clear_auto_mount_state() -> None:
 
 __all__ = [
     "ReflexMountHandle",
+    "admin_autodiscover_complete",
     "clear_auto_mount_state",
     "ensure_reflex_mount",
     "has_reflex_mount",
     "maybe_auto_mount",
     "refresh_reflex_mount_catchall",
+    "refresh_urlconf_after_admin",
     "register_mount_from_settings",
     "schedule_auto_mount_after_admin",
+    "should_defer_urlconf_import",
 ]

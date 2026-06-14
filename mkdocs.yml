@@ -128,6 +128,7 @@ nav:
     - Local development: getting-started/local_development.md
     - Existing Django project: getting-started/existing_django_project.md
     - Existing Reflex project: getting-started/existing_reflex_project.md
+    - Existing Reflex project (plugin): getting-started/existing_reflex_project_plugin.md
   - Guides:
     - guides/index.md
     - App entry and pages: guides/app_entry_and_pages.md

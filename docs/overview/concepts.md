@@ -4,6 +4,8 @@ You already know Django. reflex-django adds a reactive UI in Python on the same 
 
 This page is a short map. For step-by-step setup, go to [Getting started](../getting-started/index.md).
 
+**Brownfield?** See [Getting started — brownfield integration](../getting-started/index.md#brownfield-integration): [existing Django](../getting-started/existing_django_project.md), [existing Reflex (settings)](../getting-started/existing_reflex_project.md), or [existing Reflex (plugin)](../getting-started/existing_reflex_project_plugin.md).
+
 ## At a glance
 
 | You keep | You add |

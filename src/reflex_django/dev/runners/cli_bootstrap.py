@@ -40,9 +40,9 @@ def _attach() -> None:
 
     register_django_cli_group_if_needed(_rr.cli)
     try:
-        from reflex_django.runtime.integration import install_reflex_django_integration
+        from reflex_django.runtime.integration.registry import install_early_cli_patch
 
-        install_reflex_django_integration()
+        install_early_cli_patch()
     except Exception:
         pass
     _ATTACHED = True

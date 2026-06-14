@@ -21,11 +21,12 @@ sys.path.insert(0, {root!r})
 os.environ["DJANGO_SETTINGS_MODULE"] = "reflex_django_tests.test_auto_mount_admin_order_settings"
 
 import django
+
+django.setup()
+
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.urls import reverse
-
-django.setup()
 
 if not admin.site.is_registered(User):
     admin.site.register(User)
@@ -83,3 +84,42 @@ def test_schedule_auto_mount_patches_admin_when_reflex_listed_first(
     clear_auto_mount_state()
     monkeypatch.delattr(AdminConfig, "_reflex_auto_mount_scheduled", raising=False)
     AdminConfig.ready = original_ready
+
+
+def test_page_decorator_import_before_admin_still_reverses_app_list() -> None:
+    """@page during app ready must not freeze admin URLs before autodiscover."""
+    root = Path(__file__).resolve().parent.parent
+    script = """
+import os
+import sys
+
+sys.path.insert(0, {src!r})
+sys.path.insert(0, {root!r})
+os.environ["DJANGO_SETTINGS_MODULE"] = "reflex_django_tests.test_early_page_import_settings"
+
+import django
+
+django.setup()
+
+from django.contrib import admin
+from django.contrib.auth.models import User
+from django.urls import reverse
+
+if not admin.site.is_registered(User):
+    admin.site.register(User)
+
+url = reverse("admin:app_list", kwargs={{"app_label": "auth"}})
+assert url == "/admin/auth/", url
+print("ok")
+""".format(
+        src=str(root / "src"),
+        root=str(root),
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=str(root),
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

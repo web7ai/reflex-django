@@ -63,10 +63,12 @@ def get_or_create_app() -> Any:
 
     if reflex_app_module._app is not None:
         _APP_INSTANCE = reflex_app_module._app
+        _apply_django_integration_to_app(reflex_app_module._app)
         return reflex_app_module._app
 
     if _APP_INSTANCE is not None:
         reflex_app_module._app = _APP_INSTANCE
+        _apply_django_integration_to_app(_APP_INSTANCE)
         return _APP_INSTANCE
 
     user_app = _resolve_user_create_app()
@@ -518,16 +520,41 @@ def import_page_packages() -> list[str]:
     return imported
 
 
+def load_native_reflex_app() -> Any:
+    """Load :class:`reflex.app.App` from the on-disk ``rxconfig`` module (Reflex-first)."""
+    from reflex_base.config import get_config
+
+    config = get_config()
+    module_path = getattr(config, "module", None) or getattr(
+        config, "app_module_import", None
+    )
+    if not isinstance(module_path, str) or not module_path.strip():
+        msg = "Reflex-first mode requires rx.Config app_name / app_module_import."
+        raise RuntimeError(msg)
+    module = importlib.import_module(module_path.strip())
+    app = getattr(module, "app", None)
+    if app is None:
+        msg = f"Module {module_path!r} has no 'app' attribute."
+        raise RuntimeError(msg)
+    return app
+
+
 def load_app_factory() -> Any:
-    """Load :class:`reflex.app.App` via :func:`get_or_create_app`.
+    """Load :class:`reflex.app.App` via mode-appropriate factory.
 
     Returns:
         The Reflex app instance.
 
     """
     from reflex_django.mount.config import ensure_mount_config_loaded
+    from reflex_django.runtime.integration.modes import (
+        IntegrationMode,
+        get_active_integration_mode,
+    )
 
     ensure_mount_config_loaded()
+    if get_active_integration_mode() == IntegrationMode.REFLEX_FIRST:
+        return load_native_reflex_app()
     return get_or_create_app()
 
 

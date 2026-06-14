@@ -20,7 +20,7 @@ This file orients coding agents and LLMs: how reflex-django fits Reflex + Django
 
 ## What it is / what it is not
 
-**Is:** A Django-first integration that (1) loads Reflex config from `settings.py` (`RX_CONFIG`), (2) mounts Django HTTP routes inside the Reflex dev backend via `make_dispatcher` on `app.api_transformer`, and (3) installs **Reflex event middleware** (`DjangoEventBridge`) that builds a synthetic `HttpRequest` per Socket.IO event so `self.request.user` and `current_user()` work in `@rx.event` handlers.
+**Is:** A Django-first integration (default) that loads Reflex config from `settings.py` (`RX_CONFIG`), **or** a Reflex-first path via `ReflexDjangoPlugin` in on-disk `rxconfig.py`. Both mount Django HTTP routes inside the Reflex dev backend via `make_dispatcher` on `app.api_transformer`, and install **Reflex event middleware** (`DjangoEventBridge`).
 
 **Is not:** A single merged URL router for production. Production Django uses normal `urlpatterns` + `reflex_mount()`. Reflex `/_event` traffic is not a Django view; Django HTTP middleware runs for events only through the **event bridge**.
 
@@ -35,8 +35,9 @@ Do these in order:
 3. **`config/asgi.py`:** `application = get_asgi_application()` (not `reflex_django.asgi.entry`).
 4. **`settings.py`:** `RX_CONFIG`, `INSTALLED_APPS` including `reflex_django`, Django contrib apps as needed.
 5. **`urls.py`:** import page modules for `@page` registration; add `reflex_mount()` catch-all; optional `admin_urlpatterns("/admin")`.
-6. **Dev:** `python manage.py run_reflex` — browse `:3000`; Vite proxies to Reflex backend (`:8000` default) where Django admin/API are mounted in-process.
-7. **Optional split dev:** Terminal 1 `runserver`, Terminal 2 `run_reflex` with `RX_PROXY_SERVER = "http://127.0.0.1:8000"`.
+6. **Dev (Django-first):** `python manage.py run_reflex` — browse `:3000`; Vite proxies to Reflex backend (`:8000` default) where Django admin/API are mounted in-process.
+7. **Dev (Reflex-first):** Add `ReflexDjangoPlugin(config={...})` to `rxconfig.py` `plugins`, then `reflex run`. See `docs/getting-started/existing_reflex_project_plugin.md`.
+8. **Optional split dev:** Terminal 1 `runserver`, Terminal 2 `run_reflex` with `RX_PROXY_SERVER = "http://127.0.0.1:8000"`.
 
 See `docs/getting-started/local_development.md`.
 
@@ -58,7 +59,8 @@ Browser → edge proxy → Django ASGI (admin, API, SPA shell via reflex_mount)
 
 - **HTTP bridge (dev):** `make_dispatcher` in `src/reflex_django/asgi/app.py` (import: `from reflex_django.asgi.app import make_dispatcher`).
 - **Event bridge:** `DjangoEventBridge` in `src/reflex_django/bridge/event/`; tiers in `bridge/tier.py`, cache in `bridge/cache.py`. See `docs/operations/scaling.md`.
-- **Removed in v3:** `ReflexDjangoPlugin`, `setup/plugin.py`, `RX_AUTO_DISCOVER_PAGES`, `RX_LOGIN_URL`, `RX_I18N_EVENT_BRIDGE`, `reflex_page` alias, `reflex_mount(app_name=...)`, `django_plugin=`, top-level `make_dispatcher`.
+- **Removed in v3:** `setup/plugin.py` (restored in v3.1+ as `reflex_django.plugins`), `RX_AUTO_DISCOVER_PAGES`, `RX_LOGIN_URL`, `RX_I18N_EVENT_BRIDGE`, `reflex_page` alias, `reflex_mount(app_name=...)`, top-level `make_dispatcher`.
+- **Reflex-first (v3.1+):** `ReflexDjangoPlugin` / `RXDJANGOPLUGIN` in `rxconfig.py` — use `reflex run`; Django-first remains default without the plugin.
 
 ---
 

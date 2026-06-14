@@ -101,7 +101,7 @@ def _coerce_rx_config_dict(raw: Any) -> dict[str, Any]:
     if unknown:
         msg = (
             f"Unsupported rx_config keys: {sorted(unknown)}. "
-            f"Use reflex_mount(plugins=[...]) and django_plugin={{...}} for plugins."
+            f"Use reflex_mount(plugins=[...]) or ReflexDjangoPlugin(config={{...}}) for plugins."
         )
         raise ValueError(msg)
     if "plugins" in raw:

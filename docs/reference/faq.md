@@ -23,7 +23,12 @@ Yes. See [Add to an existing Django project](../getting-started/existing_django_
 
 ### Can I add this to an existing Reflex project?
 
-Yes. See [Add to an existing Reflex project](../getting-started/existing_reflex_project.md).
+Yes. Two integration paths:
+
+- **Settings path** — move config to `RX_CONFIG`, use `python manage.py run_reflex`. See [Add to an existing Reflex project](../getting-started/existing_reflex_project.md).
+- **Plugin path** — add `ReflexDjangoPlugin` to `rxconfig.py`, keep `reflex run`. See [Plugin path for existing Reflex](../getting-started/existing_reflex_project_plugin.md).
+
+Both require a Django shell (`manage.py`, `settings.py`, `urls.py`).
 
 ### What versions do I need?
 

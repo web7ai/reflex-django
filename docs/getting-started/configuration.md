@@ -178,6 +178,34 @@ Import page modules in `urls.py` so `@page` decorators run at Django startup. Se
 | `RX_CONFIG` | `{}` | Reflex runtime options: ports, `redis_url`, CORS, log level, **`app_name`**, and so on. |
 | `RX_PLUGINS` | `[]` | Reflex plugins as dotted paths or instances (Radix, Tailwind, and so on). |
 
+### Reflex-first plugin (`ReflexDjangoPlugin`)
+
+For existing Reflex projects that keep `rxconfig.py` and `reflex run`, add the plugin instead of moving config to settings:
+
+```python
+from reflex_django.plugins import ReflexDjangoPlugin
+
+plugins=[
+    ReflexDjangoPlugin(config={
+        "settings_module": "config.settings",
+        "django_prefix": ("/admin", "/api"),
+    }),
+]
+```
+
+See [Plugin path for existing Reflex](existing_reflex_project_plugin.md). Mode detection: plugin in `rxconfig.py` → Reflex-first; otherwise Django-first when `manage.py` / `DJANGO_SETTINGS_MODULE` exist.
+
+| Plugin config key | Purpose |
+|:---|:---|
+| `settings_module` | Django settings module (optional if `manage.py` declares it) |
+| `django_prefix` | Django-owned URL prefixes for the ASGI dispatcher |
+| `mount_prefix` | SPA catch-all prefix (default `/`) |
+| `auto_mount` | Append `reflex_mount` catch-all (default `True`) |
+| `urlconf` | Force-import a URLconf module |
+| `rx_config` | Per-mount `rx.Config` overrides (not `plugins`) |
+
+Do **not** put `plugins` inside `RX_CONFIG` or `rx_config` — use `RX_PLUGINS`, `reflex_mount(plugins=...)`, or `ReflexDjangoPlugin` in `rxconfig.py`.
+
 ### rxconfig file helpers
 
 | Setting | Default | What it does |

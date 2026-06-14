@@ -14,7 +14,11 @@ tags: [integration, reflex]
 
 Most UI code stays as-is. You mainly change where config lives, how the app boots, and (when needed) swap `rx.State` for `AppState`.
 
-**Not sure which guide?** See [Integration guides](index.md).
+**Not sure which guide?** See [Getting started — brownfield](index.md#brownfield-integration).
+
+**Minimal-change option:** Keep `rxconfig.py` and `reflex run` with [Plugin path for existing Reflex](existing_reflex_project_plugin.md).
+
+**Settings path (Django-first):** This page — move config to `settings.py`, use `python manage.py run_reflex`.
 
 **The other direction:** [Add to an existing Django project](existing_django_project.md).
 
@@ -182,4 +186,4 @@ You moved Reflex config into Django settings, deleted the standalone bootstrap p
 
 ---
 
-**Next up:** [Add to an existing Django project](existing_django_project.md)
+**Next up:** [Plugin path for existing Reflex](existing_reflex_project_plugin.md) · [Add to an existing Django project](existing_django_project.md)

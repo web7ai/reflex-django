@@ -51,6 +51,12 @@ def _ensure_settings_env() -> None:
 
 
 def _patch_get_config() -> None:
+    """Patch ``get_config`` for Django-first synthesis (legacy direct patch)."""
+    _install_smart_get_config_patch()
+
+
+def _install_smart_get_config_patch() -> None:
+    """Wrap Reflex ``get_config`` to defer mode-specific bootstrap until ``rxconfig`` loads."""
     global _ORIGINAL_GET_CONFIG
     import reflex_base.config as config_module
 
@@ -61,9 +67,54 @@ def _patch_get_config() -> None:
     def patched_get_config(reload: bool = False) -> Config:
         if reload:
             sys.modules.pop("rxconfig", None)
-        from reflex_django.setup.rxconfig_bridge import build_merged_config_for_django_mode
+        original = _ORIGINAL_GET_CONFIG
+        if original is None:
+            from reflex_django.setup.rxconfig_bridge import (
+                build_merged_config_for_django_mode,
+            )
 
-        return build_merged_config_for_django_mode()
+            return build_merged_config_for_django_mode()
+        config = original(reload=reload)
+
+        if not is_installed():
+            from reflex_django.runtime.integration.modes import (
+                IntegrationMode,
+                detect_reflex_django_plugin,
+                resolve_integration_mode,
+                set_active_integration_mode,
+            )
+
+            mode = resolve_integration_mode(config=config)
+            set_active_integration_mode(mode)
+            if mode == IntegrationMode.REFLEX_FIRST:
+                plugin = detect_reflex_django_plugin(config)
+                if plugin is not None:
+                    from reflex_django.runtime.integration import (
+                        install_reflex_first_integration,
+                    )
+
+                    install_reflex_first_integration(plugin)
+            elif mode == IntegrationMode.DJANGO_FIRST:
+                from reflex_django.runtime.integration import (
+                    install_django_first_integration,
+                )
+
+                install_django_first_integration()
+            else:
+                set_installed(True)
+
+        from reflex_django.runtime.integration.modes import (
+            IntegrationMode,
+            get_active_integration_mode,
+        )
+
+        if get_active_integration_mode() == IntegrationMode.DJANGO_FIRST:
+            from reflex_django.setup.rxconfig_bridge import (
+                build_merged_config_for_django_mode,
+            )
+
+            return build_merged_config_for_django_mode()
+        return config
 
     config_module.get_config = patched_get_config  # type: ignore[method-assign]
     _rebind_get_config_imports(patched_get_config)
@@ -346,13 +397,19 @@ def _patch_needs_reinit() -> None:
 
 
 
-def install_bootstrap_patches() -> None:
+def install_bootstrap_patches(*, patch_get_config: bool = True) -> None:
     """Apply early patches before ``rxconfig`` is materialized."""
-    _patch_get_config()
+    if patch_get_config:
+        _install_smart_get_config_patch()
     _patch_reload_paths()
     _patch_prerequisites_app_module()
     _patch_vite_dev_dependency()
     _patch_state_dispatcher_template()
+
+
+def install_early_cli_patch() -> None:
+    """Install only the smart ``get_config`` wrapper for Reflex CLI startup."""
+    _install_smart_get_config_patch()
 
 
 def install_post_rxconfig_patches() -> None:
