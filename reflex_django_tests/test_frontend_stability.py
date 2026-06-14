@@ -141,7 +141,7 @@ def test_apply_frontend_stability_patches(tmp_path: Path) -> None:
     assert "utils/components/DefaultOverlayComponents.jsx" in changed
     assert "utils/components/Button_x.jsx" in changed
     assert "app/root.jsx" in changed
-    assert "vite.config.js" in changed
+    assert "vite.config.js" not in changed
 
     assert "createContext([() => {}, []])" in (web / "utils" / "context.js").read_text(
         encoding="utf-8"

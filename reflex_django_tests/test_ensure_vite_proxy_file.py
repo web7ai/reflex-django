@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from reflex_django.dev.vite_proxy import (
+    ViteProxyRoute,
     ensure_vite_django_dev_proxy,
     inject_vite_proxy_plugin,
     patch_vite_config,
     render_proxy_plugin_js,
+    strip_vite_config_proxy,
 )
 
 _SAMPLE = """export default defineConfig({
@@ -76,3 +78,25 @@ def test_ensure_vite_django_dev_proxy_idempotent(tmp_path: Path) -> None:
         )
         is False
     )
+
+
+def test_ensure_vite_django_dev_proxy_force_restores_stripped_config(
+    tmp_path: Path,
+) -> None:
+    vite = tmp_path / "vite.config.js"
+    routes = (
+        ViteProxyRoute(
+            target="http://127.0.0.1:8010",
+            prefixes=("/admin", "/api", "/_event"),
+        ),
+    )
+    vite.write_text(_SAMPLE, encoding="utf-8")
+    ensure_vite_django_dev_proxy(tmp_path, routes=routes, force=True)
+    first = vite.read_text(encoding="utf-8")
+    assert "reflexDjangoProxyPlugin()" in first
+
+    vite.write_text(strip_vite_config_proxy(first), encoding="utf-8")
+    ensure_vite_django_dev_proxy(tmp_path, routes=routes, force=True)
+    restored = vite.read_text(encoding="utf-8")
+    assert "reflexDjangoProxyPlugin()" in restored
+    assert "rx-django-proxy-rev:" in restored

@@ -219,7 +219,6 @@ def apply_frontend_stability_patches(web_dir: Path) -> list[str]:
             patch_default_overlay_components,
         ),
         (web_dir / "app" / "root.jsx", patch_root_app_wrap),
-        (web_dir / "vite.config.js", patch_vite_react_dedupe),
     ]
 
     for path, patch_fn in patches:

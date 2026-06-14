@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from reflex_django.dev.vite_proxy import (
+    ViteProxyRoute,
     inject_vite_dev_proxy,
+    inject_vite_proxy_plugin,
     patch_vite_config,
+    patch_vite_config_content,
     strip_vite_config_proxy,
 )
 
@@ -84,3 +87,40 @@ def test_strip_vite_config_proxy_removes_injected_rules() -> None:
     assert "reflexDjangoProxyPlugin" not in stripped
     assert '"/_event":' not in stripped
     assert "server: {" in stripped
+
+
+def test_inject_vite_proxy_plugin_adds_call_when_only_import_present() -> None:
+    content = """import { reflexDjangoProxyPlugin } from "./vite-plugin-reflex-django-proxy.js";
+export default defineConfig((config) => ({
+  server: {
+    port: process.env.PORT,
+  },
+  plugins: [
+    reactRouter(),
+  ],
+}));
+"""
+    patched = inject_vite_proxy_plugin(content)
+    assert "reflexDjangoProxyPlugin()" in patched
+
+
+def test_patch_vite_config_content_adds_revision_stamp() -> None:
+    sample = """export default defineConfig((config) => ({
+  server: {
+    port: process.env.PORT,
+  },
+  plugins: [
+    reactRouter(),
+  ],
+}));
+"""
+    routes = (
+        ViteProxyRoute(
+            target="http://localhost:8000",
+            prefixes=("/admin", "/_event"),
+        ),
+    )
+    result = patch_vite_config_content(sample, routes=routes)
+    assert "reflexDjangoProxyPlugin()" in result
+    assert "rx-django-proxy-rev:" in result
+    assert '"/admin":' in result

@@ -117,6 +117,7 @@ If you only changed Python code and are on reflex-django 2.0+, restarting the ba
 2. Custom API route registered **after** the SPA catch-all (catch-all wins).
 3. Browsing `:8000` in default two-port mode expecting the Vite shell (admin still works on `:8000`, but `/` may not be the SPA).
 4. `RX_DJANGO_PREFIX` omits `/admin`, so Vite proxies admin to the wrong upstream.
+5. **After saving a Reflex page**, Vite restarted on a stripped ``vite.config.js`` before the proxy plugin was re-applied (fixed in recent releases — restart ``run_reflex`` if you still see this on an older build).
 
 **Fix:**
 
@@ -177,13 +178,14 @@ location /_event {
 
 ## Wrong routes after changing `RX_DJANGO_PREFIX`
 
-**Symptoms:** API hits the SPA shell, or Reflex pages load Django 404 JSON. Typo `DANAGO_PREFIX` in env has no effect.
+**Symptoms:** API hits the SPA shell, or Reflex pages load Django 404 JSON. Typo `DANAGO_PREFIX` in env has no effect. **Or:** `/admin` on `:3000` worked at startup but returns SPA 404 right after you save a Reflex page (hot-reload recompile).
 
 **Likely causes:**
 
 1. Env var misspelled. The real name is `RX_DJANGO_PREFIX`.
 2. Prefix list out of sync with `urlpatterns` (auto-detection skipped a `re_path`).
 3. Ensure Django prefixes (`/admin`, `/api`, …) are in `urlpatterns` and listed in `django_prefix` (auto-detected or explicit).
+4. Vite restarted on a stripped ``vite.config.js`` before reflex-django re-applied the proxy plugin. Recent releases patch proxy generation on every ``App._compile`` (including backend hot reload), not only the initial startup compile.
 
 **Fix:**
 

@@ -214,25 +214,22 @@ def test_compile_app_for_frontend_syncs_vite_proxy_layout(
 def test_compile_app_for_frontend_applies_stability_patches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """After compile, EventLoopContext guards are applied to generated ``.web`` files."""
+    """After compile, env.json is written and Vite proxy layout is finalized."""
     import reflex.utils.prerequisites as prerequisites
 
     compile_or_validate = mock.MagicMock()
     write_env = mock.MagicMock()
-    stability = mock.MagicMock(return_value=["utils/context.js"])
+    sync_layout = mock.MagicMock()
 
     monkeypatch.setattr(prerequisites, "compile_or_validate_app", compile_or_validate)
     monkeypatch.setattr(_frontend_runner, "_write_env_json", write_env)
-    monkeypatch.setattr(
-        "reflex_django.dev.frontend_stability.apply_frontend_stability_after_compile",
-        stability,
-    )
+    monkeypatch.setattr(_frontend_runner, "_sync_vite_proxy_layout_after_compile", sync_layout)
 
     _frontend_runner._compile_app_for_frontend()
 
     compile_or_validate.assert_called_once()
     write_env.assert_called_once()
-    stability.assert_called_once()
+    sync_layout.assert_called_once()
 
 
 def test_build_id_for_disk_bundle_uses_compile_stamp_when_no_index(

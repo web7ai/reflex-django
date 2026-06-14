@@ -83,3 +83,40 @@ def test_render_proxy_plugin_js_supports_multiple_targets() -> None:
     assert "http://127.0.0.1:8000" in source
     assert "http://127.0.0.1:8010" in source
     assert "/_event" in source
+
+
+def test_resolve_routes_falls_back_to_urlpatterns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _PrefixConfig:
+        def backend_prefixes_for_asgi(self) -> tuple[str, ...]:
+            return ()
+
+    monkeypatch.setattr(
+        "reflex_django.mount.prefixes.resolve_prefixes",
+        lambda: _PrefixConfig(),
+    )
+    monkeypatch.setattr(
+        "reflex_django.mount.discovery._root_urlconf_urlpatterns",
+        lambda: [object()],
+    )
+    monkeypatch.setattr(
+        "reflex_django.mount.discovery.discover_django_prefixes",
+        lambda patterns: ("/admin", "/api"),
+    )
+    monkeypatch.delenv("RX_PROXY_SERVER", raising=False)
+
+    class _Cfg:
+        api_url = "http://127.0.0.1:8010"
+        frontend_port = 3000
+        backend_port = 8010
+
+    monkeypatch.setattr(
+        "reflex_base.config.get_config",
+        lambda: _Cfg(),
+    )
+
+    routes = resolve_vite_dev_proxy_routes()
+    assert len(routes) == 1
+    assert "/admin" in routes[0].prefixes
+    assert "/api" in routes[0].prefixes
