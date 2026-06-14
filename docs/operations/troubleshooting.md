@@ -23,7 +23,7 @@ Start with the symptom below. Each section points to the long guide when you nee
 **Likely causes:**
 
 1. Reflex backend on `:8000` is not running yet (Vite started before the backend).
-2. `RXDJANGO_PROXY_SERVER` points at a Django server that is not running.
+2. `RX_PROXY_SERVER` points at a Django server that is not running.
 3. Stale or missing proxy block in `.web/vite.config.js` after a compile.
 
 **Fix:**
@@ -35,7 +35,7 @@ python manage.py run_reflex
 ```
 
 2. Wait for both lines in the log: Vite ready on `:3000` and Reflex backend on `:8000`.
-3. If using `RXDJANGO_PROXY_SERVER`, confirm Django is running at that URL.
+3. If using `RX_PROXY_SERVER`, confirm Django is running at that URL.
 4. If proxies disappeared after compile, restart `run_reflex` so `ensure_vite_django_dev_proxy_from_config()` repatches Vite.
 
 **Related:** [Local development](../getting-started/local_development.md), [Routing](../internals/routing.md)
@@ -116,7 +116,7 @@ If you only changed Python code and are on reflex-django 2.0+, restarting the ba
 1. `path("admin/", admin.site.urls)` missing from `urlpatterns`.
 2. Custom API route registered **after** the SPA catch-all (catch-all wins).
 3. Browsing `:8000` in default two-port mode expecting the Vite shell (admin still works on `:8000`, but `/` may not be the SPA).
-4. `REFLEX_DJANGO_DJANGO_PREFIX` omits `/admin`, so Vite proxies admin to the wrong upstream.
+4. `RX_DJANGO_PREFIX` omits `/admin`, so Vite proxies admin to the wrong upstream.
 
 **Fix:**
 
@@ -127,18 +127,18 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("shop.api_urls")),
 ]
-# catch-all appended by REFLEX_DJANGO_AUTO_MOUNT
+# catch-all appended by RX_AUTO_MOUNT
 ```
 
 2. Open admin directly at `http://localhost:8000/admin/` to isolate routing from Vite.
 3. If auto-detection misses a prefix, set env or settings:
 
 ```bash
-export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/static"
+export RX_DJANGO_PREFIX="/admin,/api,/static"
 python manage.py run_reflex
 ```
 
-**Related:** [Pages in views.py (URL split)](../guides/pages.md#the-url-split-django-routes-vs-reflex-routes), [Settings reference](../reference/settings.md#reflex_django_django_prefix)
+**Related:** [Pages in views.py (URL split)](../guides/pages.md#the-url-split-django-routes-vs-reflex-routes), [Settings reference](../reference/settings.md#rx_django_prefix)
 
 ---
 
@@ -175,13 +175,13 @@ location /_event {
 
 ---
 
-## Wrong routes after changing `REFLEX_DJANGO_DJANGO_PREFIX`
+## Wrong routes after changing `RX_DJANGO_PREFIX`
 
 **Symptoms:** API hits the SPA shell, or Reflex pages load Django 404 JSON. Typo `DANAGO_PREFIX` in env has no effect.
 
 **Likely causes:**
 
-1. Env var misspelled. The real name is `REFLEX_DJANGO_DJANGO_PREFIX`.
+1. Env var misspelled. The real name is `RX_DJANGO_PREFIX`.
 2. Prefix list out of sync with `urlpatterns` (auto-detection skipped a `re_path`).
 3. Ensure Django prefixes (`/admin`, `/api`, …) are in `urlpatterns` and listed in `django_prefix` (auto-detected or explicit).
 
@@ -190,13 +190,13 @@ location /_event {
 1. Set the correct env var (comma-separated, leading slashes):
 
 ```bash
-export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/internal"
+export RX_DJANGO_PREFIX="/admin,/api,/internal"
 ```
 
 2. Or pass explicit prefixes to `reflex_mount(django_prefix=(...))`.
 3. Restart `run_reflex` so compile re-exports prefixes into `env.json` and Vite.
 
-**Related:** [Routing](../internals/routing.md#django-prefix-detection), [Settings reference](../reference/settings.md#reflex_django_django_prefix)
+**Related:** [Routing](../internals/routing.md#django-prefix-detection), [Settings reference](../reference/settings.md#rx_django_prefix)
 
 ---
 
@@ -208,11 +208,11 @@ export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/internal"
 |:---|:---|
 | Blank UI on `:8000` in default dev | Open `:3000` for the SPA. `:8000` is backend-only unless you use `--env dev`. |
 | Vite silently on `:3001` | Stop the process holding `:3000`. reflex-django sets `strictPort: true`. |
-| API works on `:8000` but not `:3000` | Confirm two-port mode: `REFLEX_DJANGO_SEPARATE_DEV_PORTS=1` (default for `run_reflex`). |
+| API works on `:8000` but not `:3000` | Confirm two-port mode: `RX_SEPARATE_DEV_PORTS=1` (default for `run_reflex`). |
 | Admin/API 404 from `:3000` or `:8000` | Confirm admin is in `urlpatterns`, `django_prefix` includes `/admin`, and you restarted `run_reflex` after URL changes. |
-| Split-process dev 502 | When using `RXDJANGO_PROXY_SERVER`, confirm Django is running at that URL. |
+| Split-process dev 502 | When using `RX_PROXY_SERVER`, confirm Django is running at that URL. |
 
-**Fix:** Use `python manage.py run_reflex` (not bare `runserver` or lone uvicorn) for SPA dev. Override ports with `REFLEX_DJANGO_RX_CONFIG` or `REFLEX_DJANGO_FRONTEND_PORT` / `REFLEX_DJANGO_BACKEND_PORT`.
+**Fix:** Use `python manage.py run_reflex` (not bare `runserver` or lone uvicorn) for SPA dev. Override ports with `RX_CONFIG` or `RX_FRONTEND_PORT` / `RX_BACKEND_PORT`.
 
 **Related:** [Local development](../getting-started/local_development.md), [CLI](cli.md)
 
@@ -227,12 +227,12 @@ export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/internal"
 | `SynchronousOnlyOperation` | Use `await Model.objects.aget(...)` in async handlers. |
 | White page / `dispatch is not a function` | Delete `.web/`, restart `run_reflex`. |
 | Anonymous user in handlers | Subclass `AppState`, ensure session middleware runs. See [State management](../guides/state.md). |
-| Slow or high-frequency events | `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`; `_reflex_django_bridge = "none"` on hot `rx.State` classes. See [Scaling](scaling.md). |
+| Slow or high-frequency events | `RX_EVENT_BRIDGE_MODE = "smart"`; `_rx_bridge = "none"` on hot `rx.State` classes. See [Scaling](scaling.md). |
 
 ---
 
 ## What just happened?
 
-You matched common dev failures to concrete checks: proxies, CSRF origins, URL order, WebSocket headers, `REFLEX_DJANGO_DJANGO_PREFIX`, and port layout.
+You matched common dev failures to concrete checks: proxies, CSRF origins, URL order, WebSocket headers, `RX_DJANGO_PREFIX`, and port layout.
 
 **Next up:** [FAQ](../reference/faq.md) for short answers, or [Routing](../internals/routing.md) to understand how paths are chosen.

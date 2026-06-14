@@ -32,7 +32,7 @@ def test_reflex_mount_default_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
     import django
 
     django.setup()
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MOUNT_PREFIX", "/", raising=False)
+    monkeypatch.setattr(settings, "RX_MOUNT_PREFIX", "/", raising=False)
     patterns = reflex_mount(django_prefix=("/admin", "/api"))
     pattern = _catchall(patterns)
     regex = pattern.pattern.regex.pattern
@@ -50,8 +50,8 @@ def test_reflex_mount_prefix_kwargs_without_settings(
     import django
 
     django.setup()
-    monkeypatch.delattr(settings, "REFLEX_DJANGO_MOUNT_PREFIX", raising=False)
-    monkeypatch.delenv("REFLEX_DJANGO_DJANGO_PREFIX", raising=False)
+    monkeypatch.delattr(settings, "RX_MOUNT_PREFIX", raising=False)
+    monkeypatch.delenv("RX_DJANGO_PREFIX", raising=False)
     patterns = reflex_mount(
         mount_prefix="/",
         django_prefix=("/admin", "/api"),

@@ -155,6 +155,7 @@ nav:
   - Reference:
     - reference/index.md
     - Settings: reference/settings.md
+    - "Migration: RX settings": reference/migration/rx_settings_rename.md
     - Public API: reference/api.md
     - FAQ: reference/faq.md
     - Glossary: reference/glossary.md

@@ -25,8 +25,8 @@ def test_ensure_rxconfig_from_django_without_file(
         rx_config={"frontend_port": 3000},
     )
     monkeypatch.setattr(settings, "INSTALLED_APPS", [*settings.INSTALLED_APPS, "reflex_django"], raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False, raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_USE_RXCONFIG_FILE", False, raising=False)
+    monkeypatch.setattr(settings, "RX_MATERIALIZE_RXCONFIG", False, raising=False)
+    monkeypatch.setattr(settings, "RX_USE_RXCONFIG_FILE", False, raising=False)
 
     assert not (tmp_path / "rxconfig.py").is_file()
 

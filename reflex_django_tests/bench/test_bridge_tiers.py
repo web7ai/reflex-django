@@ -26,7 +26,7 @@ class _StubEvent:
         self.state_cls = state_cls
 
 
-@override_settings(REFLEX_DJANGO_EVENT_CACHE_TTL=0)
+@override_settings(RX_EVENT_CACHE_TTL=0)
 def test_smart_mode_invokes_bridge_fewer_times_than_full() -> None:
     import reflex as rx
 
@@ -51,7 +51,7 @@ def test_smart_mode_invokes_bridge_fewer_times_than_full() -> None:
             calls += 1
             return mock.Mock(), None
 
-        with override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE=mode), mock.patch(
+        with override_settings(RX_EVENT_BRIDGE_MODE=mode), mock.patch(
             "reflex_django.bridge.django_event.bridge_request_for_state",
             side_effect=_counting_bridge,
         ), mock.patch(

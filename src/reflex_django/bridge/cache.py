@@ -20,7 +20,7 @@ def _cache_alias() -> str:
     try:
         from django.conf import settings
 
-        alias = getattr(settings, "REFLEX_DJANGO_EVENT_CACHE", "default")
+        alias = getattr(settings, "RX_EVENT_CACHE", "default")
         if isinstance(alias, str) and alias.strip():
             return alias.strip()
     except Exception:
@@ -32,7 +32,7 @@ def _cache_ttl() -> int:
     try:
         from django.conf import settings
 
-        return int(getattr(settings, "REFLEX_DJANGO_EVENT_CACHE_TTL", 60))
+        return int(getattr(settings, "RX_EVENT_CACHE_TTL", 60))
     except Exception:
         return 60
 
@@ -41,12 +41,12 @@ def _key_prefix() -> str:
     try:
         from django.conf import settings
 
-        prefix = getattr(settings, "REFLEX_DJANGO_EVENT_CACHE_KEY_PREFIX", "rxdj:event:")
+        prefix = getattr(settings, "RX_EVENT_CACHE_KEY_PREFIX", "rx:event:")
         if isinstance(prefix, str) and prefix:
             return prefix
     except Exception:
         pass
-    return "rxdj:event:"
+    return "rx:event:"
 
 
 def _cache_key(session_key: str) -> str:

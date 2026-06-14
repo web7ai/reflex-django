@@ -117,7 +117,7 @@ components:
 
 # Design System
 
-> **UI authors:** For branded login/register pages and `REFLEX_DJANGO_AUTH` in real projects, see [Login and sessions](https://web7ai.github.io/reflex-django/authentication/) (section **Make it yours**). This file is internal Radix/Tailwind tokens only.
+> **UI authors:** For branded login/register pages and `RX_AUTH` in real projects, see [Login and sessions](https://web7ai.github.io/reflex-django/authentication/) (section **Make it yours**). This file is internal Radix/Tailwind tokens only.
 
 ## Overview
 
@@ -176,7 +176,7 @@ rx.plugins.RadixThemesPlugin(
 
 reflex-django does not ship a theme toggle UI. For preferences that must **survive logout**, store them in **`localStorage`** or a non-auth cookie — built-in logout clears auth cookies and the Reflex websocket `token` only, not `localStorage`.
 
-For server-backed prefs (shared across tabs), use `AppState.session`. Keys listed in `REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS` (default: `("theme",)`) are copied before `alogout` and restored on the new anonymous session:
+For server-backed prefs (shared across tabs), use `AppState.session`. Keys listed in `RX_LOGOUT_PRESERVE_SESSION_KEYS` (default: `("theme",)`) are copied before `alogout` and restored on the new anonymous session:
 
 ```python
 from reflex_django.states import AppState
@@ -387,7 +387,7 @@ Page classes (`LoginPage`, `RegisterPage`, `PasswordResetPage`, …) compose:
 
 `render()` → `shell(card(heading(), form_body()))`
 
-Customize by **subclassing** and overriding hooks (`heading`, `form_fields`, `submit_button`, `render`) or swapping `state_cls`. Override copy via `REFLEX_DJANGO_AUTH["MESSAGES"]` in Django settings — that dict is **strings only**, not visual tokens.
+Customize by **subclassing** and overriding hooks (`heading`, `form_fields`, `submit_button`, `render`) or swapping `state_cls`. Override copy via `RX_AUTH["MESSAGES"]` in Django settings — that dict is **strings only**, not visual tokens.
 
 Register pages with `add_auth_pages(app)` or individual `app.add_page(...)` calls.
 
@@ -474,7 +474,7 @@ Use `.length()` on Reflex lists in `rx.cond`, not Python `len()`.
 - Mix arbitrary hex colors with the theme unless defining a deliberate one-off in Tailwind.
 - Use `len()` inside `rx.cond` on reactive lists — use `.length()`.
 - Fork auth layout CSS when subclassing `LoginPage` is enough.
-- Treat `REFLEX_DJANGO_AUTH["MESSAGES"]` as design tokens.
+- Treat `RX_AUTH["MESSAGES"]` as design tokens.
 - Rely on `is_authenticated` snapshot fields alone for authorization.
 
 ---
@@ -485,7 +485,7 @@ Use `.length()` on Reflex lists in `rx.cond`, not Python `len()`.
 |------|----------|
 | Global look | `rx.theme` on `rx.App` (`accent_color`, `radius`, `appearance`) |
 | Dark mode | Session key + dynamic `appearance` |
-| Auth layout / copy | Subclass auth pages; `REFLEX_DJANGO_AUTH` messages |
+| Auth layout / copy | Subclass auth pages; `RX_AUTH` messages |
 | CRUD layout | App-level pages using `ModelState` vars and events |
 | Custom CSS | Tailwind v4 plugin in consumer `rxconfig.py` |
 | One-off color | `rx.color("indigo", 9)` or Tailwind utilities |

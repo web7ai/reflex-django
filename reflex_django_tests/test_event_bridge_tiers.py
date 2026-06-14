@@ -34,7 +34,7 @@ def test_resolve_bridge_tier_defaults_to_full() -> None:
     assert resolve_bridge_tier(None, _StubEvent()) == "full"
 
 
-@override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE="smart")
+@override_settings(RX_EVENT_BRIDGE_MODE="smart")
 def test_smart_mode_skips_plain_rx_state() -> None:
     import reflex as rx
 
@@ -44,7 +44,7 @@ def test_smart_mode_skips_plain_rx_state() -> None:
     assert resolve_bridge_tier(FilterState, _StubEvent()) == "none"
 
 
-@override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE="smart")
+@override_settings(RX_EVENT_BRIDGE_MODE="smart")
 def test_smart_mode_uses_full_for_app_state() -> None:
     from reflex_django.states import AppState
 
@@ -54,22 +54,22 @@ def test_smart_mode_uses_full_for_app_state() -> None:
     assert resolve_bridge_tier(CartState, _StubEvent()) == "full"
 
 
-@override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE="smart")
+@override_settings(RX_EVENT_BRIDGE_MODE="smart")
 def test_per_class_override_wins_over_smart_mode() -> None:
     import reflex as rx
 
     class HotState(rx.State):
-        _reflex_django_bridge = "full"
+        _rx_bridge = "full"
 
     assert resolve_bridge_tier(HotState, _StubEvent()) == "full"
 
 
-@override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE="smart")
+@override_settings(RX_EVENT_BRIDGE_MODE="smart")
 def test_upload_event_requires_auth_only_minimum() -> None:
     import reflex as rx
 
     class FilterState(rx.State):
-        _reflex_django_bridge = "none"
+        _rx_bridge = "none"
 
     event = _StubEvent(
         router_data={"pathname": "/_upload"},
@@ -85,7 +85,7 @@ def test_custom_resolver_has_highest_precedence() -> None:
         return "none"
 
     class NeedsFull(rx.State):
-        _reflex_django_bridge = "full"
+        _rx_bridge = "full"
 
     with mock.patch(
         "reflex_django.bridge.registry._load_custom_resolver",
@@ -95,7 +95,7 @@ def test_custom_resolver_has_highest_precedence() -> None:
     reset_bridge_resolver_cache()
 
 
-@override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE="smart", REFLEX_DJANGO_EVENT_CACHE_TTL=0)
+@override_settings(RX_EVENT_BRIDGE_MODE="smart", RX_EVENT_CACHE_TTL=0)
 def test_preprocess_skips_middleware_for_none_tier() -> None:
     import reflex as rx
 
@@ -123,7 +123,7 @@ def test_preprocess_skips_middleware_for_none_tier() -> None:
     asyncio.run(_go())
 
 
-@override_settings(REFLEX_DJANGO_EVENT_BRIDGE_MODE="smart", REFLEX_DJANGO_EVENT_CACHE_TTL=0)
+@override_settings(RX_EVENT_BRIDGE_MODE="smart", RX_EVENT_CACHE_TTL=0)
 def test_preprocess_runs_bridge_for_app_state_in_smart_mode() -> None:
     from reflex_django.states import AppState
 

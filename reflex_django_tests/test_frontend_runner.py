@@ -319,7 +319,7 @@ def test_resolve_spa_index_falls_back_to_compile_dev_backup(
     (backup / "index.html").write_text("<html>backup</html>", encoding="utf-8")
 
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path, raising=False)
-    monkeypatch.setenv("REFLEX_DJANGO_COMPILE_DEV", "1")
+    monkeypatch.setenv("RX_COMPILE_DEV", "1")
     monkeypatch.chdir(tmp_path)
 
     index = _resolve_spa_index()

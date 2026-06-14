@@ -73,7 +73,7 @@ def test_site_root_caught_when_single_port_prod(
     from reflex_django.mount.prefixes import resolve_prefixes
     from reflex_django.django.urls import _catchall_regex
 
-    monkeypatch.setenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", "0")
+    monkeypatch.setenv("RX_SEPARATE_DEV_PORTS", "0")
     config = resolve_prefixes(django_prefix=("/admin", "/api"))
     pattern = _catchall_regex(
         config.mount_prefix,

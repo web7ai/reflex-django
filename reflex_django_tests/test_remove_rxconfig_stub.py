@@ -18,7 +18,7 @@ def test_for_cli_does_not_write_rxconfig(tmp_path: Path, monkeypatch: pytest.Mon
 
     from django.conf import settings
 
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False, raising=False)
+    monkeypatch.setattr(settings, "RX_MATERIALIZE_RXCONFIG", False, raising=False)
 
     assert ensure_rxconfig_file(for_cli=True) is None
     assert not (tmp_path / "rxconfig.py").is_file()
@@ -34,7 +34,7 @@ def test_remove_stub_leaves_user_rxconfig(tmp_path: Path, monkeypatch: pytest.Mo
 
     from django.conf import settings
 
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False, raising=False)
+    monkeypatch.setattr(settings, "RX_MATERIALIZE_RXCONFIG", False, raising=False)
 
     assert remove_django_first_rxconfig_stub() is False
     assert (tmp_path / "rxconfig.py").is_file()

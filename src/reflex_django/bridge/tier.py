@@ -24,7 +24,7 @@ def _normalize_tier(value: object) -> BridgeTier | None:
 def _class_bridge_override(handler_state_cls: type | None) -> BridgeTier | None:
     if handler_state_cls is None:
         return None
-    for key in ("_reflex_django_bridge", "reflex_django_bridge"):
+    for key in ("_rx_bridge", "rx_bridge"):
         raw = handler_state_cls.__dict__.get(key)
         tier = _normalize_tier(raw)
         if tier is not None:
@@ -116,7 +116,7 @@ def resolve_bridge_tier(
     try:
         from django.conf import settings
 
-        mode_raw = getattr(settings, "REFLEX_DJANGO_EVENT_BRIDGE_MODE", "full")
+        mode_raw = getattr(settings, "RX_EVENT_BRIDGE_MODE", "full")
         mode = str(mode_raw).strip().lower() if isinstance(mode_raw, str) else "full"
     except Exception:
         mode = "full"

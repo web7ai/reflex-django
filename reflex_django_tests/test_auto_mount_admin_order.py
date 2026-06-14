@@ -72,7 +72,7 @@ def test_schedule_auto_mount_patches_admin_when_reflex_listed_first(
         ],
         raising=False,
     )
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
 
     original_ready = AdminConfig.ready
     schedule_auto_mount_after_admin()

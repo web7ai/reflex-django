@@ -80,7 +80,7 @@ These are defaults that work well for most projects, not hard rules.
 
 **Put `AsyncStreamingMiddleware` last** in `MIDDLEWARE`.
 
-**Custom middleware runs on Reflex events by default.** Skip expensive pieces via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+**Custom middleware runs on Reflex events by default.** Skip expensive pieces via `RX_EVENT_MIDDLEWARE_SKIP`.
 
 ---
 
@@ -88,7 +88,7 @@ These are defaults that work well for most projects, not hard rules.
 
 **Paginate lists. Prefetch aggressively.** N+1 is the most common slowdown.
 
-**Tune the event bridge from `settings.py`** for high-frequency UI: `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`, `_reflex_django_bridge` on hot State classes, `REFLEX_DJANGO_PERFORMANCE_PRESET = "lean"`. See [Scaling and performance](scaling.md).
+**Tune the event bridge from `settings.py`** for high-frequency UI: `RX_EVENT_BRIDGE_MODE = "smart"`, `_rx_bridge` on hot State classes, `RX_PERFORMANCE_PRESET = "lean"`. See [Scaling and performance](scaling.md).
 
 **Pre-build the SPA in CI**, not at container boot.
 

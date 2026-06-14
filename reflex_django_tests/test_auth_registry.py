@@ -167,7 +167,7 @@ def test_routes_lazy_from_settings(monkeypatch) -> None:
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_AUTH",
+        "RX_AUTH",
         {"LOGIN_URL": "/custom-login", "SIGNUP_URL": "/custom-register"},
         raising=False,
     )

@@ -15,8 +15,8 @@ INSTALLED_APPS = [
     "django.contrib.admin",
 ]
 
-REFLEX_DJANGO_AUTO_MOUNT = True
-REFLEX_DJANGO_RX_CONFIG = {"app_name": "demo"}
+RX_AUTO_MOUNT = True
+RX_CONFIG = {"app_name": "demo"}
 
 MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",

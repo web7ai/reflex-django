@@ -15,7 +15,7 @@ def test_login_page_heading_text_from_messages(monkeypatch) -> None:
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_AUTH",
+        "RX_AUTH",
         {"MESSAGES": {"login_heading": "Welcome back"}},
         raising=False,
     )

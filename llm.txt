@@ -19,7 +19,7 @@ This file orients coding agents and LLMs: how reflex-django fits Reflex + Django
 
 ## What it is / what it is not
 
-**Is:** A Django-first integration that (1) loads Reflex config from `settings.py` (`REFLEX_DJANGO_RX_CONFIG`), (2) mounts Django HTTP routes inside the Reflex dev backend via `make_dispatcher` on `app.api_transformer`, and (3) installs **Reflex event middleware** (`DjangoEventBridge`) that builds a synthetic `HttpRequest` per Socket.IO event so `self.request.user` and `current_user()` work in `@rx.event` handlers.
+**Is:** A Django-first integration that (1) loads Reflex config from `settings.py` (`RX_CONFIG`), (2) mounts Django HTTP routes inside the Reflex dev backend via `make_dispatcher` on `app.api_transformer`, and (3) installs **Reflex event middleware** (`DjangoEventBridge`) that builds a synthetic `HttpRequest` per Socket.IO event so `self.request.user` and `current_user()` work in `@rx.event` handlers.
 
 **Is not:** A single merged URL router for production. Production Django uses normal `urlpatterns` + `reflex_mount()`. Reflex `/_event` traffic is not a Django view; Django HTTP middleware runs for events only through the **event bridge**.
 
@@ -32,10 +32,10 @@ Do these in order:
 1. Add dependencies: `uv add reflex reflex-django` (or equivalent).
 2. Django project with `manage.py`, `config/settings.py`, `config/urls.py`, `config/asgi.py`.
 3. **`config/asgi.py`:** `application = get_asgi_application()` (not `reflex_django.asgi.entry`).
-4. **`settings.py`:** `REFLEX_DJANGO_RX_CONFIG`, `INSTALLED_APPS` including `reflex_django`, Django contrib apps as needed.
+4. **`settings.py`:** `RX_CONFIG`, `INSTALLED_APPS` including `reflex_django`, Django contrib apps as needed.
 5. **`urls.py`:** import page modules for `@page` registration; add `reflex_mount()` catch-all; optional `admin_urlpatterns("/admin")`.
 6. **Dev:** `python manage.py run_reflex` — browse `:3000`; Vite proxies to Reflex backend (`:8000` default) where Django admin/API are mounted in-process.
-7. **Optional split dev:** Terminal 1 `runserver`, Terminal 2 `run_reflex` with `RXDJANGO_PROXY_SERVER = "http://127.0.0.1:8000"`.
+7. **Optional split dev:** Terminal 1 `runserver`, Terminal 2 `run_reflex` with `RX_PROXY_SERVER = "http://127.0.0.1:8000"`.
 
 See `docs/getting-started/local_development.md`.
 
@@ -111,7 +111,7 @@ Populated from `event.router_data`: `pathname` (+ `?query`), `query` dict, `head
 
 ---
 
-**Submodule extras (not re-exported on the package root):** **`reflex_django.mixins`** exposes **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`REFLEX_DJANGO_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
+**Submodule extras (not re-exported on the package root):** **`reflex_django.mixins`** exposes **`SessionAuthConfig` / `session_auth_mixin`** (Django session login/logout in Reflex events); see `README.md`. **`reflex_django.auth`** provides canned pages as **`BaseAuthPage`** subclasses (**`LoginPage`**, **`RegisterPage`**, …). Override hook methods (`heading_text`, `form_fields`, …), **`state_cls`**, or **`render()`**; copy via **`MESSAGES`** in **`RX_AUTH`**. Register with **`app.add_page`**, **`register_*_page`** (uses **`default_on_load`**), or **`add_auth_pages(app)`**.
 
 ---
 
@@ -130,8 +130,8 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 | Argument | Role |
 |----------|------|
 | `settings_module` | Dotted path (e.g. `"backend.settings"`). Sets `DJANGO_SETTINGS_MODULE` via `setdefault` and runs `configure_django`. |
-| `backend_prefix` | Optional prefix for **your** Django HTTP routes (e.g. `"/api"`). Exported to env as `REFLEX_DJANGO_API_PREFIX` when non-empty. |
-| `admin_prefix` | Django admin mount (default `"/admin"`). Sets `REFLEX_DJANGO_ADMIN_PREFIX`. |
+| `backend_prefix` | Optional prefix for **your** Django HTTP routes (e.g. `"/api"`). Exported to env as `RX_API_PREFIX` when non-empty. |
+| `admin_prefix` | Django admin mount (default `"/admin"`). Sets `RX_ADMIN_PREFIX`. |
 | `django_prefix` | Django-owned URL prefixes (auto-detected from `urlpatterns` by default; override via `reflex_mount(django_prefix=...)`). |
 | `install_event_bridge` | Default `True`: register `DjangoEventBridge`. Set `False` if you do not need session/user on Reflex events (then `current_user()` etc. will not be populated by the bridge). |
 | `install_auth_pages` | Default `False`. When `True`, attempts `reflex_django.auth.autoload()` (prefer explicit `add_auth_pages(app)` in the app module). |
@@ -140,36 +140,36 @@ Many public attributes are resolved via **PEP 562** `__getattr__` so submodules 
 
 ---
 
-## Django settings (`REFLEX_DJANGO_*` and related)
+## Django settings (`RX_*` and related)
 
 Consolidated from `src/reflex_django/setup/default_settings.py` and related modules:
 
 | Setting | Meaning |
 |---------|---------|
-| `REFLEX_DJANGO_AUTO_SETTINGS` | `True` in bundled defaults; plugin **warns** that you should use your own settings + stable `SECRET_KEY` for production. |
+| `RX_AUTO_SETTINGS` | `True` in bundled defaults; plugin **warns** that you should use your own settings + stable `SECRET_KEY` for production. |
 | `reflex_mount(admin_prefix=...)` | Admin URL prefix in ``urls.py`` (default ``/admin``); exported to env for workers. |
-| `REFLEX_DJANGO_LOGIN_URL` | Redirect target for `login_required` on event handlers when anonymous. Legacy fallback for `REFLEX_DJANGO_AUTH["LOGIN_URL"]`. |
-| `REFLEX_DJANGO_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
+| `RX_LOGIN_URL` | Redirect target for `login_required` on event handlers when anonymous. Legacy fallback for `RX_AUTH["LOGIN_URL"]`. |
+| `RX_AUTH` | Dict: `ENABLED`, `SIGNUP_ENABLED`, `PASSWORD_RESET_ENABLED`, route URLs, redirects, `EMAIL_REQUIRED`, `PASSWORD_MIN_LENGTH`, `MESSAGES`. See `reflex_django.auth.settings`. |
 | `EMAIL_BACKEND` / `DEFAULT_FROM_EMAIL` | Required for password-reset emails (console backend OK in dev). |
-| `REFLEX_DJANGO_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
-| `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
-| `REFLEX_DJANGO_AUTH_AUTO_SYNC` | When `True` (default), `DjangoEventBridge` refreshes `AppState` auth snapshot vars on every event. |
-| `REFLEX_DJANGO_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`bridge/django_event.py`). |
-| `REFLEX_DJANGO_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
-| `REFLEX_DJANGO_RX_CONFIG` | Dict of `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, etc. |
-| `RXDJANGO_PROXY_SERVER` | Optional. When set, Vite proxies Django URL prefixes to separate `runserver`. When unset, Django runs in-process on Reflex backend. |
-| `REFLEX_DJANGO_PLUGINS` | List of Reflex plugin dotted paths or instances. |
-| `REFLEX_DJANGO_EVENT_BRIDGE_MODE` | `"full"` (default), `"smart"`, or `"none"`. Tiered middleware on Reflex events. |
-| `REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE` | Tuple of middleware for `"auth_only"` tier (default: session + auth). |
-| `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` | Optional dotted callable `(handler_state_cls, event) -> tier`. Highest precedence. |
-| `REFLEX_DJANGO_EVENT_RESOLVE_URL` | When `True`, populate `request.resolver_match` on synthetic event requests. |
-| `REFLEX_DJANGO_EVENT_CACHE` / `TTL` / `KEY_PREFIX` | Django `CACHES` alias and TTL for bridge auth snapshot cache (`0` disables). |
-| `REFLEX_DJANGO_EVENT_METRICS` | When `True`, log bridge phase timings at DEBUG. |
-| `REFLEX_DJANGO_PERFORMANCE_PRESET` | `"lean"` disables default mirror/auth-sync toggles when still at library defaults. |
+| `RX_SITE_ORIGIN` | Optional absolute origin for reset links when no request is bound. |
+| `RX_USER_SNAPSHOT_INCLUDE_GROUPS` | When `True`, user snapshots / `DjangoUserState` may include group names. |
+| `RX_AUTH_AUTO_SYNC` | When `True` (default), `DjangoEventBridge` refreshes `AppState` auth snapshot vars on every event. |
+| `RX_I18N_EVENT_BRIDGE` | When `True` and `USE_I18N`, event bridge aligns locale with Django-style negotiation on the synthetic request (`bridge/django_event.py`). |
+| `RX_DATABASE_URL` | Optional env override for DB URL when using defaults (`default_settings._resolve_db_url`). |
+| `RX_CONFIG` | Dict of `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, etc. |
+| `RX_PROXY_SERVER` | Optional. When set, Vite proxies Django URL prefixes to separate `runserver`. When unset, Django runs in-process on Reflex backend. |
+| `RX_PLUGINS` | List of Reflex plugin dotted paths or instances. |
+| `RX_EVENT_BRIDGE_MODE` | `"full"` (default), `"smart"`, or `"none"`. Tiered middleware on Reflex events. |
+| `RX_AUTH_ONLY_MIDDLEWARE` | Tuple of middleware for `"auth_only"` tier (default: session + auth). |
+| `RX_EVENT_BRIDGE_RESOLVER` | Optional dotted callable `(handler_state_cls, event) -> tier`. Highest precedence. |
+| `RX_EVENT_RESOLVE_URL` | When `True`, populate `request.resolver_match` on synthetic event requests. |
+| `RX_EVENT_CACHE` / `TTL` / `KEY_PREFIX` | Django `CACHES` alias and TTL for bridge auth snapshot cache (`0` disables). |
+| `RX_EVENT_METRICS` | When `True`, log bridge phase timings at DEBUG. |
+| `RX_PERFORMANCE_PRESET` | `"lean"` disables default mirror/auth-sync toggles when still at library defaults. |
 
-**Override precedence:** `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` → `State._reflex_django_bridge` → `REFLEX_DJANGO_EVENT_BRIDGE_MODE` → smart defaults. Use `_reflex_django_bridge` (underscore) — public attrs become Reflex state vars. Full guide: `docs/operations/scaling.md`.
+**Override precedence:** `RX_EVENT_BRIDGE_RESOLVER` → `State._rx_bridge` → `RX_EVENT_BRIDGE_MODE` → smart defaults. Use `_rx_bridge` (underscore) — public attrs become Reflex state vars. Full guide: `docs/operations/scaling.md`.
 
-Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX_DJANGO_STATIC_ROOT`, `REFLEX_DJANGO_SECRET_KEY`, `REFLEX_DJANGO_DEBUG`, `REFLEX_DJANGO_ALLOWED_HOSTS`, `REFLEX_DJANGO_URLCONF`. Database URL can fall back from Reflex config `db_url` to a local SQLite file.
+Default settings also honor env vars such as `RX_STATIC_URL`, `RX_STATIC_ROOT`, `RX_SECRET_KEY`, `RX_DEBUG`, `RX_ALLOWED_HOSTS`, `RX_URLCONF`. Database URL can fall back from Reflex config `db_url` to a local SQLite file.
 
 ---
 
@@ -249,8 +249,8 @@ Reflex events skip `SessionMiddleware`. After `login()` / `logout()`, call `_syn
 
 ### Settings
 
-- `REFLEX_DJANGO_AUTH_AUTO_SYNC` (default True): bridge calls `refresh_django_user_fields()` on each event for `AppState` instances.
-- `REFLEX_DJANGO_USER_SNAPSHOT_INCLUDE_GROUPS`: load `group_names` in snapshot.
+- `RX_AUTH_AUTO_SYNC` (default True): bridge calls `refresh_django_user_fields()` on each event for `AppState` instances.
+- `RX_USER_SNAPSHOT_INCLUDE_GROUPS`: load `group_names` in snapshot.
 
 Human docs: `docs/guides/authentication.md`.
 

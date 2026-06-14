@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import warnings
 
 
 def truthy_env(
@@ -57,10 +56,8 @@ def setting_or_env_bool(
         return default
 
 
-_PROXY_SERVER_ENV = "RXDJANGO_PROXY_SERVER"
-_PROXY_SERVER_SETTING = "RXDJANGO_PROXY_SERVER"
-_DEPRECATED_HTTP_UPSTREAM_ENV = "REFLEX_DJANGO_HTTP_UPSTREAM"
-_DEPRECATED_HTTP_UPSTREAM_SETTING = "REFLEX_DJANGO_HTTP_UPSTREAM"
+_PROXY_SERVER_ENV = "RX_PROXY_SERVER"
+_PROXY_SERVER_SETTING = "RX_PROXY_SERVER"
 
 
 def resolve_rxdjango_proxy_server(*, required: bool = False) -> str:
@@ -81,44 +78,16 @@ def resolve_rxdjango_proxy_server(*, required: bool = False) -> str:
     except Exception:
         pass
 
-    deprecated_env = os.environ.get(_DEPRECATED_HTTP_UPSTREAM_ENV, "").strip()
-    if deprecated_env:
-        warnings.warn(
-            f"{_DEPRECATED_HTTP_UPSTREAM_ENV} is deprecated; "
-            f"use {_PROXY_SERVER_ENV} instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return deprecated_env.rstrip("/")
-
-    try:
-        from django.conf import settings
-
-        if settings.configured:
-            deprecated_settings = str(
-                getattr(settings, _DEPRECATED_HTTP_UPSTREAM_SETTING, "") or ""
-            ).strip()
-            if deprecated_settings:
-                warnings.warn(
-                    f"{_DEPRECATED_HTTP_UPSTREAM_SETTING} is deprecated; "
-                    f"use {_PROXY_SERVER_SETTING} instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                return deprecated_settings.rstrip("/")
-    except Exception:
-        pass
-
     if required:
         from reflex_django.setup.errors import ConfigurationError
 
         raise ConfigurationError(
-            "RXDJANGO_PROXY_SERVER is not set.\n"
+            "RX_PROXY_SERVER is not set.\n"
             "When Django runs on a separate HTTP server, start it first, for example:\n"
             "    python manage.py runserver\n"
             "Then set in settings.py:\n"
-            '    RXDJANGO_PROXY_SERVER = "http://127.0.0.1:8000"\n'
-            "Or export RXDJANGO_PROXY_SERVER=http://127.0.0.1:8000.\n"
+            '    RX_PROXY_SERVER = "http://127.0.0.1:8000"\n'
+            "Or export RX_PROXY_SERVER=http://127.0.0.1:8000.\n"
             "Leave it unset when Django is mounted in the Reflex backend (default)."
         )
     return ""

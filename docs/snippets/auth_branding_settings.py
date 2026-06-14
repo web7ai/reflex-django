@@ -1,4 +1,4 @@
-REFLEX_DJANGO_AUTH = {
+RX_AUTH = {
     "BRAND_TEXT": "My App",
     "BRAND_ICON_SRC": "/static/logo.png",
     "MESSAGES": {

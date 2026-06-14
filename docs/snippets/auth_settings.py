@@ -1,4 +1,4 @@
-REFLEX_DJANGO_AUTH = {
+RX_AUTH = {
     "LOGIN_URL": "/sign-in",
     "SIGNUP_URL": "/sign-up",
     "LOGIN_REDIRECT_URL": "/dashboard",

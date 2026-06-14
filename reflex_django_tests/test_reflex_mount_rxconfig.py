@@ -38,7 +38,7 @@ def test_reflex_mount_registers_plugins_in_rx_config(
         "reflex_django_tests.test_reflex_mount_plugins_urls",
         raising=False,
     )
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_USE_RXCONFIG_FILE", False, raising=False)
+    monkeypatch.setattr(settings, "RX_USE_RXCONFIG_FILE", False, raising=False)
 
     config = ensure_rxconfig_from_django()
 
@@ -58,7 +58,7 @@ def test_reflex_mount_rx_config_used_when_settings_missing(
         "reflex_django_tests.test_reflex_mount_plugins_urls",
         raising=False,
     )
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_USE_RXCONFIG_FILE", False, raising=False)
+    monkeypatch.setattr(settings, "RX_USE_RXCONFIG_FILE", False, raising=False)
 
     config = ensure_rxconfig_from_django()
     assert config.frontend_port == 3100

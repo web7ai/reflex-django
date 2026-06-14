@@ -54,7 +54,7 @@ def test_render_passes_through_when_disabled_via_env(
     monkeypatch: pytest.MonkeyPatch,
     html_request,
 ) -> None:
-    monkeypatch.setenv("REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE", "0")
+    monkeypatch.setenv("RX_RENDER_SPA_VIA_TEMPLATE_ENGINE", "0")
     response = HttpResponse(
         b"<p>{{ user.is_authenticated }}</p>",
         content_type="text/html",
@@ -96,19 +96,19 @@ def test_response_is_html_rejects_other_types() -> None:
 
 
 def test_env_var_overrides_setting(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE", "false")
+    monkeypatch.setenv("RX_RENDER_SPA_VIA_TEMPLATE_ENGINE", "false")
     assert _render_via_template_engine_enabled() is False
-    monkeypatch.setenv("REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE", "1")
+    monkeypatch.setenv("RX_RENDER_SPA_VIA_TEMPLATE_ENGINE", "1")
     assert _render_via_template_engine_enabled() is True
 
 
 def test_setting_used_when_env_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE", raising=False)
+    monkeypatch.delenv("RX_RENDER_SPA_VIA_TEMPLATE_ENGINE", raising=False)
     from django.conf import settings
 
     with mock.patch.object(
         settings,
-        "REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE",
+        "RX_RENDER_SPA_VIA_TEMPLATE_ENGINE",
         False,
         create=True,
     ):

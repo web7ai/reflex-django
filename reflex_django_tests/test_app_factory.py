@@ -41,7 +41,7 @@ def test_import_page_packages_registers_pages(
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_PAGE_PACKAGES",
+        "RX_PAGE_PACKAGES",
         ["reflex_django_tests.fixtures.factory_app"],
         raising=False,
     )
@@ -168,7 +168,7 @@ def test_resolve_page_packages_explicit_override(
 ) -> None:
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_PAGE_PACKAGES",
+        "RX_PAGE_PACKAGES",
         ["reflex_django_tests.fixtures.factory_app"],
         raising=False,
     )
@@ -178,9 +178,9 @@ def test_resolve_page_packages_explicit_override(
 def test_resolve_page_packages_legacy_single_app_when_auto_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_DISCOVER_PAGES", False, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_DISCOVER_PAGES", False, raising=False)
     register_mount_rx_config(app_name="myapp")
-    monkeypatch.delattr(settings, "REFLEX_DJANGO_PAGE_PACKAGES", raising=False)
+    monkeypatch.delattr(settings, "RX_PAGE_PACKAGES", raising=False)
     assert resolve_page_packages() == ["myapp.views"]
 
 
@@ -201,7 +201,7 @@ def test_import_page_packages_auto_discovers_template_pages(
         ],
         raising=False,
     )
-    monkeypatch.delattr(settings, "REFLEX_DJANGO_PAGE_PACKAGES", raising=False)
+    monkeypatch.delattr(settings, "RX_PAGE_PACKAGES", raising=False)
     imported = import_page_packages()
     assert "reflex_django_tests.fixtures.pages_app.views" in imported
     assert any(p.route == "/discovered-home" for p in PAGE_REGISTRY)

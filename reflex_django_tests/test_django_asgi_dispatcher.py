@@ -24,9 +24,9 @@ def _reset_state() -> None:
 def test_get_or_create_app_installs_django_dispatcher(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("RXDJANGO_PROXY_SERVER", raising=False)
+    monkeypatch.delenv("RX_PROXY_SERVER", raising=False)
     monkeypatch.setattr(
-        "django.conf.settings.RXDJANGO_PROXY_SERVER",
+        "django.conf.settings.RX_PROXY_SERVER",
         "",
         raising=False,
     )
@@ -36,7 +36,7 @@ def test_get_or_create_app_installs_django_dispatcher(
         raising=False,
     )
     monkeypatch.setattr(
-        "django.conf.settings.REFLEX_DJANGO_AUTO_MOUNT",
+        "django.conf.settings.RX_AUTO_MOUNT",
         False,
         raising=False,
     )
@@ -68,7 +68,7 @@ def test_auto_mount_prepends_admin_when_missing(
         "reflex_django_tests.test_django_asgi_dispatcher_urls",
         raising=False,
     )
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
 
     import reflex_django_tests.test_django_asgi_dispatcher_urls as urlconf
 

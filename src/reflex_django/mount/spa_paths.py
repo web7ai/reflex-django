@@ -1,96 +1,96 @@
-"""Discover compiled SPA bundles on disk."""
-
-from __future__ import annotations
-
-import os
-from collections.abc import Iterable
-from pathlib import Path
-
-from reflex_django.core.constants import SPA_STATIC_SUBDIRS
-
-_WEB_BUILD_CANDIDATES: tuple[str, ...] = (
-    "build/client",
-    "_static",
-    "build",
-)
-
-
-def compile_dev_mode_enabled() -> bool:
-    """Return whether compile-dev single-port mode is active."""
-    return str(os.environ.get("REFLEX_DJANGO_COMPILE_DEV", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def _append_web_spa_roots(roots: list[Path], base: Path) -> None:
-    """Append in-place Reflex build output directories under base/.web."""
-    from reflex_django.dev.runners.frontend import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
-
-    roots.append(base / ".web" / "build" / "client")
-    if compile_dev_mode_enabled():
-        roots.append(base / ".web" / COMPILE_DEV_CLIENT_BACKUP_DIRNAME)
-    roots.append(base / ".web" / "_static")
-    roots.append(base / ".web" / "build")
-
-
-def spa_root_candidates() -> Iterable[Path]:
-    """Yield directories that may hold the compiled Reflex SPA."""
-    try:
-        from django.conf import settings
-    except Exception:
-        return ()
-
-    roots: list[Path] = []
-    static_root = getattr(settings, "STATIC_ROOT", None)
-    if static_root:
-        base = Path(static_root)
-        for sub in SPA_STATIC_SUBDIRS:
-            roots.append(base / sub)
-        roots.append(base)
-
-    project = getattr(settings, "BASE_DIR", None)
-    if project:
-        _append_web_spa_roots(roots, Path(project))
-
-    seen: set[Path] = set()
-    out: list[Path] = []
-    for root in roots:
-        try:
-            resolved = root.resolve()
-        except OSError:
-            continue
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        out.append(root)
-    return out
-
-
-def resolve_spa_index() -> Path | None:
-    """Return the compiled SPA index.html path, or None if missing."""
-    for root in spa_root_candidates():
-        candidate = root / "index.html"
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def resolve_build_dir(*, cwd: Path | None = None) -> Path | None:
-    """Return the directory containing index.html under .web/."""
-    web = (cwd or Path.cwd()) / ".web"
-    for rel in _WEB_BUILD_CANDIDATES:
-        candidate = web / rel
-        if candidate.is_dir() and (candidate / "index.html").is_file():
-            return candidate
-    return None
-
-
-__all__ = [
-    "compile_dev_mode_enabled",
-    "resolve_build_dir",
-    "resolve_spa_index",
-    "spa_root_candidates",
+"""Discover compiled SPA bundles on disk."""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Iterable
+from pathlib import Path
+
+from reflex_django.core.constants import SPA_STATIC_SUBDIRS
+
+_WEB_BUILD_CANDIDATES: tuple[str, ...] = (
+    "build/client",
+    "_static",
+    "build",
+)
+
+
+def compile_dev_mode_enabled() -> bool:
+    """Return whether compile-dev single-port mode is active."""
+    return str(os.environ.get("RX_COMPILE_DEV", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _append_web_spa_roots(roots: list[Path], base: Path) -> None:
+    """Append in-place Reflex build output directories under base/.web."""
+    from reflex_django.dev.runners.frontend import COMPILE_DEV_CLIENT_BACKUP_DIRNAME
+
+    roots.append(base / ".web" / "build" / "client")
+    if compile_dev_mode_enabled():
+        roots.append(base / ".web" / COMPILE_DEV_CLIENT_BACKUP_DIRNAME)
+    roots.append(base / ".web" / "_static")
+    roots.append(base / ".web" / "build")
+
+
+def spa_root_candidates() -> Iterable[Path]:
+    """Yield directories that may hold the compiled Reflex SPA."""
+    try:
+        from django.conf import settings
+    except Exception:
+        return ()
+
+    roots: list[Path] = []
+    static_root = getattr(settings, "STATIC_ROOT", None)
+    if static_root:
+        base = Path(static_root)
+        for sub in SPA_STATIC_SUBDIRS:
+            roots.append(base / sub)
+        roots.append(base)
+
+    project = getattr(settings, "BASE_DIR", None)
+    if project:
+        _append_web_spa_roots(roots, Path(project))
+
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for root in roots:
+        try:
+            resolved = root.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        out.append(root)
+    return out
+
+
+def resolve_spa_index() -> Path | None:
+    """Return the compiled SPA index.html path, or None if missing."""
+    for root in spa_root_candidates():
+        candidate = root / "index.html"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def resolve_build_dir(*, cwd: Path | None = None) -> Path | None:
+    """Return the directory containing index.html under .web/."""
+    web = (cwd or Path.cwd()) / ".web"
+    for rel in _WEB_BUILD_CANDIDATES:
+        candidate = web / rel
+        if candidate.is_dir() and (candidate / "index.html").is_file():
+            return candidate
+    return None
+
+
+__all__ = [
+    "compile_dev_mode_enabled",
+    "resolve_build_dir",
+    "resolve_spa_index",
+    "spa_root_candidates",
 ]

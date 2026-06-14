@@ -55,7 +55,7 @@ MIDDLEWARE = [
     "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
 
-REFLEX_DJANGO_RX_CONFIG = {
+RX_CONFIG = {
     "app_name": "shop",
     "frontend_port": 3000,
     "backend_port": 8000,

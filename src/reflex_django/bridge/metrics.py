@@ -14,7 +14,7 @@ def _metrics_enabled() -> bool:
     try:
         from django.conf import settings
 
-        return bool(getattr(settings, "REFLEX_DJANGO_EVENT_METRICS", False))
+        return bool(getattr(settings, "RX_EVENT_METRICS", False))
     except Exception:
         return False
 
@@ -23,7 +23,7 @@ def _metrics_logger() -> logging.Logger:
     try:
         from django.conf import settings
 
-        name = getattr(settings, "REFLEX_DJANGO_EVENT_METRICS_LOGGER", None)
+        name = getattr(settings, "RX_EVENT_METRICS_LOGGER", None)
         if isinstance(name, str) and name.strip():
             return logging.getLogger(name.strip())
     except Exception:

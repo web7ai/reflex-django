@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 _LEAN_OVERRIDES = {
-    "REFLEX_DJANGO_AUTH_AUTO_SYNC": False,
-    "REFLEX_DJANGO_MIRROR_MESSAGES": False,
-    "REFLEX_DJANGO_MIRROR_CSRF": False,
-    "REFLEX_DJANGO_MIRROR_LANGUAGE": False,
+    "RX_AUTH_AUTO_SYNC": False,
+    "RX_MIRROR_MESSAGES": False,
+    "RX_MIRROR_CSRF": False,
+    "RX_MIRROR_LANGUAGE": False,
 }
 
 
@@ -17,7 +17,7 @@ def apply_performance_preset() -> None:
     except Exception:
         return
 
-    preset = str(getattr(settings, "REFLEX_DJANGO_PERFORMANCE_PRESET", "default")).strip().lower()
+    preset = str(getattr(settings, "RX_PERFORMANCE_PRESET", "default")).strip().lower()
     if preset != "lean":
         return
 

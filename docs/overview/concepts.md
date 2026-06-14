@@ -47,7 +47,7 @@ Most projects only change **settings** and **pages**. The catch-all URL is autom
 <p class="rd-knob__label">Knob 1</p>
 <p class="rd-knob__title">Settings</p>
 <p class="rd-knob__where"><strong>Where:</strong> <code>settings.py</code></p>
-<p class="rd-knob__what"><strong>What:</strong> <code>REFLEX_DJANGO_RX_CONFIG</code>, auth, plugins, performance</p>
+<p class="rd-knob__what"><strong>What:</strong> <code>RX_CONFIG</code>, auth, plugins, performance</p>
 </div>
 <div class="rd-knob">
 <p class="rd-knob__label">Knob 2</p>
@@ -77,7 +77,7 @@ Most projects only change **settings** and **pages**. The catch-all URL is autom
 - Browse **http://localhost:3000/** for the UI (Vite hot reload).
 - Vite proxies admin, API, and `/_event` to the Reflex backend on **port 8000**.
 - Django runs in-process on the backend. Cookies work on both ports.
-- Optional: run Django on `runserver` separately and set `RXDJANGO_PROXY_SERVER`.
+- Optional: run Django on `runserver` separately and set `RX_PROXY_SERVER`.
 
 === "Production"
 
@@ -91,7 +91,7 @@ See [Local development](../getting-started/local_development.md) and [Deployment
 
 | Plain Reflex | reflex-django |
 |:---|:---|
-| `rxconfig.py` | `REFLEX_DJANGO_RX_CONFIG` in `settings.py` |
+| `rxconfig.py` | `RX_CONFIG` in `settings.py` |
 | `shop/shop.py` with `app = rx.App()` | `from reflex_django import app` |
 | Catch-all in `urls.py` | Optional; auto-mount covers the default |
 | `@rx.page` | `@page` from `reflex_django.pages.decorators` |
@@ -100,7 +100,7 @@ See [Local development](../getting-started/local_development.md) and [Deployment
 
 You touch three files, then run one command:
 
-1. **`settings.py`** - `INSTALLED_APPS`, `REFLEX_DJANGO_RX_CONFIG`, middleware
+1. **`settings.py`** - `INSTALLED_APPS`, `RX_CONFIG`, middleware
 2. **`urls.py`** - `import yourapp.views` so pages register
 3. **`views.py`** - `@page` functions and state classes
 
@@ -108,7 +108,7 @@ Copy-paste examples live in [Your first app](../getting-started/quickstart.md). 
 
 ## What is app_name {#what-is-app_name}
 
-`app_name` in `REFLEX_DJANGO_RX_CONFIG` is Reflex's **compile label** (which `.web` bundle to build). It is not always the same as your Django app package name.
+`app_name` in `RX_CONFIG` is Reflex's **compile label** (which `.web` bundle to build). It is not always the same as your Django app package name.
 
 If you omit it, reflex-django uses the folder name next to `manage.py` (hyphens become underscores).
 

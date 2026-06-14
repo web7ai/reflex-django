@@ -28,7 +28,7 @@ def test_ensure_rxconfig_file_writes_stub(tmp_path: Path, monkeypatch: pytest.Mo
     from django.conf import settings
 
     register_mount_rx_config(app_name="myfrontend")
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", True, raising=False)
+    monkeypatch.setattr(settings, "RX_MATERIALIZE_RXCONFIG", True, raising=False)
 
     created = ensure_rxconfig_file()
     assert created is not None
@@ -53,7 +53,7 @@ def test_ensure_rxconfig_file_uses_project_folder_name(
 
     from django.conf import settings
 
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", True, raising=False)
+    monkeypatch.setattr(settings, "RX_MATERIALIZE_RXCONFIG", True, raising=False)
 
     created = ensure_rxconfig_file()
     assert created is not None
@@ -78,7 +78,7 @@ def test_ensure_rxconfig_file_updates_stale_stub(
     from django.conf import settings
 
     register_mount_rx_config(app_name="demo")
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_MATERIALIZE_RXCONFIG", False, raising=False)
+    monkeypatch.setattr(settings, "RX_MATERIALIZE_RXCONFIG", False, raising=False)
 
     assert ensure_rxconfig_file() is None
 

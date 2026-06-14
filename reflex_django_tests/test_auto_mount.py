@@ -35,7 +35,7 @@ def test_maybe_auto_mount_appends_catchall(monkeypatch: pytest.MonkeyPatch) -> N
     django.setup()
     urlconf_name = "reflex_django_tests.test_auto_mount_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
     import sys
 
     sys.modules.pop(urlconf_name, None)
@@ -56,7 +56,7 @@ def test_maybe_auto_mount_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     django.setup()
     urlconf_name = "reflex_django_tests.test_auto_mount_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
     import sys
 
     sys.modules.pop(urlconf_name, None)
@@ -76,7 +76,7 @@ def test_maybe_auto_mount_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     django.setup()
     urlconf_name = "reflex_django_tests.test_auto_mount_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", False, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", False, raising=False)
     import sys
 
     sys.modules.pop(urlconf_name, None)
@@ -92,7 +92,7 @@ def test_manual_reflex_mount_skips_duplicate(monkeypatch: pytest.MonkeyPatch) ->
     django.setup()
     urlconf_name = "reflex_django_tests.test_prefix_discovery_mount_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
     import sys
 
     sys.modules.pop(urlconf_name, None)
@@ -113,7 +113,7 @@ def test_resolve_app_name_from_rx_config(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_RX_CONFIG",
+        "RX_CONFIG",
         {"app_name": "from_settings"},
         raising=False,
     )
@@ -129,7 +129,7 @@ def test_maybe_auto_mount_infers_django_prefix(
     django.setup()
     urlconf_name = "reflex_django_tests.test_auto_mount_prefix_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
     import sys
 
     sys.modules.pop(urlconf_name, None)

@@ -27,11 +27,11 @@ def test_get_auth_settings_legacy_login_url(monkeypatch) -> None:
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_AUTH",
+        "RX_AUTH",
         {"LOGIN_REDIRECT_URL": "/home"},
         raising=False,
     )
-    monkeypatch.setattr(settings, "REFLEX_DJANGO_LOGIN_URL", "/signin", raising=False)
+    monkeypatch.setattr(settings, "RX_LOGIN_URL", "/signin", raising=False)
     auth = get_auth_settings()
     assert auth.login_url == "/signin"
     assert auth.login_redirect_url == "/home"
@@ -42,7 +42,7 @@ def test_get_auth_settings_overrides(monkeypatch) -> None:
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_AUTH",
+        "RX_AUTH",
         {
             "ENABLED": False,
             "SIGNUP_ENABLED": False,

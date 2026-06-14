@@ -66,9 +66,9 @@ def test_show_built_with_reflex_defaults_to_false() -> None:
 def test_show_built_with_reflex_honours_django_setting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Setting ``REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX = True`` re-enables the badge."""
+    """Setting ``RX_SHOW_BUILT_WITH_REFLEX = True`` re-enables the badge."""
     monkeypatch.setattr(
-        settings, "REFLEX_DJANGO_SHOW_BUILT_WITH_REFLEX", True, raising=False
+        settings, "RX_SHOW_BUILT_WITH_REFLEX", True, raising=False
     )
     base = Config(app_name="app", _skip_plugins_checks=True)
     out = _apply_built_with_reflex_default(base)

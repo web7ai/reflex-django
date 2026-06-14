@@ -41,8 +41,8 @@ def test_run_reflex_works_without_proxy_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_integration(monkeypatch)
-    monkeypatch.delenv("RXDJANGO_PROXY_SERVER", raising=False)
-    monkeypatch.delenv("REFLEX_DJANGO_HTTP_UPSTREAM", raising=False)
+    monkeypatch.delenv("RX_PROXY_SERVER", raising=False)
+    monkeypatch.delenv("RX_PROXY_SERVER", raising=False)
     invoke = mock.MagicMock()
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
@@ -58,7 +58,7 @@ def test_run_reflex_invokes_full_reflex_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_integration(monkeypatch)
-    monkeypatch.setenv("RXDJANGO_PROXY_SERVER", "http://127.0.0.1:8000")
+    monkeypatch.setenv("RX_PROXY_SERVER", "http://127.0.0.1:8000")
     invoke = mock.MagicMock()
     monkeypatch.setattr(
         "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",

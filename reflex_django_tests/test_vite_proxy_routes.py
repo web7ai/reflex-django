@@ -15,9 +15,9 @@ from reflex_django.dev.vite_proxy import (
 def test_resolve_routes_use_reflex_backend_when_proxy_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("RXDJANGO_PROXY_SERVER", raising=False)
+    monkeypatch.delenv("RX_PROXY_SERVER", raising=False)
     monkeypatch.setenv(
-        "REFLEX_DJANGO_DJANGO_PREFIX",
+        "RX_DJANGO_PREFIX",
         '["/admin", "/api"]',
     )
 
@@ -41,9 +41,9 @@ def test_resolve_routes_use_reflex_backend_when_proxy_unset(
 def test_resolve_routes_splits_django_and_reflex_targets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("RXDJANGO_PROXY_SERVER", "http://127.0.0.1:8000")
+    monkeypatch.setenv("RX_PROXY_SERVER", "http://127.0.0.1:8000")
     monkeypatch.setenv(
-        "REFLEX_DJANGO_DJANGO_PREFIX",
+        "RX_DJANGO_PREFIX",
         '["/admin", "/api"]',
     )
 

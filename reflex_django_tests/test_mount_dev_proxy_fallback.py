@@ -21,8 +21,8 @@ def _isolate_dev_proxy_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mount, "_dev_proxy_self_loop_handled", False, raising=False)
     monkeypatch.setattr(mount, "_vite_unreachable_until", 0.0, raising=False)
     monkeypatch.setattr(mount, "_vite_unreachable_logged", False, raising=False)
-    monkeypatch.delenv("REFLEX_DJANGO_DEV_PROXY", raising=False)
-    monkeypatch.delenv("REFLEX_DJANGO_SEPARATE_DEV_PORTS", raising=False)
+    monkeypatch.delenv("RX_DEV_PROXY", raising=False)
+    monkeypatch.delenv("RX_SEPARATE_DEV_PORTS", raising=False)
 
 
 class _FakeRequest:
@@ -94,7 +94,7 @@ def test_self_target_serves_from_disk(
 def test_self_loop_disables_dev_proxy_process_wide(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Detecting a self-loop sets REFLEX_DJANGO_DEV_PROXY=0 to stop re-checking."""
+    """Detecting a self-loop sets RX_DEV_PROXY=0 to stop re-checking."""
     _patch_common(monkeypatch)
     monkeypatch.setattr(
         mount, "_dev_vite_target_or_none", lambda: "http://127.0.0.1:3000"
@@ -104,7 +104,7 @@ def test_self_loop_disables_dev_proxy_process_wide(
     view = mount.ReflexMountView()
     asyncio.run(view._handle(_FakeRequest(port="3000")))  # type: ignore[arg-type]
 
-    assert os.environ.get("REFLEX_DJANGO_DEV_PROXY") == "0"
+    assert os.environ.get("RX_DEV_PROXY") == "0"
     assert mount._dev_proxy_self_loop_handled is True
 
 
@@ -202,9 +202,9 @@ def test_healthy_proxy_response_is_used(
 def test_proxy_502_returns_503_when_dev_proxy_forced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When REFLEX_DJANGO_DEV_PROXY=1, a 502 does not fall back to disk."""
+    """When RX_DEV_PROXY=1, a 502 does not fall back to disk."""
     patched = _patch_common(monkeypatch)
-    monkeypatch.setenv("REFLEX_DJANGO_DEV_PROXY", "1")
+    monkeypatch.setenv("RX_DEV_PROXY", "1")
     monkeypatch.setattr(
         mount, "_dev_vite_target_or_none", lambda: "http://127.0.0.1:3000"
     )
@@ -244,7 +244,7 @@ def test_cooldown_returns_503_when_dev_proxy_forced(
 ) -> None:
     """Cooldown skips disk fallback when dev proxy is explicitly on."""
     patched = _patch_common(monkeypatch)
-    monkeypatch.setenv("REFLEX_DJANGO_DEV_PROXY", "1")
+    monkeypatch.setenv("RX_DEV_PROXY", "1")
     monkeypatch.setattr(
         mount, "_dev_vite_target_or_none", lambda: "http://127.0.0.1:3000"
     )

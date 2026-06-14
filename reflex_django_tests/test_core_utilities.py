@@ -49,10 +49,10 @@ def test_truthy_env_or_none_returns_none_when_unset():
 
 
 def test_setting_or_env_bool_prefers_env():
-    with mock.patch.dict(os.environ, {"REFLEX_DJANGO_SERVE_FROM_BUILD": "1"}):
+    with mock.patch.dict(os.environ, {"RX_SERVE_FROM_BUILD": "1"}):
         assert setting_or_env_bool(
-            "REFLEX_DJANGO_SERVE_FROM_BUILD",
-            "REFLEX_DJANGO_SERVE_FROM_BUILD",
+            "RX_SERVE_FROM_BUILD",
+            "RX_SERVE_FROM_BUILD",
             default=False,
         )
 

@@ -9,23 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (breaking)
 
+- All `REFLEX_DJANGO_*` Django settings and environment variables. Use `RX_*` instead (`REFLEX_DJANGO_RX_CONFIG` → `RX_CONFIG`, `RXDJANGO_PROXY_SERVER` → `RX_PROXY_SERVER`). No deprecated aliases. See [RX settings rename](docs/reference/migration/rx_settings_rename.md).
+- State bridge override `_reflex_django_bridge` → `_rx_bridge`.
+- `REFLEX_DJANGO_HTTP_UPSTREAM` / `RX_HTTP_UPSTREAM` (use `RX_PROXY_SERVER`).
 - Composed ASGI entry `reflex_django.asgi.entry:application` and outer dispatchers (`django_outer`, `reflex_outer`).
-- `REFLEX_DJANGO_URL_ROUTING`, `REFLEX_DJANGO_HTTP_SUBPROCESS`, `REFLEX_DJANGO_HTTP_PORT`, and related HTTP worker settings.
+- `RX_URL_ROUTING`, `RX_HTTP_SUBPROCESS`, `RX_HTTP_PORT`, and related HTTP worker settings.
 - `build_django_outer_application`, `asgi_application`, and `build_asgi_application` public exports.
 
 ### Added
 
-- `RXDJANGO_PROXY_SERVER` — optional base URL of a separate Django server for Vite dev proxy; when unset, Django is served from the Reflex backend.
+- `RX_PROXY_SERVER` — optional base URL of a separate Django server for Vite dev proxy; when unset, Django is served from the Reflex backend.
 - `docs/migration/v3_mount_only.md` — mount-only migration guide.
-- **Tiered event bridge** — `REFLEX_DJANGO_EVENT_BRIDGE_MODE` (`full` / `smart` / `none`), per-State `_reflex_django_bridge`, optional `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER`.
-- **Event cache** — Django `CACHES`-backed write-only auth metadata cache (`REFLEX_DJANGO_EVENT_CACHE`, TTL, `invalidate_event_cache()`).
-- **`REFLEX_DJANGO_PERFORMANCE_PRESET = "lean"`** — trims mirror/auth-sync defaults when still at library defaults.
-- **`REFLEX_DJANGO_EVENT_METRICS`** — opt-in DEBUG timing logs for bridge phases.
+- **Tiered event bridge** — `RX_EVENT_BRIDGE_MODE` (`full` / `smart` / `none`), per-State `_rx_bridge`, optional `RX_EVENT_BRIDGE_RESOLVER`.
+- **Event cache** — Django `CACHES`-backed write-only auth metadata cache (`RX_EVENT_CACHE`, TTL, `invalidate_event_cache()`).
+- **`RX_PERFORMANCE_PRESET = "lean"`** — trims mirror/auth-sync defaults when still at library defaults.
+- **`RX_EVENT_METRICS`** — opt-in DEBUG timing logs for bridge phases.
 - `docs/scaling.md` — settings-first scaling guide for Django + realtime UI.
 
 ### Changed (breaking)
 
-- `manage.py run_reflex` runs Reflex with Vite and the native Reflex backend; Django is mounted in the Reflex backend by default. Set `RXDJANGO_PROXY_SERVER` only when Django runs separately.
+- `manage.py run_reflex` runs Reflex with Vite and the native Reflex backend; Django is mounted in the Reflex backend by default. Set `RX_PROXY_SERVER` only when Django runs separately.
 - Production Django ASGI uses plain `get_asgi_application()`; reverse-proxy `/_event` to Reflex.
 
 ## [2.0.0] - 2026-06-12
@@ -76,16 +79,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (breaking)
 
-- **Reflex event context-processor bridge** — removed `collect_reflex_context`, `DjangoContextState`, `builtin_user_context`, `builtin_i18n_context`, and settings `REFLEX_DJANGO_CONTEXT_PROCESSORS`, `REFLEX_DJANGO_AUTO_LOAD_CONTEXT`, `REFLEX_DJANGO_USE_TEMPLATE_CONTEXT_PROCESSORS`.
+- **Reflex event context-processor bridge** — removed `collect_reflex_context`, `DjangoContextState`, `builtin_user_context`, `builtin_i18n_context`, and settings `RX_CONTEXT_PROCESSORS`, `RX_AUTO_LOAD_CONTEXT`, `RX_USE_TEMPLATE_CONTEXT_PROCESSORS`.
 - **`AppState.django_context`**, **`AppState.load_django_context()`**, **`ModelState.Meta.load_context_processors`**, and **`DjangoStateRequest.context`** (processor-key attribute fallback).
 - Doc page `django_context_to_reflex.md`.
 
-**Migration:** use middleware-backed APIs instead — `self.user` / `current_user()`, `self.messages` / `current_messages()`, `current_language()`, `self.csrf_token` / `current_csrf_token()`. For custom cross-cutting data, use explicit Reflex state vars on `AppState`. Django `TEMPLATES` context processors and SPA shell templating (`REFLEX_DJANGO_RENDER_SPA_VIA_TEMPLATE_ENGINE`) are unchanged.
+**Migration:** use middleware-backed APIs instead — `self.user` / `current_user()`, `self.messages` / `current_messages()`, `current_language()`, `self.csrf_token` / `current_csrf_token()`. For custom cross-cutting data, use explicit Reflex state vars on `AppState`. Django `TEMPLATES` context processors and SPA shell templating (`RX_RENDER_SPA_VIA_TEMPLATE_ENGINE`) are unchanged.
 
 ### Added
 
-- **Settings-driven auto-mount** — `REFLEX_DJANGO_AUTO_MOUNT=True` (default) appends the Reflex SPA catch-all to `ROOT_URLCONF` at startup. No `reflex_mount()` line required in `urls.py`.
-- **`REFLEX_DJANGO_RX_CONFIG["app_name"]`** — Reflex compile identity moves to settings; `reflex_mount(app_name=...)` is deprecated.
+- **Settings-driven auto-mount** — `RX_AUTO_MOUNT=True` (default) appends the Reflex SPA catch-all to `ROOT_URLCONF` at startup. No `reflex_mount()` line required in `urls.py`.
+- **`RX_CONFIG["app_name"]`** — Reflex compile identity moves to settings; `reflex_mount(app_name=...)` is deprecated.
 - **`from reflex_django import app`** — native Reflex-style page registration via `app.add_page()` on the `django_led_app` singleton.
 - **`reflex_django.mount.auto`** — `maybe_auto_mount()`, `ensure_reflex_mount()`, `register_mount_from_settings()` for boot-time URL wiring.
 - Tests: `test_auto_mount.py`, `test_django_led_app_pages.py`, `test_production_entry.py`.
@@ -95,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs** — new [mental_model.md](docs/mental_model.md); entry points updated for auto-mount and settings-driven `app_name`.
 - **`reflex_mount()`** — returns a URL-only :class:`~reflex_django.mount.auto.ReflexMountHandle` (iterable / `.urlpatterns`); use for URL overrides only, not page registration.
 - **`reflex_django.django.urls.urlpatterns`** — default empty list; catch-all comes from auto-mount when enabled.
-- **`REFLEX_DJANGO_AUTO_DISCOVER_PAGES`** — still default `True` but emits `DeprecationWarning`; explicit `urls.py` imports recommended until next major.
+- **`RX_AUTO_DISCOVER_PAGES`** — still default `True` but emits `DeprecationWarning`; explicit `urls.py` imports recommended until next major.
 - **`apply_reflex_plugins_to_app()`** — restores plugins after `rx.App()` clears `get_config().plugins`.
 
 ### Added (continued)
@@ -104,15 +107,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   open the **frontend port** (`:3000`) for the SPA; the **backend port** (`:8000`) serves Django
   and Reflex endpoints only (admin, API, `/_event`). The SPA's `env.json` points backend paths
   at `:8000`. Pass ``--env dev`` for compile-only single-port dev on `:8000`.
-- Setting ``REFLEX_DJANGO_SEPARATE_DEV_PORTS`` and env ``REFLEX_DJANGO_SEPARATE_DEV_PORTS``.
-- **Compile dev on one port (`--env dev`)** — sets ``REFLEX_DJANGO_COMPILE_DEV=1``; recompiles
+- Setting ``RX_SEPARATE_DEV_PORTS`` and env ``RX_SEPARATE_DEV_PORTS``.
+- **Compile dev on one port (`--env dev`)** — sets ``RX_COMPILE_DEV=1``; recompiles
   to ``.web/`` on save and serves from Django on port 8000 (no Vite after first compile).
   Pass ``--with-vite`` to add live HMR on `:3000` again. For Django reverse-proxying Vite on
-  one URL, set ``REFLEX_DJANGO_DEV_PROXY=1`` explicitly (no CLI flag).
+  one URL, set ``RX_DEV_PROXY=1`` explicitly (no CLI flag).
 - **`export_rx_port_env()`** — `reflex_mount()` exports `frontend_port` and `backend_port`
   from `rx_config` into the environment so the dev proxy resolves ports even outside
   `run_reflex`.
-- **`REFLEX_DJANGO_FRONTEND_PORT` / `REFLEX_DJANGO_BACKEND_PORT`** — optional Django
+- **`RX_FRONTEND_PORT` / `RX_BACKEND_PORT`** — optional Django
   settings (and env vars) for the Vite and ASGI ports; documented in
   [Settings reference](docs/settings_reference.md).
 - **`strip_vite_django_dev_proxy()`** — removes stale Vite→Django `server.proxy` rules from
@@ -139,10 +142,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dev docs and defaults** — installation, CLI, FAQ, and local-development guides now
   describe default two-port dev (`:3000` for SPA, `:8000` for backend) and ``--env dev`` for
   compile-only single-port dev. Legacy ``--single-port`` CLI flag removed; use ``--env dev`` or
-  ``REFLEX_DJANGO_DEV_PROXY=1`` instead.
+  ``RX_DEV_PROXY=1`` instead.
 - **`ReflexDjangoPlugin.pre_compile`** — skips injecting Vite→Django proxy rules in
   DJANGO_OUTER mode; `post_compile` strips any stale proxy block instead.
-- **`ReflexMountView`** — when `REFLEX_DJANGO_DEV_PROXY=1` (set by `run_reflex`), Vite
+- **`ReflexMountView`** — when `RX_DEV_PROXY=1` (set by `run_reflex`), Vite
   outages return **503** with a clear message instead of serving a broken disk bundle.
 - **`_resolve_frontend_port_from_config()`** — reads ports from Django settings and the
   `reflex_mount()` registry, not only `rx.Config` and env.
@@ -209,7 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ``python manage.py run_reflex`` no longer writes ``rxconfig.py``; Reflex config is loaded
   from ``reflex_mount()`` via an in-memory ``rxconfig`` module. Auto-generated stubs are
-  removed on startup unless ``REFLEX_DJANGO_MATERIALIZE_RXCONFIG=True``.
+  removed on startup unless ``RX_MATERIALIZE_RXCONFIG=True``.
 
 ### Fixed
 
@@ -237,7 +240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Django-led URL routing** (``REFLEX_DJANGO_URL_ROUTING = "django_led"``): backend prefixes
+- **Django-led URL routing** (``RX_URL_ROUTING = "django_led"``): backend prefixes
   (admin, API, static) go to Django; all other HTTP paths go to Reflex (SPA catch-all).
 - :func:`reflex_django.django.urls.reflex_mount` catch-all urlpattern and
   :class:`reflex_django.views.mount.ReflexMountView`.
@@ -247,13 +250,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- ``REFLEX_DJANGO_APP_FACTORY`` — use the built-in :func:`reflex_django.create_app` or
+- ``RX_APP_FACTORY`` — use the built-in :func:`reflex_django.create_app` or
   edit ``{APP_NAME}/{APP_NAME}.py`` for a custom ``rx.App``.
 - ``reflex_mount(admin_prefix=...)``, ``api_prefix=...``, and ``include_admin`` —
   wire Django routes in ``urlpatterns`` and list prefixes in ``django_prefix``; optional
   :func:`reflex_django.django.urls.admin_urlpatterns` for admin.
 - :mod:`reflex_django.runtime.app_factory` — built-in :func:`reflex_django.create_app` and
-  ``REFLEX_DJANGO_PAGE_PACKAGES`` for Django-first page registration.
+  ``RX_PAGE_PACKAGES`` for Django-first page registration.
 - Optional :func:`reflex_django.decorators.page` (``reflex_page`` alias) / ``reflex_template`` with
   ``PAGE_REGISTRY``.
 - Documentation: [django_urls.md](docs/django_urls.md).
@@ -305,8 +308,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ``ReflexDjangoPlugin(settings_module=...)`` is deprecated; use ``manage.py`` or
   ``DJANGO_SETTINGS_MODULE`` instead.
 - Plugin path prefixes can be set in Django settings
-  (``REFLEX_DJANGO_API_PREFIX``, ``REFLEX_DJANGO_ADMIN_PREFIX``,
-  ``REFLEX_DJANGO_EXTRA_PREFIXES``).
+  (``RX_API_PREFIX``, ``RX_ADMIN_PREFIX``,
+  ``RX_EXTRA_PREFIXES``).
 
 ### Fixed
 

@@ -47,7 +47,7 @@ def test_get_auth_settings_login_fields(monkeypatch) -> None:
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_AUTH",
+        "RX_AUTH",
         {"LOGIN_FIELDS": ["email"]},
         raising=False,
     )
@@ -61,7 +61,7 @@ def test_get_auth_settings_login_fields_both_updates_message(monkeypatch) -> Non
 
     monkeypatch.setattr(
         settings,
-        "REFLEX_DJANGO_AUTH",
+        "RX_AUTH",
         {"LOGIN_FIELDS": ["username", "email"]},
         raising=False,
     )

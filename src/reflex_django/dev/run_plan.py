@@ -44,7 +44,7 @@ def resolve_from_build(options: dict[str, Any]) -> bool:
         return False
     if explicit_from_build:
         return True
-    return setting_or_env_bool(ENV_SERVE_FROM_BUILD, "REFLEX_DJANGO_SERVE_FROM_BUILD", default=False)
+    return setting_or_env_bool(ENV_SERVE_FROM_BUILD, "RX_SERVE_FROM_BUILD", default=False)
 
 
 def build_run_plan(options: dict[str, Any]) -> RunPlan:
@@ -57,12 +57,12 @@ def build_run_plan(options: dict[str, Any]) -> RunPlan:
     serve_from_disk = is_prod or from_build
     backend_port = int(
         options.get("backend_port")
-        or os.environ.get("REFLEX_DJANGO_BACKEND_PORT")
+        or os.environ.get("RX_BACKEND_PORT")
         or DEFAULT_BACKEND_PORT
     )
     frontend_port = int(
         options.get("frontend_port")
-        or os.environ.get("REFLEX_DJANGO_FRONTEND_PORT")
+        or os.environ.get("RX_FRONTEND_PORT")
         or DEFAULT_FRONTEND_PORT
     )
     if serve_from_disk:
@@ -79,7 +79,7 @@ def build_run_plan(options: dict[str, Any]) -> RunPlan:
         with_vite=with_vite,
         backend_host=str(
             options.get("backend_host")
-            or os.environ.get("REFLEX_DJANGO_BACKEND_HOST")
+            or os.environ.get("RX_BACKEND_HOST")
             or "0.0.0.0"
         ),
         backend_port=backend_port,
