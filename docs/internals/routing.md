@@ -67,8 +67,9 @@ If admin returns 404:
 
 ## Production
 
-- **Django process:** admin, API, static, compiled SPA from disk.
-- **Reflex process:** WebSocket/event channel (or skip if serving static export only).
-- **Edge proxy:** route `/_event` and friends to Reflex; route everything else to Django.
+Two deployment layouts:
+
+- **Single-process:** `python manage.py run_reflex --env prod`: one Reflex backend on one port; Django admin/API mounted in-process; SPA and `/_event` on the same port.
+- **Split:** Django ASGI for HTTP; separate Reflex backend; edge proxy routes `/_event` and friends to Reflex.
 
 See [Deployment](../operations/deployment.md) and [Local development](../getting-started/local_development.md).

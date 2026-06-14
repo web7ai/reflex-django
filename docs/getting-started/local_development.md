@@ -109,6 +109,7 @@ Use `run_reflex` instead.
 | **Default two-port HMR** | `run_reflex` | `:3000` for UI | Yes (see table above) |
 | **Compile dev (one port)** | `run_reflex --env dev` | `:8000` | No (stripped) |
 | **From disk, no HMR** | `run_reflex --from-build` | `:8000` | No |
+| **Prod-like local test** | `run_reflex --env prod` | `:8000` | No |
 
 Optional advanced layout: set `REFLEX_DJANGO_DEV_PROXY=True` and `REFLEX_DJANGO_SEPARATE_DEV_PORTS=False` in settings if you want Django on `:8000` to reverse-proxy SPA assets to Vite on `:3000`. There is no CLI flag for that today.
 
@@ -162,7 +163,7 @@ MIDDLEWARE = [
 ## Troubleshooting
 
 **"Reflex SPA bundle not found" on `:8000`**
-In default two-port mode, `:8000` does not serve the SPA shell. Open `:3000`. With `--env dev` or `--from-build`, browse `:8000`.
+In default two-port mode, `:8000` does not serve the SPA shell. Open `:3000`. With `--env dev`, `--from-build`, or `--env prod`, browse `:8000`.
 
 **Port 3000 already in use**
 Stop the other Vite or `run_reflex` instance, then start again.

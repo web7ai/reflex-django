@@ -55,6 +55,18 @@ def build_run_plan(options: dict[str, Any]) -> RunPlan:
     is_env_dev = options.get("env") == "dev"
     from_build = resolve_from_build(options)
     serve_from_disk = is_prod or from_build
+    backend_port = int(
+        options.get("backend_port")
+        or os.environ.get("REFLEX_DJANGO_BACKEND_PORT")
+        or DEFAULT_BACKEND_PORT
+    )
+    frontend_port = int(
+        options.get("frontend_port")
+        or os.environ.get("REFLEX_DJANGO_FRONTEND_PORT")
+        or DEFAULT_FRONTEND_PORT
+    )
+    if serve_from_disk:
+        frontend_port = backend_port
     return RunPlan(
         env_name=env_name,
         is_prod=is_prod,
@@ -70,16 +82,8 @@ def build_run_plan(options: dict[str, Any]) -> RunPlan:
             or os.environ.get("REFLEX_DJANGO_BACKEND_HOST")
             or "0.0.0.0"
         ),
-        backend_port=int(
-            options.get("backend_port")
-            or os.environ.get("REFLEX_DJANGO_BACKEND_PORT")
-            or DEFAULT_BACKEND_PORT
-        ),
-        frontend_port=int(
-            options.get("frontend_port")
-            or os.environ.get("REFLEX_DJANGO_FRONTEND_PORT")
-            or DEFAULT_FRONTEND_PORT
-        ),
+        backend_port=backend_port,
+        frontend_port=frontend_port,
         loglevel=str(options.get("loglevel") or "info"),
     )
 

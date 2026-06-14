@@ -98,7 +98,11 @@ Start with `ModelState`. Use `ModelCRUDView` when you want explicit serializer c
 
 ### Which URL do I open, `:3000` or `:8000`?
 
-**`:3000`** for the SPA in default dev. **`:8000`** for admin/API directly, or everything with `run_reflex --env dev`. [Local development](../getting-started/local_development.md).
+**`:3000`** for the SPA in default dev. **`:8000`** for admin/API directly, or everything with `run_reflex --env dev`, `--from-build`, or `--env prod`. [Local development](../getting-started/local_development.md).
+
+### How do I run production locally?
+
+After `export_reflex` + `collectstatic`, run `python manage.py run_reflex --env prod --skip-rebuild` and browse `:8000`. For split Django ASGI + Reflex + proxy, see [Deployment](../operations/deployment.md).
 
 ### Hot reload stopped working?
 
@@ -114,7 +118,7 @@ Yes: `python manage.py run_reflex --from-build --skip-rebuild`. [CLI reference](
 
 ### One container or two?
 
-One Django ASGI process for HTTP in production, plus a Reflex backend (or static export) behind your proxy. In dev, Reflex backend serves both Reflex and Django routes in one process. [Deployment](../operations/deployment.md).
+**Path A (single-process):** one `run_reflex --env prod` process for SPA, admin, API, and `/_event`. **Path B (split):** Django ASGI for HTTP plus a separate Reflex backend behind your proxy. In dev, the Reflex backend serves both Reflex and Django routes in one process. [Deployment](../operations/deployment.md).
 
 ### Must I rebuild the SPA every deploy?
 

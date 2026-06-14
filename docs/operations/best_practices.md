@@ -104,6 +104,8 @@ These are defaults that work well for most projects, not hard rules.
 
 **`run_reflex --from-build --skip-rebuild`** when you only touch Django models or admin.
 
+**`run_reflex --env prod --skip-rebuild`** to validate the production bundle locally before ship (browse `:8000`). See [Deployment](deployment.md).
+
 **Keep `.web/` and `.reflex/` in `.gitignore`.**
 
 ---

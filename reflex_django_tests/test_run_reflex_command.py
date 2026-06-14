@@ -7,7 +7,15 @@ from unittest import mock
 import pytest
 from django.core.management.base import CommandError
 
-from reflex_django.management.commands.run_reflex import Command
+from reflex_django.management.commands.run_reflex import Command, _parse_asgi_target
+
+
+def test_parse_asgi_target_django_dotted_path() -> None:
+    assert _parse_asgi_target("base.asgi.application") == ("base.asgi", "application")
+
+
+def test_parse_asgi_target_uvicorn_colon_path() -> None:
+    assert _parse_asgi_target("base.asgi:application") == ("base.asgi", "application")
 
 
 def _stub_integration(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,19 +73,37 @@ def test_run_reflex_invokes_full_reflex_run(
     assert not options.get("backend_only")
 
 
-def test_from_build_runs_plain_django(
+def test_from_build_runs_reflex_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_integration(monkeypatch)
     export_call = mock.MagicMock()
-    server = mock.MagicMock()
+    invoke = mock.MagicMock()
     monkeypatch.setattr("django.core.management.call_command", export_call)
     monkeypatch.setattr(
-        "reflex_django.management.commands.run_reflex.Command._run_plain_django",
-        server,
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
     )
 
     Command().handle(from_build=True, skip_rebuild=False)
 
     export_call.assert_called_once()
-    server.assert_called_once()
+    invoke.assert_called_once()
+
+
+def test_env_prod_runs_reflex_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_integration(monkeypatch)
+    export_call = mock.MagicMock()
+    invoke = mock.MagicMock()
+    monkeypatch.setattr("django.core.management.call_command", export_call)
+    monkeypatch.setattr(
+        "reflex_django.management.commands.run_reflex.Command._invoke_reflex_run",
+        invoke,
+    )
+
+    Command().handle(env="prod", skip_rebuild=True)
+
+    invoke.assert_called_once()
+    assert not export_call.called

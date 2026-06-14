@@ -47,8 +47,8 @@ Open **`http://localhost:3000/`** for UI work. Admin and API work at **`http://l
 
 For compile dev on one port (no Vite), use **`--env dev`** and browse **`http://localhost:8000/`**. See [Local development](../getting-started/local_development.md).
 
-!!! tip "Production has no Vite"
-    In production you serve the compiled SPA from your ASGI server on one port. See [Deployment](deployment.md).
+!!! tip "Production on one port"
+    For single-process production, use `python manage.py run_reflex --env prod --no-reload --skip-rebuild`. For split Django ASGI + Reflex + proxy, see [Deployment](deployment.md).
 
 ### Flags
 
@@ -88,9 +88,14 @@ python manage.py run_reflex --from-build --frontend-only
 
 # Custom backend port
 python manage.py run_reflex --backend-port 9000
+
+# Production single-process (after CI build)
+python manage.py run_reflex --env prod --no-reload --skip-rebuild
 ```
 
-### Boot order (default Vite mode)
+### Boot order
+
+**Default Vite dev** (`run_reflex` with no `--env` / `--from-build`):
 
 ```text
 1. install_reflex_django_integration()
@@ -100,13 +105,29 @@ python manage.py run_reflex --backend-port 9000
 5. Page edits hot-reload via Vite; backend reload on Python changes
 ```
 
-With `--from-build` or `--env dev`:
+**Compile-from-disk dev** (`--env dev` or `--from-build`):
 
 ```text
 1. install_reflex_django_integration()
 2. export_reflex --frontend-only --no-zip --stage-to-static-root (unless --skip-rebuild)
-3. uvicorn on :8000
-4. watchfiles: on .py change, stop uvicorn, re-export, restart
+3. reflex run on :8000 (single port; Django mounted in-process)
+4. watchfiles: on .py change, re-export (unless --skip-rebuild) and restart
+```
+
+**Production single-process** (`--env prod`):
+
+```text
+1. install_reflex_django_integration()
+2. export_reflex (unless --skip-rebuild); sets REFLEX_DJANGO_DEBUG=0
+3. reflex run --env prod on :8000 (single port; SPA + /_event + Django admin/API)
+4. Use --no-reload in production; pre-build SPA in CI with --skip-rebuild
+```
+
+**Plain Django only** (`--backend-only`):
+
+```text
+1. configure_django()
+2. uvicorn/hypercorn/granian on ASGI_APPLICATION (no Reflex WebSocket /_event)
 ```
 
 ### Common warnings
@@ -117,7 +138,7 @@ Set `export DJANGO_SETTINGS_MODULE=config.settings`. Auto-discovery via `manage.
 
 **"Could not find compiled SPA"**
 
-You may be using `runserver` instead of `run_reflex`, or Vite did not start. Use `python manage.py run_reflex` and open `:3000` (or `:8000` with `--env dev`). See [Troubleshooting](troubleshooting.md).
+You may be using `runserver` instead of `run_reflex`, or Vite did not start. Use `python manage.py run_reflex` and open `:3000` (or `:8000` with `--env dev`, `--from-build`, or `--env prod`). See [Troubleshooting](troubleshooting.md).
 
 **"Port 3000 is already in use"**
 
@@ -166,7 +187,9 @@ python manage.py collectstatic --noinput
 3. **Other Python** (states, models, settings): uvicorn restarts the backend.
 4. Migrations, tests, and `.web/` are ignored.
 
-**`--from-build` or `--env dev`:** full restart loop (stop uvicorn, re-export unless `--skip-rebuild`, start fresh uvicorn).
+**`--from-build` or `--env dev`:** full restart loop (re-export unless `--skip-rebuild`, restart Reflex backend on `:8000`).
+
+**`--env prod`:** same single-port Reflex backend as `--from-build`, with `REFLEX_ENV=prod`. Use `--no-reload --skip-rebuild` in production. See [Deployment](deployment.md).
 
 ---
 

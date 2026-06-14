@@ -17,3 +17,9 @@ def test_build_run_plan_default_dev_uses_vite():
     plan = build_run_plan({"env": "dev"})
     assert plan.is_single_port_dev is False
     assert plan.serve_from_disk is False
+
+
+def test_build_run_plan_prod_uses_single_port():
+    plan = build_run_plan({"env": "prod"})
+    assert plan.serve_from_disk is True
+    assert plan.frontend_port == plan.backend_port == 8000

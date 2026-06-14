@@ -26,6 +26,27 @@ _DEFAULT_FRONTEND_PORT = DEFAULT_FRONTEND_PORT
 _DEFAULT_BACKEND_PORT = DEFAULT_BACKEND_PORT
 
 
+def _parse_asgi_target(target: str) -> tuple[str, str]:
+    """Return ``(module, attr)`` from Django or ASGI-server path strings.
+
+    Django ``ASGI_APPLICATION`` uses dots (``config.asgi.application``).
+    Uvicorn and Granian use a colon (``config.asgi:application``).
+    """
+    if ":" in target:
+        module_name, attr = target.split(":", 1)
+    elif "." in target:
+        module_name, attr = target.rsplit(".", 1)
+    else:
+        raise CommandError(f"Invalid ASGI target: {target!r}")
+    if not module_name or not attr:
+        raise CommandError(f"Invalid ASGI target: {target!r}")
+    return module_name, attr
+
+
+class _ServerNotAvailable(Exception):
+    """Raised when an optional ASGI server package is not installed."""
+
+
 class Command(BaseCommand):
     """Start Reflex dev (Vite + native Reflex backend). Django runs separately."""
 
@@ -127,8 +148,12 @@ class Command(BaseCommand):
             os.environ["RXDJANGO_PROXY_SERVER"] = str(options["django_server"]).strip()
 
         plan = build_run_plan(options)
-        os.environ.setdefault("REFLEX_DJANGO_FRONTEND_PORT", str(plan.frontend_port))
-        os.environ.setdefault("REFLEX_DJANGO_BACKEND_PORT", str(plan.backend_port))
+        if plan.serve_from_disk:
+            os.environ["REFLEX_DJANGO_FRONTEND_PORT"] = str(plan.backend_port)
+            os.environ["REFLEX_DJANGO_BACKEND_PORT"] = str(plan.backend_port)
+        else:
+            os.environ.setdefault("REFLEX_DJANGO_FRONTEND_PORT", str(plan.frontend_port))
+            os.environ.setdefault("REFLEX_DJANGO_BACKEND_PORT", str(plan.backend_port))
         os.environ.setdefault("REFLEX_DJANGO_AUTO_EXPORT_ON_START", "0")
 
         if plan.serve_from_disk:
@@ -164,7 +189,27 @@ class Command(BaseCommand):
             from reflex_django.mount.auto import refresh_reflex_mount_catchall
 
             refresh_reflex_mount_catchall()
-            self._run_plain_django(plan, options)
+            proxy_server = resolve_rxdjango_proxy_server()
+            if proxy_server:
+                django_note = (
+                    f"Django admin/API proxied to {proxy_server} "
+                    "(RXDJANGO_PROXY_SERVER)."
+                )
+            else:
+                django_note = (
+                    "Django admin/API served from the Reflex backend "
+                    "(set RXDJANGO_PROXY_SERVER to proxy a separate Django server)."
+                )
+            mode = "prod" if plan.is_prod else "compiled bundle"
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(
+                    f"reflex-django: Reflex backend ({mode}, no Vite) — browse "
+                    f"http://localhost:{plan.backend_port}/\n"
+                    f"    {django_note}"
+                )
+            )
+            # Plain Django ASGI cannot handle WebSocket /_event traffic.
+            self._invoke_reflex_run(options, plan)
             return
 
         from reflex_django.dev.vite_proxy import ensure_vite_django_dev_proxy_from_config
@@ -193,9 +238,10 @@ class Command(BaseCommand):
             )
         )
 
-        self._invoke_reflex_run(options)
+        self._invoke_reflex_run(options, plan)
 
     def _run_plain_django(self, plan: RunPlan, options: dict[str, Any]) -> None:
+        """Serve Django HTTP only (``--backend-only``). No Reflex WebSocket events."""
         from django.conf import settings
 
         asgi_path = getattr(settings, "ASGI_APPLICATION", None)
@@ -315,11 +361,12 @@ class Command(BaseCommand):
         except ImportError as exc:
             raise _ServerNotAvailable from exc
 
-        module_name, _, attr = target.partition(":")
+        module_name, attr = _parse_asgi_target(target)
+        server_target = f"{module_name}:{attr}"
         application = getattr(importlib.import_module(module_name), attr)
         self.stdout.write(
             self.style.SUCCESS(
-                f"reflex-django: serving {target} via uvicorn at "
+                f"reflex-django: serving {server_target} via uvicorn at "
                 f"http://{host}:{port}/"
             )
         )
@@ -348,14 +395,16 @@ class Command(BaseCommand):
         except ImportError as exc:
             raise _ServerNotAvailable from exc
 
+        module_name, attr = _parse_asgi_target(target)
+        server_target = f"{module_name}:{attr}"
         self.stdout.write(
             self.style.SUCCESS(
-                f"reflex-django: serving {target} via granian at "
+                f"reflex-django: serving {server_target} via granian at "
                 f"http://{host}:{port}/"
             )
         )
         Granian(
-            target,
+            server_target,
             address=host,
             port=port,
             interface=Interfaces.ASGI,
@@ -380,7 +429,8 @@ class Command(BaseCommand):
         except ImportError as exc:
             raise _ServerNotAvailable from exc
 
-        module_name, _, attr = target.partition(":")
+        module_name, attr = _parse_asgi_target(target)
+        server_target = f"{module_name}:{attr}"
         application = getattr(importlib.import_module(module_name), attr)
         cfg = Config()
         cfg.bind = [f"{host}:{port}"]
@@ -388,13 +438,13 @@ class Command(BaseCommand):
         cfg.use_reloader = reload
         self.stdout.write(
             self.style.SUCCESS(
-                f"reflex-django: serving {target} via hypercorn at "
+                f"reflex-django: serving {server_target} via hypercorn at "
                 f"http://{host}:{port}/"
             )
         )
         asyncio.run(serve(application, cfg))
 
-    def _invoke_reflex_run(self, options: dict[str, Any]) -> None:
+    def _invoke_reflex_run(self, options: dict[str, Any], plan: RunPlan) -> None:
         try:
             from reflex.reflex import cli as reflex_cli
         except ImportError as exc:
@@ -415,11 +465,18 @@ class Command(BaseCommand):
 
         original_get_config = config_module.get_config
         frontend_only = bool(options.get("frontend_only"))
+        single_port = plan.serve_from_disk
 
         def wrapped_get_config(reload: bool = False) -> Any:
             cfg = original_get_config(reload=reload)
             if frontend_only:
                 cfg.backend_port = None
+            elif single_port:
+                port = plan.backend_port
+                if getattr(cfg, "backend_port", None) is not None:
+                    port = cfg.backend_port
+                cfg.backend_port = port
+                cfg.frontend_port = port
             return cfg
 
         config_module.get_config = wrapped_get_config
@@ -428,10 +485,14 @@ class Command(BaseCommand):
         forward: list[str] = ["run"]
         if options.get("env"):
             forward.extend(["--env", options["env"]])
-        if options.get("frontend_port"):
-            forward.extend(["--frontend-port", str(options["frontend_port"])])
-        if options.get("backend_port"):
-            forward.extend(["--backend-port", str(options["backend_port"])])
+        if single_port:
+            forward.extend(["--frontend-port", str(plan.backend_port)])
+            forward.extend(["--backend-port", str(plan.backend_port)])
+        else:
+            if options.get("frontend_port"):
+                forward.extend(["--frontend-port", str(options["frontend_port"])])
+            if options.get("backend_port"):
+                forward.extend(["--backend-port", str(options["backend_port"])])
         if options.get("backend_host"):
             forward.extend(["--backend-host", options["backend_host"]])
         if options.get("loglevel"):
@@ -448,7 +509,3 @@ class Command(BaseCommand):
             sys.argv = old_argv
             config_module.get_config = original_get_config
             _rebind_get_config_imports(original_get_config)
-
-
-class _ServerNotAvailable(Exception):
-    """Raised when an ASGI server package is not installed."""
