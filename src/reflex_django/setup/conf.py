@@ -85,6 +85,12 @@ def configure_django(settings_module: str | None = None) -> str:
         django.setup()
         _SETUP_DONE = True
         try:
+            from reflex_django.setup.performance import apply_performance_preset
+
+            apply_performance_preset()
+        except Exception:
+            pass
+        try:
             from reflex_django.mount.auto import maybe_auto_mount
 
             maybe_auto_mount()

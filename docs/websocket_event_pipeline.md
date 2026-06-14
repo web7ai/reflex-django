@@ -30,17 +30,19 @@ You do not need this page to build features. You need it when something goes wro
 2. Browser: send Socket.IO event over WebSocket → /_event
 3. Reflex backend: reserved path → Reflex inner ASGI (not Django HTTP)
 4. Reflex: receives event, calls registered preprocess middleware
-5. Bridge: builds synthetic HttpRequest from event.router_data
-6. Bridge: runs settings.MIDDLEWARE on it (minus skip list)
-7. Bridge: eagerly resolves request.user
-8. Bridge: binds context (request, user, session, csrf, messages, language)
-9. Reflex: calls your @rx.event handler
-10. Handler: mutates state, returns events/redirects
-11. Reflex: ships state diff back over WebSocket
-12. Browser: re-renders
+5. Bridge: resolve bridge tier (full / auth_only / none) for handler state class
+6. Bridge (tier none): return early — handler runs with no Django context
+7. Bridge (tier auth_or_full): build synthetic HttpRequest from event.router_data
+8. Bridge: run middleware for tier (full MIDDLEWARE or auth_only subset)
+9. Bridge: eagerly resolves request.user; write optional event cache metadata
+10. Bridge: binds context (request, user, session, csrf, messages, language)
+11. Reflex: calls your @rx.event handler
+12. Handler: mutates state, returns events/redirects
+13. Reflex: ships state diff back over WebSocket
+14. Browser: re-renders
 ```
 
-Steps 5 through 8 are what reflex-django adds. The rest is normal Reflex plus ASGI.
+Steps 5 through 10 are what reflex-django adds. The rest is normal Reflex plus ASGI. Default tier is **`full`** (legacy behavior). Opt into `"smart"` mode from `settings.py` to skip middleware for plain `rx.State`. See [Scaling and performance](scaling.md).
 
 ```mermaid
 flowchart TD
@@ -48,10 +50,12 @@ flowchart TD
     B --> C[Reflex backend api_transformer]
     C --> D[Reflex inner ASGI]
     D --> E[DjangoEventBridge.preprocess]
-    E --> F[Synthetic HttpRequest]
-    F --> G[EventMiddlewareHandler + MIDDLEWARE]
+    E --> T[resolve_bridge_tier]
+    T -->|none| I["Your @rx.event handler"]
+    T -->|auth_only or full| F[Synthetic HttpRequest]
+    F --> G[Tier middleware chain]
     G --> H[Bind self.request / self.user]
-    H --> I["Your @rx.event handler"]
+    H --> I
     I --> J[State diff → browser]
 ```
 
@@ -86,8 +90,32 @@ app.add_middleware(DjangoEventBridge())
 
 When Reflex receives a `/_event` payload, it walks registered preprocess middleware in order. The `DjangoEventBridge.preprocess` call is where everything below happens.
 
+First, the bridge resolves a **tier** for the handler's state class:
+
+```python
+from reflex_django.bridge.tier import resolve_bridge_tier
+
+tier = resolve_bridge_tier(handler_state_cls, event)  # "full" | "auth_only" | "none"
+```
+
+When tier is `"none"`, `preprocess` returns immediately and your handler runs without Django context. Otherwise the bridge continues with request building and middleware.
+
 !!! tip "No plugin required in v1"
     You do not add `ReflexDjangoPlugin` or wire the bridge manually. `install_reflex_django_integration()` registers it when the app is built.
+
+---
+
+## Step 4b: bridge tiers (before the synthetic request)
+
+| Tier | Middleware | When |
+|:---|:---|:---|
+| `full` | Full `settings.MIDDLEWARE` (minus skip list) | Default; `AppState` / `ModelState` in smart mode |
+| `auth_only` | `REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE` (session + auth) | Upload events (minimum); optional per-State override |
+| `none` | Skipped | Plain `rx.State` in smart mode; explicit `_reflex_django_bridge = "none"` |
+
+Override precedence (highest wins): `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` → `State._reflex_django_bridge` → `REFLEX_DJANGO_EVENT_BRIDGE_MODE` → smart defaults.
+
+Source: `reflex_django/bridge/tier.py`, `reflex_django/bridge/registry.py`.
 
 ---
 
@@ -105,22 +133,31 @@ Reflex events carry a `router_data` dict that describes the page the event came 
 
 It then constructs a real `django.http.HttpRequest` with those fields filled in. From this point on, the request looks like a normal Django GET to middleware. The body is empty (events have no HTTP bodies) and the method is `GET` by default.
 
-Source: `reflex_django/bridge/django_event.py` (`bridge_request_for_state`, `_build_request_from_event`).
+Source: `reflex_django/bridge/request_builder.py`, `reflex_django/bridge/django_event.py` (`bridge_request_for_state`).
 
 ---
 
-## Step 6: running `settings.MIDDLEWARE`
+## Step 6: running middleware for the tier
 
 The bridge passes the request through `EventMiddlewareHandler`, a subclass of Django's `BaseHandler` that exposes the middleware chain without dispatching to a view.
 
 ```python
-# Effectively:
+# Effectively for tier "full":
 from reflex_django.bridge.event_handler import run_middleware_chain
 
 response = await run_middleware_chain(request)
+
+# Effectively for tier "auth_only":
+from reflex_django.bridge.event_handler import run_auth_middleware_chain
+
+response = await run_auth_middleware_chain(request)
 ```
 
-Every middleware in `settings.MIDDLEWARE` runs in order (except the skip list). `SessionMiddleware` loads the session row. `AuthenticationMiddleware` resolves `request.user`. Your custom middleware runs too.
+For tier **`full`**, every middleware in `settings.MIDDLEWARE` runs in order (except the skip list). `SessionMiddleware` loads the session row. `AuthenticationMiddleware` resolves `request.user`. Your custom middleware runs too.
+
+For tier **`auth_only`**, only `REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE` runs (default: session + auth). Upload events always run at least this tier.
+
+For tier **`none`**, this step is skipped entirely.
 
 ### What is skipped
 
@@ -138,6 +175,16 @@ Disable the entire chain temporarily with `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = 
 `process_view` is not called (there is no Django view). `process_request`, `process_response`, and `process_exception` run normally.
 
 Source: `reflex_django/bridge/event_handler.py`.
+
+---
+
+## Step 6b: event cache (write-only)
+
+After middleware runs, the bridge may store **post-middleware auth metadata** in Django's cache (`REFLEX_DJANGO_EVENT_CACHE`, TTL via `REFLEX_DJANGO_EVENT_CACHE_TTL`). This is **write-only** — it does not skip session or auth middleware on the next event. Set `REFLEX_DJANGO_EVENT_CACHE_TTL = 0` to disable.
+
+Invalidate on logout with `from reflex_django.bridge import invalidate_event_cache`.
+
+Source: `reflex_django/bridge/cache.py`.
 
 ---
 
@@ -312,7 +359,12 @@ If something feels off, try this order:
 | `reflex_django/runtime/app_factory.py` | Wires dispatcher on `get_or_create_app()` |
 | `reflex_django/bootstrap/app_setup.py` | Installs `DjangoEventBridge` on the Reflex app |
 | `reflex_django/bridge/django_event.py` | `DjangoEventBridge` preprocess hook |
-| `reflex_django/bridge/event_handler.py` | `EventMiddlewareHandler`, skip list |
+| `reflex_django/bridge/tier.py` | `resolve_bridge_tier`, smart defaults |
+| `reflex_django/bridge/registry.py` | `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` hook |
+| `reflex_django/bridge/request_builder.py` | Synthetic `HttpRequest` from `router_data` |
+| `reflex_django/bridge/event_handler.py` | `EventMiddlewareHandler`, skip list, auth-only chain |
+| `reflex_django/bridge/cache.py` | Write-only event cache, `invalidate_event_cache` |
+| `reflex_django/bridge/metrics.py` | Opt-in phase timings (`REFLEX_DJANGO_EVENT_METRICS`) |
 | `reflex_django/bridge/context.py` | ContextVars |
 | `reflex_django/bridge/request.py` | `RequestProxy` for non-AppState access |
 | `reflex_django/bridge/upload.py` | Injects router_data into uploads |
@@ -321,6 +373,6 @@ If something feels off, try this order:
 
 ## What just happened?
 
-You traced a Reflex event from the browser through the Reflex backend, `DjangoEventBridge`, the full middleware chain, and back to the UI update.
+You traced a Reflex event from the browser through the Reflex backend, tier resolution, `DjangoEventBridge`, the middleware chain for that tier, and back to the UI update.
 
 **Next up:** [AsyncStreamingMiddleware explained →](async_streaming_middleware.md)

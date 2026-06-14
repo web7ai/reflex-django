@@ -59,6 +59,8 @@ DATABASES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+
 USE_I18N = True
 LANGUAGE_CODE = "en"
 LANGUAGES = [

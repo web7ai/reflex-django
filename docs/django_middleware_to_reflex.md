@@ -5,7 +5,7 @@ tags: [middleware, events]
 
 # Custom middleware in events
 
-**What you'll learn:** How reflex-django runs your `settings.MIDDLEWARE` chain on every Reflex event, what is skipped by default, and how to customize that behavior.
+**What you'll learn:** How reflex-django runs Django middleware on Reflex events (by tier), what is skipped by default, and how to customize that behavior.
 
 **When you need this:**
 
@@ -20,17 +20,27 @@ tags: [middleware, events]
 
 The `DjangoEventBridge` runs on every Reflex event. It:
 
-1. Builds a synthetic `HttpRequest` from WebSocket router data (cookies, path, headers).
-2. Walks `settings.MIDDLEWARE` in order.
-3. Binds the resulting `request` (and `response`) to your `AppState` handler.
+1. Resolves a **bridge tier** for the handler's state class (`full`, `auth_only`, or `none`). Default project setting is `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "full"` — same as before tiered bridges.
+2. Returns early when tier is `none` (handler runs with no Django context).
+3. Builds a synthetic `HttpRequest` from WebSocket router data (cookies, path, headers).
+4. Runs middleware for the tier — full `MIDDLEWARE` or `REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE`.
+5. Binds the resulting `request` (and `response`) when the tier requires it.
 
-If `TenantMiddleware` sets `request.tenant_id` on HTTP, `self.request.tenant_id` is set in handlers too. No extra wiring.
+If `TenantMiddleware` sets `request.tenant_id` on HTTP, `self.request.tenant_id` is set in handlers too — but only when the tier runs middleware (not tier `none`). No extra wiring.
 
 ```python
 --8<-- "snippets/minimal_settings.py"
 ```
 
-Your middleware list in settings is the same list that runs on events (minus the skip list below).
+### Bridge tiers
+
+| Tier | What runs | Typical handler |
+|:---|:---|:---|
+| `full` | Full `MIDDLEWARE` (minus skip list) | `AppState`, `ModelState`, custom middleware-dependent logic |
+| `auth_only` | Session + auth subset | Upload events (minimum); lightweight auth checks |
+| `none` | Nothing | Plain `rx.State` in smart mode; high-frequency UI-only handlers |
+
+Upload events always run at least `auth_only`. Override per class with `_reflex_django_bridge` or project-wide with `REFLEX_DJANGO_EVENT_BRIDGE_MODE`. Full recipes: [Scaling and performance](scaling.md).
 
 ---
 
@@ -187,9 +197,13 @@ The proxy delegates to the same per-event request the bridge built.
 
 The full chain on every event is usually cheap (session + auth). For very high-frequency states:
 
-1. Skip heavy middleware via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
-2. Use plain `rx.State` when you do not need Django context.
-3. Last resort: `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
+1. Set `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"` so plain `rx.State` skips middleware.
+2. Override one class with `_reflex_django_bridge = "none"` (underscore prefix — public attrs become Reflex state vars).
+3. Skip heavy middleware via `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`.
+4. Use `REFLEX_DJANGO_PERFORMANCE_PRESET = "lean"` for smaller WebSocket deltas.
+5. Last resort: `REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False`.
+
+See [Scaling and performance](scaling.md) for tiers, cache, Redis, and override recipes.
 
 ---
 

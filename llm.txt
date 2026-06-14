@@ -56,7 +56,7 @@ Browser → edge proxy → Django ASGI (admin, API, SPA shell via reflex_mount)
 ```
 
 - **HTTP bridge (dev):** `make_dispatcher` in `src/reflex_django/asgi/app.py`, wired from `runtime/app_factory.py` and `bootstrap/app_setup.py`.
-- **Event bridge:** `DjangoEventBridge` in `src/reflex_django/bridge/django_event.py`.
+- **Event bridge:** `DjangoEventBridge` in `src/reflex_django/bridge/django_event.py`; tiers in `bridge/tier.py`, cache in `bridge/cache.py`. See `docs/scaling.md`.
 - **Removed in v3:** `django_outer`, `reflex_outer`, `reflex_django.asgi.entry`. `ReflexDjangoPlugin` is deprecated.
 
 ---
@@ -71,7 +71,7 @@ These names match `__all__` in `src/reflex_django/__init__.py`. Many are **lazy-
 | Django init | `configure_django` |
 | ASGI | `build_django_asgi`, `make_dispatcher` |
 | Per-event context | **`request`** (`request.user`, `request.session`, `request.GET`, `request.headers`), `current_request`, `current_user`, `current_session`, `current_language`, `begin_event_request`, `end_event_request` |
-| Event middleware | `DjangoEventBridge` |
+| Event middleware | `DjangoEventBridge`, `resolve_bridge_tier`, `invalidate_event_cache` |
 | Reflex state helpers | `AppState`, `ModelState`, `DjangoUserState`, `DjangoI18nState` |
 | Per-event context | `current_user`, `current_session`, `current_request`, `current_messages`, `current_language`, `current_csrf_token` |
 | Auth shortcuts | `require_login_user`, `auser_has_perm`, `ReflexDjangoAuthError` (`reflex_django.auth.shortcuts`) |
@@ -159,6 +159,15 @@ Consolidated from `src/reflex_django/setup/default_settings.py` and related modu
 | `REFLEX_DJANGO_RX_CONFIG` | Dict of `rx.Config` overrides: `frontend_port`, `backend_port`, `redis_url`, `frontend_packages`, CORS, etc. |
 | `RXDJANGO_PROXY_SERVER` | Optional. When set, Vite proxies Django URL prefixes to separate `runserver`. When unset, Django runs in-process on Reflex backend. |
 | `REFLEX_DJANGO_PLUGINS` | List of Reflex plugin dotted paths or instances. |
+| `REFLEX_DJANGO_EVENT_BRIDGE_MODE` | `"full"` (default), `"smart"`, or `"none"`. Tiered middleware on Reflex events. |
+| `REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE` | Tuple of middleware for `"auth_only"` tier (default: session + auth). |
+| `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` | Optional dotted callable `(handler_state_cls, event) -> tier`. Highest precedence. |
+| `REFLEX_DJANGO_EVENT_RESOLVE_URL` | When `True`, populate `request.resolver_match` on synthetic event requests. |
+| `REFLEX_DJANGO_EVENT_CACHE` / `TTL` / `KEY_PREFIX` | Django `CACHES` alias and TTL for bridge auth snapshot cache (`0` disables). |
+| `REFLEX_DJANGO_EVENT_METRICS` | When `True`, log bridge phase timings at DEBUG. |
+| `REFLEX_DJANGO_PERFORMANCE_PRESET` | `"lean"` disables default mirror/auth-sync toggles when still at library defaults. |
+
+**Override precedence:** `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` → `State._reflex_django_bridge` → `REFLEX_DJANGO_EVENT_BRIDGE_MODE` → smart defaults. Use `_reflex_django_bridge` (underscore) — public attrs become Reflex state vars. Full guide: `docs/scaling.md`.
 
 Default settings also honor env vars such as `REFLEX_DJANGO_STATIC_URL`, `REFLEX_DJANGO_STATIC_ROOT`, `REFLEX_DJANGO_SECRET_KEY`, `REFLEX_DJANGO_DEBUG`, `REFLEX_DJANGO_ALLOWED_HOSTS`, `REFLEX_DJANGO_URLCONF`. Database URL can fall back from Reflex config `db_url` to a local SQLite file.
 

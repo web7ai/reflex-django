@@ -282,6 +282,15 @@ async def sign_out(self):
     return _sync_session_cookie_then_nav(current_request(), "/login", clear_cookie=True)
 ```
 
+Built-in `AppState.logout()` and `DjangoAuthState.logout` also call `invalidate_event_cache()` so the event bridge drops cached auth metadata for that session. Custom logout handlers should do the same:
+
+```python
+from reflex_django.bridge import invalidate_event_cache
+
+await self.logout()
+invalidate_event_cache(session_key=getattr(self.session, "session_key", None))
+```
+
 ---
 
 ## Browser storage: Django `sessionid` vs Reflex `token`

@@ -39,7 +39,11 @@ def _ensure_django_api_transformer(app: App) -> None:
         return
 
     from reflex_django.asgi.app import django_asgi_application, make_dispatcher
+    from reflex_django.core.env import resolve_rxdjango_proxy_server
     from reflex_django.mount.prefixes import resolve_prefixes
+
+    if resolve_rxdjango_proxy_server():
+        return
 
     prefixes = resolve_prefixes().backend_prefixes_for_asgi()
     if not prefixes:

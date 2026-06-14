@@ -79,7 +79,7 @@ Follow the cards in order. Check each box when you are done. Skip the Django or 
 
 ## After the path
 
-Once the checklist is green, drop into build guides as you need them: [Pages in views.py](pages_in_views.md), [CRUD with ModelState](reactive_model_state.md), [Authentication](authentication.md), [Deployment](deployment.md).
+Once the checklist is green, drop into build guides as you need them: [Pages in views.py](pages_in_views.md), [CRUD with ModelState](reactive_model_state.md), [Authentication](authentication.md), [Deployment](deployment.md), [Scaling and performance](scaling.md) for high-traffic or multi-worker setups.
 
 Total time for the full path is about 45 minutes if you read everything, or about 25 if you skip the two primers. Either way, you will know more than the average developer who installs a framework and immediately opens twelve tabs.
 

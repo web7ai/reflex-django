@@ -204,6 +204,33 @@ REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP: tuple[str, ...] = (
     "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 )
 
+# Event bridge performance (opt-in). "full" preserves legacy behavior on every event.
+REFLEX_DJANGO_EVENT_BRIDGE_MODE = "full"  # "full" | "smart" | "none"
+
+# Middleware subset for the "auth_only" bridge tier (tuple, like MIDDLEWARE).
+REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE = (
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+)
+
+# Populate request.resolver_match on synthetic event requests.
+REFLEX_DJANGO_EVENT_RESOLVE_URL = True
+
+# Optional dotted path: callable(handler_state_cls, event) -> "full"|"auth_only"|"none"
+# REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER = "myapp.performance.resolve_bridge_tier"
+
+# Django CACHES alias for session/user bridge cache between events (0 TTL disables).
+REFLEX_DJANGO_EVENT_CACHE = "default"
+REFLEX_DJANGO_EVENT_CACHE_TTL = 60
+REFLEX_DJANGO_EVENT_CACHE_KEY_PREFIX = "rxdj:event:"
+
+# Opt-in bridge timing logs at DEBUG.
+REFLEX_DJANGO_EVENT_METRICS = False
+# REFLEX_DJANGO_EVENT_METRICS_LOGGER = "myapp.performance"
+
+# "lean" applies smaller WebSocket deltas when mirror settings still match defaults.
+REFLEX_DJANGO_PERFORMANCE_PRESET = "default"  # "default" | "lean"
+
 # When True (default), if a middleware short-circuits with a 3xx response,
 # the bridge converts it into a Reflex ``rx.redirect(...)`` event so the
 # browser navigates to the target. Disable to handle redirects manually.

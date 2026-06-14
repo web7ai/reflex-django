@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `RXDJANGO_PROXY_SERVER` — optional base URL of a separate Django server for Vite dev proxy; when unset, Django is served from the Reflex backend.
 - `docs/migration/v3_mount_only.md` — mount-only migration guide.
+- **Tiered event bridge** — `REFLEX_DJANGO_EVENT_BRIDGE_MODE` (`full` / `smart` / `none`), per-State `_reflex_django_bridge`, optional `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER`.
+- **Event cache** — Django `CACHES`-backed write-only auth metadata cache (`REFLEX_DJANGO_EVENT_CACHE`, TTL, `invalidate_event_cache()`).
+- **`REFLEX_DJANGO_PERFORMANCE_PRESET = "lean"`** — trims mirror/auth-sync defaults when still at library defaults.
+- **`REFLEX_DJANGO_EVENT_METRICS`** — opt-in DEBUG timing logs for bridge phases.
+- `docs/scaling.md` — settings-first scaling guide for Django + realtime UI.
 
 ### Changed (breaking)
 

@@ -170,16 +170,18 @@ Use `/_health` (or `/ping`). Returns `{"status": "ok"}` without touching the dat
 
 - **Workers:** start with 2 to 4; async handlers benefit from concurrency inside a worker.
 - **Sticky sessions:** default Reflex state is in-memory per process.
-- **Redis:** optional shared state via `REFLEX_DJANGO_RX_CONFIG["redis_url"]`.
+- **Redis:** required for multi-worker Reflex via `REFLEX_DJANGO_RX_CONFIG["redis_url"]`.
 - **WebSocket idle timeout:** set proxy timeout to at least 300 seconds.
+- **Event bridge:** opt into `"smart"` mode and `"lean"` preset for large apps — see [Scaling and performance](scaling.md).
 
 | Symptom | Likely fix |
 |:---|:---|
 | WebSocket drops after 60s | Raise proxy idle timeout |
 | CSRF on admin behind HTTPS | Set `SECURE_PROXY_SSL_HEADER` |
 | Slow first request | Pre-build SPA in CI; disable auto-export on start |
+| High event volume | `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"` + per-State `_reflex_django_bridge` |
 
-More: [Troubleshooting](troubleshooting.md).
+More: [Troubleshooting](troubleshooting.md), [Scaling and performance](scaling.md).
 
 ---
 

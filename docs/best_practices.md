@@ -88,6 +88,8 @@ These are defaults that work well for most projects, not hard rules.
 
 **Paginate lists. Prefetch aggressively.** N+1 is the most common slowdown.
 
+**Tune the event bridge from `settings.py`** for high-frequency UI: `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`, `_reflex_django_bridge` on hot State classes, `REFLEX_DJANGO_PERFORMANCE_PRESET = "lean"`. See [Scaling and performance](scaling.md).
+
 **Pre-build the SPA in CI**, not at container boot.
 
 **Run `migrate` as a deploy step**, not from every worker at startup.

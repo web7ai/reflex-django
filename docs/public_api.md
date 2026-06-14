@@ -24,6 +24,7 @@ from reflex_django import request, current_request, current_user
 from reflex_django.asgi.app import build_django_asgi, make_dispatcher
 from reflex_django import app, create_app
 from reflex_django.bridge.context import begin_event_request, end_event_request
+from reflex_django.bridge import resolve_bridge_tier, invalidate_event_cache
 ```
 
 Most projects import little beyond this list. Upgrading? See [v3 mount-only](migration/v3_mount_only.md) or [v2 module paths](migration/v2_module_paths.md).
@@ -61,6 +62,7 @@ reflex_django/
 | **Testing** | `begin_event_request`, `end_event_request` | [Testing](testing.md) |
 | **ASGI / bootstrap** | `application`, `build_application`, `install_reflex_django_integration` | [Architecture](architecture.md), [Deployment](deployment.md) |
 | **Middleware** | `AsyncStreamingMiddleware`, `DEFAULT_DEV_MIDDLEWARE` | [Middleware in events](django_middleware_to_reflex.md), [Local development](local_development.md) |
+| **Performance** | `REFLEX_DJANGO_EVENT_BRIDGE_MODE`, `resolve_bridge_tier`, `invalidate_event_cache` | [Scaling and performance](scaling.md) |
 | **CLI** | `run_reflex`, `export_reflex`, `reflex django ...` | [CLI reference](cli.md) |
 | **Settings** | All `REFLEX_DJANGO_*` keys | [Settings reference](settings_reference.md) |
 | **Routing** | `UrlRoutingMode`, `resolve_url_routing` | [Routing](routing.md) |

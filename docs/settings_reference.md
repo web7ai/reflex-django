@@ -138,6 +138,44 @@ REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP = (
 
 ---
 
+## Performance and bridge tiers
+
+Every Reflex event runs through `DjangoEventBridge.preprocess`. By default the **full** middleware chain runs (same as before tiered bridges). For high-frequency handlers, tune from `settings.py`:
+
+| Setting | Default | Purpose |
+|:---|:---|:---|
+| `REFLEX_DJANGO_EVENT_BRIDGE_MODE` | `"full"` | Project default: `"full"`, `"smart"`, or `"none"` |
+| `REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE` | session + auth | Middleware tuple for `"auth_only"` tier |
+| `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` | unset | Dotted path to custom `(state_cls, event) -> tier` callable |
+| `REFLEX_DJANGO_EVENT_RESOLVE_URL` | `True` | Populate `request.resolver_match` on synthetic requests |
+| `REFLEX_DJANGO_EVENT_CACHE` | `"default"` | `CACHES` alias for bridge cache |
+| `REFLEX_DJANGO_EVENT_CACHE_TTL` | `60` | Seconds; `0` disables write |
+| `REFLEX_DJANGO_EVENT_CACHE_KEY_PREFIX` | `"rxdj:event:"` | Key prefix for cached auth metadata |
+| `REFLEX_DJANGO_PERFORMANCE_PRESET` | `"default"` | `"lean"` trims mirror/auth-sync defaults |
+| `REFLEX_DJANGO_EVENT_METRICS` | `False` | DEBUG timing logs when `True` |
+| `REFLEX_DJANGO_EVENT_METRICS_LOGGER` | unset | Logger name for bridge phase timings |
+
+Event cache is **write-only** after middleware (post-middleware auth metadata). It does not skip session or auth on subsequent events.
+
+**Override precedence** (highest wins):
+
+1. `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER`
+2. `State._reflex_django_bridge` (use `_` prefix — public attrs become Reflex vars)
+3. `REFLEX_DJANGO_EVENT_BRIDGE_MODE`
+4. Smart defaults (`AppState` → `full`, plain `rx.State` → `none`)
+
+```python
+# settings.py — large apps (opt-in)
+REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"
+
+class FilterState(rx.State):
+    _reflex_django_bridge = "none"
+```
+
+Upload events always run at least `"auth_only"`. Full scaling guide: [Scaling and performance](scaling.md).
+
+---
+
 ## Reactive mirrors, pages, auth
 
 | Setting | Default | Purpose |
@@ -164,6 +202,7 @@ When reflex-django supplies bundled settings, env vars include `REFLEX_DJANGO_DA
 2. First touch is often `REFLEX_DJANGO_AUTH`.
 3. Dev port confusion? Read **SEPARATE_DEV_PORTS**, **DEV_PROXY**, and **RXDJANGO_PROXY_SERVER** above.
 4. Routing 404s? Check **DJANGO_PREFIX** and [Troubleshooting](troubleshooting.md).
+5. High event volume or multi-worker deploy? Read [Scaling and performance](scaling.md).
 
 ---
 

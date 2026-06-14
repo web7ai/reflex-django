@@ -103,16 +103,20 @@ def dashboard_ui():
 
 Every Reflex event arrives on `/_event` as a WebSocket frame. By default that bypasses Django's HTTP pipeline. reflex-django inserts the **`DjangoEventBridge`** before your handler:
 
-1. Read `router_data` from the event (cookies, path, query string, headers).
-2. Build a synthetic `HttpRequest`.
-3. Run `settings.MIDDLEWARE` (sessions, auth, your custom middleware).
-4. Eagerly resolve `request.user` with Django's async `aget_user`.
-5. Bind the result onto your `AppState` instance.
-6. Run your handler.
+1. Resolve bridge tier for the handler's state class (`full`, `auth_only`, or `none`). Default project mode is **`full`** (unchanged legacy behavior).
+2. If tier is `none`, skip Django setup and run your handler immediately.
+3. Read `router_data` from the event (cookies, path, query string, headers).
+4. Build a synthetic `HttpRequest`.
+5. Run middleware for the tier — full `MIDDLEWARE` or the auth-only subset.
+6. Eagerly resolve `request.user` with Django's async `aget_user`.
+7. Bind the result onto state when the tier requires it; sync auth snapshots on `full` (and `auth_only` for `DjangoUserState` handlers).
+8. Run your handler.
+
+With `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`, plain `rx.State` handlers use tier `none` automatically — no middleware, no `self.request`. `AppState` and `ModelState` still get tier `full`.
 
 If middleware returns a 3xx (for example login required), the bridge converts it to `rx.redirect(...)` unless you set `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False`.
 
-See [WebSocket event pipeline](websocket_event_pipeline.md) for the full plumbing.
+See [WebSocket event pipeline](websocket_event_pipeline.md) for the full plumbing and [Scaling and performance](scaling.md) for tuning.
 
 ---
 
@@ -127,6 +131,9 @@ See [WebSocket event pipeline](websocket_event_pipeline.md) for the full plumbin
 ```python
 class FilterState(rx.State):
     query: str = ""
+    # With REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart", tier "none" is automatic.
+    # To force Django context on a plain rx.State handler:
+    # _reflex_django_bridge = "full"
 
 
 class CartState(AppState):
@@ -141,7 +148,7 @@ class ProductState(ModelState):
     fields = ["name", "price"]
 ```
 
-A page can mix several states. Use `rx.State` for a filter bar and `AppState` for user-specific data.
+A page can mix several states. Use `rx.State` for a filter bar and `AppState` for user-specific data. Use `_reflex_django_bridge` (underscore prefix) for per-class tier overrides — public class attrs become Reflex state vars. See [Scaling and performance](scaling.md).
 
 ---
 

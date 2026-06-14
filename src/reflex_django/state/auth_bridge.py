@@ -297,6 +297,7 @@ class AuthBridgeMixin:
         if request is not None:
             from django.conf import settings as django_settings
 
+            session_key = request.COOKIES.get("sessionid", "")
             preserve_keys = getattr(
                 django_settings,
                 "REFLEX_DJANGO_LOGOUT_PRESERVE_SESSION_KEYS",
@@ -309,6 +310,9 @@ class AuthBridgeMixin:
                     if key in session:
                         preserved[key] = session[key]
             await alogout(request)
+            from reflex_django.bridge.cache import invalidate_event_cache
+
+            invalidate_event_cache(session_key or None)
             if preserved and session is not None:
                 for key, value in preserved.items():
                     session[key] = value

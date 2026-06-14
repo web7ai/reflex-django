@@ -227,6 +227,7 @@ export REFLEX_DJANGO_DJANGO_PREFIX="/admin,/api,/internal"
 | `SynchronousOnlyOperation` | Use `await Model.objects.aget(...)` in async handlers. |
 | White page / `dispatch is not a function` | Delete `.web/`, restart `run_reflex`. |
 | Anonymous user in handlers | Subclass `AppState`, ensure session middleware runs. See [State management](state_management.md). |
+| Slow or high-frequency events | `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`; `_reflex_django_bridge = "none"` on hot `rx.State` classes. See [Scaling](scaling.md). |
 
 ---
 

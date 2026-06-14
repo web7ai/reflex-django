@@ -212,14 +212,14 @@ def _scheme_from_headers(headers: dict[str, str]) -> str:
 
 
 def _resolve_url_match(path: str) -> Any | None:
-    """Best-effort URL resolution for the synthetic event request.
+    """Best-effort URL resolution for the synthetic event request."""
+    try:
+        from django.conf import settings
 
-    When ``ROOT_URLCONF`` is set we run :func:`django.urls.resolve` to
-    populate ``request.resolver_match`` — handy for middleware that
-    inspects view kwargs or namespaces (e.g. login-required gates).
-    Failures are swallowed so anonymous-event paths or pages that no
-    longer exist do not break event processing.
-    """
+        if not getattr(settings, "REFLEX_DJANGO_EVENT_RESOLVE_URL", True):
+            return None
+    except Exception:
+        pass
     try:
         from django.urls import resolve
     except Exception:
@@ -419,24 +419,26 @@ async def _eagerly_resolve_lazy_user(request: HttpRequest) -> None:
         request.user = resolved  # pyright: ignore[reportAttributeAccessIssue]
 
 
-async def _run_full_middleware_chain(
+async def _run_middleware_for_tier(
     request: HttpRequest,
+    tier: str,
 ) -> HttpResponse | None:
-    """Run ``settings.MIDDLEWARE`` against the synthetic request.
-
-    Returns the :class:`~django.http.HttpResponse` produced by the chain
-    (either the terminal empty 200 or a short-circuit) or ``None`` when
-    the middleware chain is disabled via
-    ``REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN = False``.
-    """
+    """Run middleware for *tier* (``full`` or ``auth_only``)."""
     from django.conf import settings
 
+    if tier not in {"full", "auth_only"}:
+        return None
     if not getattr(settings, "REFLEX_DJANGO_RUN_MIDDLEWARE_CHAIN", True):
         return None
 
-    from reflex_django.bridge.event_handler import run_middleware_chain
+    from reflex_django.bridge.event_handler import (
+        run_auth_middleware_chain,
+        run_middleware_chain,
+    )
 
     try:
+        if tier == "auth_only":
+            return await run_auth_middleware_chain(request)
         return await run_middleware_chain(request)
     except Exception:
         from reflex_base.utils import console
@@ -448,44 +450,50 @@ async def _run_full_middleware_chain(
         return None
 
 
+async def _run_full_middleware_chain(
+    request: HttpRequest,
+) -> HttpResponse | None:
+    """Run full ``settings.MIDDLEWARE`` against the synthetic request."""
+    return await _run_middleware_for_tier(request, "full")
+
+
 async def bridge_request_for_state(
     state: Any,
     event: Event | None = None,
+    *,
+    tier: str = "full",
 ) -> tuple[HttpRequest, HttpResponse | None] | None:
-    """Build the synthetic request and run ``settings.MIDDLEWARE`` against it.
+    """Build the synthetic request and run middleware for *tier*."""
+    from reflex_django.bridge.cache import set_cached_event_context
+    from reflex_django.bridge.metrics import measure_event_phase
 
-    Args:
-        state: Reflex state used to recover ``router_data`` when the event omits it.
-        event: The incoming Reflex event, or ``None`` to bridge from state only.
+    if tier == "none":
+        return None
 
-    Returns:
-        ``(request, response)`` when bridging succeeds. ``response`` is the
-        middleware-chain output, or ``None`` if the chain is disabled.
-        Returns ``None`` when no usable ``router_data`` is available.
-    """
     try:
-        if event is not None:
-            request = _build_request_from_event(event, state)
-        else:
-            router_data = _router_data_from_state_chain(state)
-            if not router_data:
-                return None
-            request = _build_request_from_router_data(router_data)
+        with measure_event_phase("build_request"):
+            if event is not None:
+                request = _build_request_from_event(event, state)
+            else:
+                router_data = _router_data_from_state_chain(state)
+                if not router_data:
+                    return None
+                request = _build_request_from_router_data(router_data)
     except Exception:
         return None
 
-    # Default to AnonymousUser so middleware that touches ``request.user``
-    # before AuthenticationMiddleware (e.g. custom request-logging) does not
-    # ``AttributeError``.
     _attach_anonymous_user(request)
 
-    response = await _run_full_middleware_chain(request)
+    session_key = request.COOKIES.get("sessionid", "") or ""
 
-    # Async-safety: ``AuthenticationMiddleware`` leaves a ``SimpleLazyObject``
-    # in ``request.user`` that triggers a sync DB query on first access.
-    # Resolve it now (in async context) so handlers can safely use
-    # ``self.user`` / ``self.request.user`` without a SynchronousOnlyOperation.
-    await _eagerly_resolve_lazy_user(request)
+    with measure_event_phase(f"middleware_{tier}"):
+        response = await _run_middleware_for_tier(request, tier)
+
+    with measure_event_phase("resolve_user"):
+        await _eagerly_resolve_lazy_user(request)
+
+    if session_key:
+        set_cached_event_context(session_key, request)
 
     return request, response
 
@@ -494,6 +502,7 @@ async def bind_django_request_for_handler_state(
     handler_state: Any,
     *,
     event: Event | None = None,
+    tier: str = "full",
 ) -> None:
     """Ensure *handler_state* can use ``self.request`` in the current event."""
     from reflex_django.bridge.context import begin_event_request, current_request
@@ -506,7 +515,7 @@ async def bind_django_request_for_handler_state(
             root = handler_state._get_root_state()  # noqa: SLF001
         except (AttributeError, TypeError):
             pass
-        bridged = await bridge_request_for_state(root, event)
+        bridged = await bridge_request_for_state(root, event, tier=tier)
         if bridged is not None:
             http, response = bridged
             begin_event_request(http)
@@ -570,7 +579,15 @@ class DjangoEventBridge(Middleware):
         """
         end_event_request()
         end_event_response()
-        bridged = await bridge_request_for_state(state, event)
+
+        from reflex_django.bridge.tier import resolve_bridge_tier, tier_needs_auth_sync
+
+        handler_state_cls = getattr(event, "state_cls", None)
+        tier = resolve_bridge_tier(handler_state_cls, event)
+        if tier == "none":
+            return None
+
+        bridged = await bridge_request_for_state(state, event, tier=tier)
         if bridged is None:
             from reflex_base.utils import console
 
@@ -608,10 +625,11 @@ class DjangoEventBridge(Middleware):
                     )
 
                     mirror_auth_cookies_to_state_tree(state, sk)
-            await maybe_sync_app_state_auth(
-                state,
-                handler_state_cls=getattr(event, "state_cls", None),
-            )
+            if tier_needs_auth_sync(tier, handler_state_cls):
+                await maybe_sync_app_state_auth(
+                    state,
+                    handler_state_cls=handler_state_cls,
+                )
 
         short_circuit = self._maybe_short_circuit_redirect(response)
         if short_circuit is not None:

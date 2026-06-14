@@ -75,6 +75,21 @@ def _filtered_middleware_setting(skip: set[str]) -> list[str]:
     return [m for m in getattr(settings, "MIDDLEWARE", ()) if m not in skip]
 
 
+def _auth_only_middleware_setting() -> tuple[str, ...]:
+    try:
+        from django.conf import settings
+
+        raw = getattr(settings, "REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE", None)
+    except Exception:
+        raw = None
+    if raw is None:
+        return (
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+        )
+    return tuple(str(item) for item in raw if str(item).strip())
+
+
 def _build_event_handler_class():
     """Build the :class:`EventMiddlewareHandler` class lazily.
 
@@ -98,24 +113,28 @@ def _build_event_handler_class():
         """
 
         skip: tuple[str, ...]
+        middleware_override: tuple[str, ...] | None
 
-        def __init__(self, skip: tuple[str, ...] | None = None) -> None:
+        def __init__(
+            self,
+            skip: tuple[str, ...] | None = None,
+            *,
+            middleware_override: tuple[str, ...] | None = None,
+        ) -> None:
             super().__init__()
             self.skip = skip if skip is not None else _settings_skip_list()
+            self.middleware_override = middleware_override
 
         def load_middleware(self, is_async: bool = False) -> None:
-            """Load ``settings.MIDDLEWARE`` minus the configured skip list.
-
-            We temporarily replace ``settings.MIDDLEWARE`` so Django's own
-            loader builds the chain we want. Restoring the original value
-            in the ``finally`` block keeps the rest of Django's HTTP path
-            (admin views, custom views) unaffected.
-            """
+            """Load middleware for the event bridge chain."""
             from django.conf import settings
 
             skip_set = set(self.skip)
             original = list(getattr(settings, "MIDDLEWARE", ()))
-            filtered = [m for m in original if m not in skip_set]
+            if self.middleware_override is not None:
+                filtered = list(self.middleware_override)
+            else:
+                filtered = [m for m in original if m not in skip_set]
             try:
                 settings.MIDDLEWARE = filtered  # type: ignore[misc]
                 super().load_middleware(is_async=is_async)
@@ -137,61 +156,55 @@ def _build_event_handler_class():
 # Module-level singletons. Two are kept so async- and sync-style middleware
 # chains are both available without re-running ``load_middleware``.
 _handler_lock = threading.RLock()
-_async_handler: Any | None = None
-_sync_handler: Any | None = None
-_skip_signature: tuple[str, ...] | None = None
+_async_handlers: dict[tuple[Any, ...], Any] = {}
+_sync_handlers: dict[tuple[Any, ...], Any] = {}
+
+
+def _handler_cache_key(
+    *,
+    middleware_override: tuple[str, ...] | None,
+) -> tuple[Any, ...]:
+    skip = _settings_skip_list()
+    if middleware_override is None:
+        return ("full", skip)
+    return ("override", skip, middleware_override)
 
 
 def _reset_singletons() -> None:
     """Drop cached handlers (tests only)."""
-    global _async_handler, _sync_handler, _skip_signature
+    global _async_handlers, _sync_handlers
     with _handler_lock:
-        _async_handler = None
-        _sync_handler = None
-        _skip_signature = None
+        _async_handlers = {}
+        _sync_handlers = {}
 
 
-def _get_handler(*, is_async: bool) -> Any:
-    """Return a singleton :class:`EventMiddlewareHandler` for the current process.
-
-    Rebuilds the handler if the skip list changes (typically only in tests).
-    """
-    global _async_handler, _sync_handler, _skip_signature
-
-    skip = _settings_skip_list()
+def _get_handler(
+    *,
+    is_async: bool,
+    middleware_override: tuple[str, ...] | None = None,
+) -> Any:
+    """Return a cached :class:`EventMiddlewareHandler` for the current process."""
+    key = _handler_cache_key(middleware_override=middleware_override)
+    store = _async_handlers if is_async else _sync_handlers
     with _handler_lock:
-        if _skip_signature != skip:
-            _async_handler = None
-            _sync_handler = None
-            _skip_signature = skip
-
-        handler = _async_handler if is_async else _sync_handler
+        handler = store.get(key)
         if handler is None:
             handler_cls = _build_event_handler_class()
-            handler = handler_cls(skip=skip)
+            handler = handler_cls(
+                skip=_settings_skip_list(),
+                middleware_override=middleware_override,
+            )
             handler.load_middleware(is_async=is_async)
-            if is_async:
-                _async_handler = handler
-            else:
-                _sync_handler = handler
+            store[key] = handler
         return handler
 
 
-async def run_middleware_chain(request: HttpRequest) -> HttpResponse:
-    """Run ``settings.MIDDLEWARE`` against ``request`` and return the final response.
-
-    The response is either the empty 200 produced by the terminal "view"
-    (meaning every middleware passed the request through unchanged) or
-    whatever short-circuit response a middleware returned (e.g. a 302
-    redirect from ``LoginRequiredMiddleware``).
-
-    Args:
-        request: The synthetic Django request built from the Reflex event.
-
-    Returns:
-        The :class:`~django.http.HttpResponse` produced by the chain.
-    """
-    handler = _get_handler(is_async=True)
+async def _run_chain(
+    request: HttpRequest,
+    *,
+    middleware_override: tuple[str, ...] | None = None,
+) -> HttpResponse:
+    handler = _get_handler(is_async=True, middleware_override=middleware_override)
     chain = getattr(handler, "_middleware_chain", None)
     if chain is None:
         logger.warning(
@@ -206,8 +219,22 @@ async def run_middleware_chain(request: HttpRequest) -> HttpResponse:
     return result
 
 
+async def run_middleware_chain(request: HttpRequest) -> HttpResponse:
+    """Run full ``settings.MIDDLEWARE`` (minus skip list) on *request*."""
+    return await _run_chain(request, middleware_override=None)
+
+
+async def run_auth_middleware_chain(request: HttpRequest) -> HttpResponse:
+    """Run ``REFLEX_DJANGO_AUTH_ONLY_MIDDLEWARE`` on *request*."""
+    return await _run_chain(
+        request,
+        middleware_override=_auth_only_middleware_setting(),
+    )
+
+
 __all__ = [
     "DEFAULT_EVENT_MIDDLEWARE_SKIP",
     "_reset_singletons",
+    "run_auth_middleware_chain",
     "run_middleware_chain",
 ]

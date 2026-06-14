@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from django.conf import settings
 from django.urls import clear_url_caches
 
 from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
@@ -23,6 +24,12 @@ def _reset_state() -> None:
 def test_get_or_create_app_installs_django_dispatcher(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("RXDJANGO_PROXY_SERVER", raising=False)
+    monkeypatch.setattr(
+        "django.conf.settings.RXDJANGO_PROXY_SERVER",
+        "",
+        raising=False,
+    )
     monkeypatch.setattr(
         "django.conf.settings.ROOT_URLCONF",
         "reflex_django_tests.test_reflex_mount_admin_urls",
@@ -35,6 +42,10 @@ def test_get_or_create_app_installs_django_dispatcher(
     )
     clear_url_caches()
     configure_django()
+
+    import importlib
+
+    importlib.import_module(settings.ROOT_URLCONF)
 
     app = get_or_create_app()
 

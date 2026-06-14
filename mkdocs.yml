@@ -160,6 +160,7 @@ nav:
     - CLI: cli.md
     - Testing: testing.md
     - Deployment: deployment.md
+    - Scaling and performance: scaling.md
     - Best practices: best_practices.md
     - Upgrade to v1: migration/v1_migration.md
     - Upgrade to v2: migration/v2_module_paths.md

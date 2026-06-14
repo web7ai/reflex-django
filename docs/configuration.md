@@ -298,6 +298,20 @@ Set `RXDJANGO_PROXY_SERVER` and run Django with `runserver` in a second terminal
 
 ---
 
+## Performance at scale
+
+Default bridge behavior is unchanged (`REFLEX_DJANGO_EVENT_BRIDGE_MODE = "full"`). For high event volume or multi-worker Reflex backends, opt in from `settings.py`:
+
+```python
+REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"
+REFLEX_DJANGO_PERFORMANCE_PRESET = "lean"
+REFLEX_DJANGO_RX_CONFIG = {"redis_url": os.environ["REDIS_URL"]}
+```
+
+Full cheatsheet, tiers, cache, and override recipes: [Scaling and performance](scaling.md).
+
+---
+
 ## How `DJANGO_SETTINGS_MODULE` is resolved
 
 In order of preference:

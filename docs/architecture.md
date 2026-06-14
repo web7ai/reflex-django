@@ -59,11 +59,17 @@ Key modules:
 
 | Module | Role |
 |:---|:---|
-| `reflex_django.bootstrap.app_setup` | Attaches `make_dispatcher`, event bridge, plugin hooks |
+| `reflex_django.bootstrap.app_setup` | Attaches `make_dispatcher` (skipped when `RXDJANGO_PROXY_SERVER` is set), event bridge, plugin hooks |
 | `reflex_django.mount.auto` | Appends SPA catch-all; auto-wires admin URLs when needed |
 | `reflex_django.asgi.app` | `build_django_asgi`, `make_dispatcher` |
 | `reflex_django.dev.vite_proxy` | Multi-target Vite proxy for two-port dev |
-| `reflex_django.bridge.django_event` | Synthetic `HttpRequest` + middleware on events |
+| `reflex_django.bridge.django_event` | `DjangoEventBridge` orchestration |
+| `reflex_django.bridge.tier` | `resolve_bridge_tier`, smart defaults |
+| `reflex_django.bridge.registry` | Custom `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER` hook |
+| `reflex_django.bridge.request_builder` | Synthetic `HttpRequest` from router data |
+| `reflex_django.bridge.event_handler` | Full and auth-only middleware chains |
+| `reflex_django.bridge.cache` | Write-only event cache, `invalidate_event_cache` |
+| `reflex_django.bridge.metrics` | Opt-in bridge phase timings |
 
 ---
 
@@ -123,10 +129,13 @@ Reflex events arrive on `/_event` as WebSocket/Socket.IO frames. Django HTTP mid
 
 **`DjangoEventBridge`** (installed by bootstrap) runs **before** your handler:
 
-1. Build a synthetic `HttpRequest` from cookies, headers, path, and query string.
-2. Run `settings.MIDDLEWARE` (skipping classes listed in `REFLEX_DJANGO_EVENT_MIDDLEWARE_SKIP`).
-3. Resolve `request.user` asynchronously.
-4. Bind `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` on `AppState`.
+1. Resolve bridge tier (`full`, `auth_only`, or `none`) from settings, per-State override, or custom resolver.
+2. Build a synthetic `HttpRequest` from cookies, headers, path, and query string.
+3. Run the tier pipeline — full `MIDDLEWARE`, auth-only subset, or skip.
+4. Resolve `request.user` asynchronously.
+5. Bind `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` on `AppState` when the tier requires it.
+
+Default tier is **`full`** (unchanged legacy behavior). Opt into `"smart"` mode from `settings.py` for large apps. See [Scaling and performance](scaling.md).
 
 Deep trace: [WebSocket event pipeline](websocket_event_pipeline.md), [State management](state_management.md).
 
