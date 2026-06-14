@@ -80,6 +80,10 @@ def configure_django(settings_module: str | None = None) -> str:
         if _SETUP_DONE:
             return active
 
+        from reflex_django.setup.project import ensure_django_project_on_path
+
+        ensure_django_project_on_path()
+
         import django
 
         django.setup()

@@ -26,6 +26,22 @@ def find_manage_py(start: Path | None = None) -> Path | None:
     return None
 
 
+def ensure_django_project_on_path(start: Path | None = None) -> Path | None:
+    """Insert the nearest ``manage.py`` parent directory onto ``sys.path``.
+
+    ``reflex run`` does not add the Django project root to ``PYTHONPATH`` the way
+    ``manage.py`` does. Required before importing ``demo.settings`` and similar
+    layout modules created by ``django-admin startproject``.
+    """
+    manage_py = find_manage_py(start)
+    if manage_py is None:
+        return None
+    root = str(manage_py.parent.resolve())
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    return manage_py.parent
+
+
 def parse_settings_module(manage_py: Path) -> str | None:
     """AST-parse ``DJANGO_SETTINGS_MODULE`` from a standard ``manage.py``.
 

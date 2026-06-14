@@ -12,6 +12,7 @@ import pytest
 from reflex_django.setup.project import (
     RXCONFIG_SYNTHETIC_ATTR,
     discover_settings_module,
+    ensure_django_project_on_path,
     find_manage_py,
     parse_settings_module,
     rxconfig_module_has_file,
@@ -60,6 +61,56 @@ def test_find_manage_py_walks_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     (root / "manage.py").write_text("# manage\n", encoding="utf-8")
     monkeypatch.chdir(nested)
     assert find_manage_py() == root / "manage.py"
+
+
+def test_configure_django_adds_startproject_root_to_sys_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``reflex run`` must import ``demo.settings`` without manual PYTHONPATH."""
+    import reflex_django.setup.conf as conf_module
+    from reflex_django.setup.conf import configure_django
+
+    (tmp_path / "demo").mkdir()
+    (tmp_path / "demo" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "demo" / "settings.py").write_text(
+        textwrap.dedent(
+            """
+            SECRET_KEY = "test"
+            DEBUG = True
+            ALLOWED_HOSTS = ["*"]
+            INSTALLED_APPS = [
+                "django.contrib.auth",
+                "django.contrib.contenttypes",
+            ]
+            DATABASES = {
+                "default": {
+                    "ENGINE": "django.db.backends.sqlite3",
+                    "NAME": ":memory:",
+                }
+            }
+            USE_TZ = True
+            """
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "manage.py").write_text(
+        textwrap.dedent(
+            """
+            import os
+            os.environ.setdefault("DJANGO_SETTINGS_MODULE", "demo.settings")
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DJANGO_SETTINGS_MODULE", raising=False)
+    conf_module._SETUP_DONE = False
+
+    result = configure_django()
+    assert result == "demo.settings"
+    assert str(tmp_path) in sys.path
 
 
 def test_rxconfig_module_has_file_ignores_synthetic_module(
