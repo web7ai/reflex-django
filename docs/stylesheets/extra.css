@@ -54,7 +54,7 @@
   --rd-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Typography — single place to tune body and code sizes */
-  --rd-font-size-body:         0.875rem;  /* ~14px at default root */
+  --rd-font-size-body:         0.9375rem;
   --rd-font-size-code-block:   0.875rem;
   --rd-font-size-code-inline:  0.92em;
   --rd-font-size-code-lines:   0.82rem;
@@ -112,7 +112,7 @@ body, .md-typeset {
 .md-header {
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
-  background: linear-gradient(135deg, var(--rd-django-800) 0%, var(--rd-reflex-600) 100%);
+  background: var(--rd-django-800);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, var(--rd-shadow-sm);
 }
 
@@ -937,8 +937,23 @@ body, .md-typeset {
   box-shadow: var(--rd-shadow-xs);
 }
 
-/* ---------- Learning path cards ------------------------------------------ */
+/* Inner pages: solid heading color (gradient reserved for home hero) */
+.md-content .md-typeset > h1 {
+  background: none;
+  -webkit-text-fill-color: unset;
+  color: var(--md-primary-fg-color--dark);
+}
 
+.md-content .rd-hero .rd-hero__brand {
+  background: linear-gradient(135deg, var(--rd-django-700) 0%, var(--rd-reflex-600) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---------- Section cards (home + section indexes) ------------------------- */
+
+.rd-card-grid,
 .rd-path-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -946,6 +961,7 @@ body, .md-typeset {
   margin: 1.5rem 0 2rem;
 }
 
+.rd-card,
 .rd-path-card {
   display: block;
   padding: 1.1rem 1.2rem;
@@ -958,12 +974,14 @@ body, .md-typeset {
   transition: transform 0.2s var(--rd-ease), box-shadow 0.2s var(--rd-ease);
 }
 
+.rd-card:hover,
 .rd-path-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--rd-shadow-md);
   border-color: var(--rd-border-strong);
 }
 
+.rd-card__title,
 .rd-path-card__title {
   font-weight: 700;
   font-size: 1rem;
@@ -971,10 +989,12 @@ body, .md-typeset {
   color: var(--md-primary-fg-color--dark);
 }
 
-.rd-path-card__meta {
-  font-size: var(--rd-font-size-nav-label);
+.rd-card__desc,
+.rd-path-card__desc {
+  font-size: var(--rd-font-size-ui-small);
   color: var(--rd-text-soft);
-  margin-bottom: 0.5rem;
+  margin: 0;
+  line-height: 1.5;
 }
 
 .rd-path-card__desc {
@@ -1036,4 +1056,103 @@ body, .md-typeset {
 [data-md-color-scheme="slate"] .rd-instructor {
   background: linear-gradient(135deg, rgba(110, 86, 207, 0.08) 0%, var(--rd-surface) 100%);
   border-color: var(--rd-border-strong);
+}
+
+/* ---------- Concepts page (overview) --------------------------------------- */
+
+.rd-knob-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 1.75rem;
+}
+
+.rd-knob {
+  padding: 1rem 1.1rem;
+  border-radius: var(--rd-radius-md);
+  border: 1px solid var(--rd-border-soft);
+  background: var(--rd-surface);
+  box-shadow: var(--rd-shadow-xs);
+}
+
+.rd-knob__label {
+  display: inline-block;
+  font-size: var(--rd-font-size-nav-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rd-django-600);
+  margin-bottom: 0.35rem;
+}
+
+[data-md-color-scheme="slate"] .rd-knob__label {
+  color: var(--rd-django-300);
+}
+
+.rd-knob__title {
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  color: var(--md-primary-fg-color--dark);
+}
+
+.rd-knob__where,
+.rd-knob__what {
+  font-size: var(--rd-font-size-ui-small);
+  color: var(--rd-text-soft);
+  margin: 0 0 0.35rem;
+  line-height: 1.55;
+}
+
+.rd-knob__where code,
+.rd-knob__what code {
+  font-size: 0.85em;
+}
+
+.rd-flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 1.25rem 0 1.75rem;
+  padding: 1rem;
+  border-radius: var(--rd-radius-md);
+  border: 1px solid var(--rd-border-soft);
+  background: linear-gradient(135deg, var(--rd-django-50) 0%, var(--rd-reflex-100) 100%);
+}
+
+[data-md-color-scheme="slate"] .rd-flow-strip {
+  background: linear-gradient(135deg, rgba(9, 46, 32, 0.2) 0%, rgba(110, 86, 207, 0.12) 100%);
+}
+
+.rd-flow-step {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--rd-radius-sm);
+  background: var(--rd-surface);
+  border: 1px solid var(--rd-border-soft);
+  font-size: var(--rd-font-size-ui-small);
+  line-height: 1.5;
+}
+
+.rd-flow-step strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  color: var(--md-primary-fg-color--dark);
+}
+
+.rd-flow-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--rd-reflex-500);
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex: 0 0 auto;
+}
+
+.md-typeset .mermaid {
+  margin: 1.25rem 0 1.75rem;
+  text-align: center;
 }

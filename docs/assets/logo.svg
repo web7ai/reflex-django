@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="reflex-django">
+  <rect width="32" height="32" rx="6" fill="#2e7d32"/>
+  <circle cx="11" cy="16" r="5" fill="#7c4dff"/>
+  <circle cx="21" cy="16" r="5" fill="#ffffff" fill-opacity="0.9"/>
+</svg>

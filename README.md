@@ -127,15 +127,15 @@ Open **http://localhost:3000/** for the Reflex UI. Admin at **http://localhost:8
 
 Start here on the docs site:
 
-1. **[Learning path](https://web7ai.github.io/reflex-django/learning_path/)** — pick your route from zero to shipping
-2. **[Your first app](https://web7ai.github.io/reflex-django/quickstart/)** — 15-minute todo tutorial
-3. **[Troubleshooting](https://web7ai.github.io/reflex-django/troubleshooting/)** — when ports, proxies, or CSRF fight back
+1. **[Getting started](https://web7ai.github.io/reflex-django/getting-started/)** — install, quickstart, project layout
+2. **[Your first app](https://web7ai.github.io/reflex-django/getting-started/quickstart/)** — todo tutorial
+3. **[Troubleshooting](https://web7ai.github.io/reflex-django/operations/troubleshooting/)** — ports, proxies, CSRF
 
 More essentials:
 
-- [The three knobs](https://web7ai.github.io/reflex-django/mental_model/) — settings, app, URLs
-- [Local development](https://web7ai.github.io/reflex-django/local_development/) — `:3000` vs `:8000` vs `:8001`
-- [Add to an existing Django project](https://web7ai.github.io/reflex-django/existing_django_project/)
+- [How it fits](https://web7ai.github.io/reflex-django/overview/concepts/) — settings, app, URLs
+- [Local development](https://web7ai.github.io/reflex-django/getting-started/local_development/) — `:3000` vs `:8000`
+- [Add to an existing Django project](https://web7ai.github.io/reflex-django/getting-started/existing_django_project/)
 
 Full site: **https://web7ai.github.io/reflex-django/**
 

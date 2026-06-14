@@ -7,6 +7,7 @@ repo_name: web7ai/reflex-django
 
 theme:
   name: material
+  logo: assets/logo.svg
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -111,63 +112,55 @@ exclude_docs: |
   STYLE.md
   snippets/
   auth_branding.md
-  migration_django_outer.md
-  migration/v0-to-v1.md
+  _archive/**
 
 nav:
-  - Level 0 · Welcome:
-    - Home: index.md
-    - Learning path (start here): learning_path.md
-    - The three knobs: mental_model.md
-    - Why reflex-django exists: why_reflex_django.md
-    - How Django works (5 min): how_django_works.md
-    - How Reflex works (5 min): how_reflex_works.md
-    - How they fit together: how_they_fit.md
-  - Level 1 · Get running:
-    - Install: installation.md
-    - Your first app: quickstart.md
-    - Local development: local_development.md
-    - Troubleshooting: troubleshooting.md
-    - Integration guides: integration_guides.md
-    - Existing Django project: existing_django_project.md
-    - Existing Reflex project: existing_reflex_project.md
-  - Level 2 · Build features:
-    - Project structure: project_structure.md
-    - Configuration: configuration.md
-    - Pages in views.py: pages_in_views.md
-    - AppState bridge: state_management.md
-    - Database: database_integration.md
-    - Login and sessions: authentication.md
-    - Media files: media_files.md
-    - CRUD manual: crud_without_mixins.md
-    - CRUD with ModelState: reactive_model_state.md
-    - ModelCRUDView: crud_with_mixins_and_states.md
-    - ModelState vs ModelCRUDView: model_state_and_crud_view.md
-    - Mixins: reflex_django_mixins.md
-    - Forms and validation: forms_and_validation.md
-    - File uploads: file_uploads.md
-    - Serializers: serializers.md
-    - i18n: i18n.md
-    - HTTP APIs alongside Reflex: api_integration.md
-    - Custom middleware in events: django_middleware_to_reflex.md
-    - Cookbook: cookbook.md
-  - Level 3 · Under the hood:
-    - Architecture: architecture.md
-    - Routing: routing.md
-    - WebSocket event pipeline: websocket_event_pipeline.md
-    - AsyncStreamingMiddleware: async_streaming_middleware.md
-  - Level 4 · Ship it:
-    - CLI: cli.md
-    - Testing: testing.md
-    - Deployment: deployment.md
-    - Scaling and performance: scaling.md
-    - Best practices: best_practices.md
-    - Upgrade to v1: migration/v1_migration.md
-    - Upgrade to v2: migration/v2_module_paths.md
-    - Upgrade to v3 (mount-only): migration/v3_mount_only.md
+  - Home: index.md
+  - Overview:
+    - overview/index.md
+    - How it fits: overview/concepts.md
+  - Getting started:
+    - getting-started/index.md
+    - Install: getting-started/installation.md
+    - Your first app: getting-started/quickstart.md
+    - Project structure: getting-started/project_structure.md
+    - Configuration: getting-started/configuration.md
+    - Local development: getting-started/local_development.md
+    - Existing Django project: getting-started/existing_django_project.md
+    - Existing Reflex project: getting-started/existing_reflex_project.md
+  - Guides:
+    - guides/index.md
+    - Pages: guides/pages.md
+    - State: guides/state.md
+    - Database: guides/database.md
+    - Authentication: guides/authentication.md
+    - Middleware: guides/middleware.md
+    - Forms: guides/forms.md
+    - CRUD: guides/crud.md
+    - Mixins: guides/mixins.md
+    - Serializers: guides/serializers.md
+    - File uploads: guides/uploads.md
+    - Media files: guides/media.md
+    - HTTP APIs: guides/api.md
+    - i18n: guides/i18n.md
+    - Cookbook: guides/cookbook.md
+  - Operations:
+    - operations/index.md
+    - CLI: operations/cli.md
+    - Testing: operations/testing.md
+    - Deployment: operations/deployment.md
+    - Scaling: operations/scaling.md
+    - Troubleshooting: operations/troubleshooting.md
+    - Best practices: operations/best_practices.md
   - Reference:
-    - What's new: whats_new.md
-    - Settings: settings_reference.md
-    - Public API: public_api.md
-    - FAQ: faq.md
-    - Glossary: glossary.md
+    - reference/index.md
+    - Settings: reference/settings.md
+    - Public API: reference/api.md
+    - FAQ: reference/faq.md
+    - Glossary: reference/glossary.md
+  - Internals:
+    - internals/index.md
+    - Architecture: internals/architecture.md
+    - Routing: internals/routing.md
+    - Event pipeline: internals/event_pipeline.md
+    - Streaming middleware: internals/streaming_middleware.md
