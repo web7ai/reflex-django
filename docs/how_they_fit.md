@@ -91,7 +91,7 @@ Edge proxy (Nginx, Caddy, …)
                                       └── catch-all → ReflexMountView (SPA shell)
 ```
 
-Django uses plain `get_asgi_application()` — not a composed reflex-django ASGI entry. See [Deployment](deployment.md).
+Django uses plain `get_asgi_application()`  -  not a composed reflex-django ASGI entry. See [Deployment](deployment.md).
 
 ---
 

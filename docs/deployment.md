@@ -172,7 +172,7 @@ Use `/_health` (or `/ping`). Returns `{"status": "ok"}` without touching the dat
 - **Sticky sessions:** default Reflex state is in-memory per process.
 - **Redis:** required for multi-worker Reflex via `REFLEX_DJANGO_RX_CONFIG["redis_url"]`.
 - **WebSocket idle timeout:** set proxy timeout to at least 300 seconds.
-- **Event bridge:** opt into `"smart"` mode and `"lean"` preset for large apps — see [Scaling and performance](scaling.md).
+- **Event bridge:** opt into `"smart"` mode and `"lean"` preset for large apps  -  see [Scaling and performance](scaling.md).
 
 | Symptom | Likely fix |
 |:---|:---|

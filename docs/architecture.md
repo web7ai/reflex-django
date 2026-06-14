@@ -23,7 +23,7 @@ reflex-django optimizes for four properties:
 1. **Django-first config.** `settings.py` and `manage.py run_reflex` are the source of truth, not a standalone `rxconfig.py`.
 2. **One origin in the browser.** SPA, admin, API, and WebSocket events share cookies on one host in dev (via Vite proxy) and in production (via your edge proxy).
 3. **Real Django requests in handlers.** Every `@rx.event` runs after middleware populated a synthetic `HttpRequest`.
-4. **Mount-only production Django.** Plain `get_asgi_application()` plus `reflex_mount()` catch-all — no composed outer ASGI entry.
+4. **Mount-only production Django.** Plain `get_asgi_application()` plus `reflex_mount()` catch-all  -  no composed outer ASGI entry.
 
 ### Package layout (v2+)
 
@@ -131,7 +131,7 @@ Reflex events arrive on `/_event` as WebSocket/Socket.IO frames. Django HTTP mid
 
 1. Resolve bridge tier (`full`, `auth_only`, or `none`) from settings, per-State override, or custom resolver.
 2. Build a synthetic `HttpRequest` from cookies, headers, path, and query string.
-3. Run the tier pipeline — full `MIDDLEWARE`, auth-only subset, or skip.
+3. Run the tier pipeline  -  full `MIDDLEWARE`, auth-only subset, or skip.
 4. Resolve `request.user` asynchronously.
 5. Bind `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` on `AppState` when the tier requires it.
 

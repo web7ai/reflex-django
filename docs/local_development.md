@@ -24,12 +24,12 @@ python manage.py run_reflex
 
 | Server | Port (default) | Role |
 |:---|:---|:---|
-| **Vite** | `3000` | Reflex UI with HMR — **open this for frontend work** |
-| **Reflex backend** | (Reflex default) | Django admin/API, `/_event`, `/_upload` — all proxied from Vite |
+| **Vite** | `3000` | Reflex UI with HMR  -  **open this for frontend work** |
+| **Reflex backend** | (Reflex default) | Django admin/API, `/_event`, `/_upload`  -  all proxied from Vite |
 
 **Browse `http://localhost:3000/`** for the SPA. Django admin/API and Reflex WebSocket paths are proxied to the Reflex backend (Django is mounted there in-process).
 
-**Optional — separate Django server:** run `python manage.py runserver` in another terminal and set:
+**Optional  -  separate Django server:** run `python manage.py runserver` in another terminal and set:
 
 ```python
 # settings.py
@@ -84,7 +84,7 @@ Set `RXDJANGO_PROXY_SERVER` only when Django runs on a separate HTTP server.
 You should see a banner like:
 
 ```text
-reflex-django: Reflex dev (Vite + Reflex backend) — browse http://localhost:3000/
+reflex-django: Reflex dev (Vite + Reflex backend)  -  browse http://localhost:3000/
     Django must already be running at http://127.0.0.1:8000 ...
 reflex-django patched .web/vite.config.js for backend proxies (1 upstream group(s)).
 ```

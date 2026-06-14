@@ -18,18 +18,18 @@ In v2.0, loose root-level modules were moved into domain subpackages. There are 
 
 | Old path | New path |
 |:---|:---|
-| `from reflex_django.asgi_entry import application` | v2: `from reflex_django.asgi.entry import application` — **v3:** use `get_asgi_application()` (see [v3 migration](v3_mount_only.md)) |
+| `from reflex_django.asgi_entry import application` | v2: `from reflex_django.asgi.entry import application`  -  **v3:** use `get_asgi_application()` (see [v3 migration](v3_mount_only.md)) |
 | `ROOT_URLCONF = "reflex_django.urls"` | `ROOT_URLCONF = "reflex_django.django.urls"` |
 | `"reflex_django.apps.ReflexDjangoConfig"` | `"reflex_django.django.apps.ReflexDjangoConfig"` |
 | `"reflex_django.streaming_middleware.AsyncStreamingMiddleware"` | `"reflex_django.bridge.streaming.AsyncStreamingMiddleware"` |
 
-### ASGI entry (v2 only — superseded by v3)
+### ASGI entry (v2 only  -  superseded by v3)
 
 ```python
 # Before (v1)
 from reflex_django.asgi_entry import application
 
-# After (v2) — removed again in v3
+# After (v2)  -  removed again in v3
 from reflex_django.asgi.entry import application
 
 # v3 production
@@ -55,7 +55,7 @@ INSTALLED_APPS = [..., "reflex_django.django.apps.ReflexDjangoConfig"]
 
 | Old path | New path |
 |:---|:---|
-| `reflex_django.asgi_entry` | v2: `reflex_django.asgi.entry` — **v3:** removed; use `get_asgi_application()` |
+| `reflex_django.asgi_entry` | v2: `reflex_django.asgi.entry`  -  **v3:** removed; use `get_asgi_application()` |
 | `reflex_django.asgi` | `reflex_django.asgi.app` |
 | `reflex_django.urls` | `reflex_django.django.urls` |
 | `reflex_django.apps` | `reflex_django.django.apps` |

@@ -29,7 +29,7 @@ myproject/
 ├── config/                       # Django project package
 │   ├── settings.py               # INSTALLED_APPS, MIDDLEWARE, REFLEX_DJANGO_*
 │   ├── urls.py                   # Django routes + import page modules
-│   ├── asgi.py                   # get_asgi_application() — plain Django ASGI
+│   ├── asgi.py                   # get_asgi_application()  -  plain Django ASGI
 │   └── wsgi.py
 │
 ├── shop/                         # a Django app

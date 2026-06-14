@@ -107,12 +107,12 @@ Every Reflex event arrives on `/_event` as a WebSocket frame. By default that by
 2. If tier is `none`, skip Django setup and run your handler immediately.
 3. Read `router_data` from the event (cookies, path, query string, headers).
 4. Build a synthetic `HttpRequest`.
-5. Run middleware for the tier — full `MIDDLEWARE` or the auth-only subset.
+5. Run middleware for the tier  -  full `MIDDLEWARE` or the auth-only subset.
 6. Eagerly resolve `request.user` with Django's async `aget_user`.
 7. Bind the result onto state when the tier requires it; sync auth snapshots on `full` (and `auth_only` for `DjangoUserState` handlers).
 8. Run your handler.
 
-With `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`, plain `rx.State` handlers use tier `none` automatically — no middleware, no `self.request`. `AppState` and `ModelState` still get tier `full`.
+With `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"`, plain `rx.State` handlers use tier `none` automatically  -  no middleware, no `self.request`. `AppState` and `ModelState` still get tier `full`.
 
 If middleware returns a 3xx (for example login required), the bridge converts it to `rx.redirect(...)` unless you set `REFLEX_DJANGO_AUTO_REDIRECT_FROM_MIDDLEWARE = False`.
 
@@ -148,7 +148,7 @@ class ProductState(ModelState):
     fields = ["name", "price"]
 ```
 
-A page can mix several states. Use `rx.State` for a filter bar and `AppState` for user-specific data. Use `_reflex_django_bridge` (underscore prefix) for per-class tier overrides — public class attrs become Reflex state vars. See [Scaling and performance](scaling.md).
+A page can mix several states. Use `rx.State` for a filter bar and `AppState` for user-specific data. Use `_reflex_django_bridge` (underscore prefix) for per-class tier overrides  -  public class attrs become Reflex state vars. See [Scaling and performance](scaling.md).
 
 ---
 

@@ -262,7 +262,7 @@ class HomeState(AppState):
 **Page does not show up after adding it**
 
 1. Is the page module imported in `urls.py` (or listed in `REFLEX_DJANGO_PAGE_PACKAGES`)?
-2. If the page is in `{app_name}/{app_name}.py`, restart `run_reflex` once (cold start) — it should not require a second save after restart.
+2. If the page is in `{app_name}/{app_name}.py`, restart `run_reflex` once (cold start)  -  it should not require a second save after restart.
 3. If you rely on auto-discover: is the app in `INSTALLED_APPS`?
 4. Did you save the file? The SPA rebuild can take a few seconds.
 5. Restart `run_reflex`. If still missing, delete `.web/` and run again.

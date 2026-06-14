@@ -5,7 +5,7 @@ tags: [performance, deployment, settings]
 
 # Scaling and performance
 
-**What you will learn:** How to tune reflex-django as a **Django + realtime UI stack** from `settings.py` alone — bridge tiers, cache, lean WebSocket deltas, and production topology.
+**What you will learn:** How to tune reflex-django as a **Django + realtime UI stack** from `settings.py` alone  -  bridge tiers, cache, lean WebSocket deltas, and production topology.
 
 **When you need this:**
 
@@ -14,7 +14,7 @@ tags: [performance, deployment, settings]
 - You want performance knobs without reading bridge source.
 
 !!! tip "Defaults are safe"
-    Out of the box, `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "full"` — the same behavior as before tiered bridges. Enable `"smart"` and `"lean"` only when you need them.
+    Out of the box, `REFLEX_DJANGO_EVENT_BRIDGE_MODE = "full"`  -  the same behavior as before tiered bridges. Enable `"smart"` and `"lean"` only when you need them.
 
 ---
 
@@ -87,11 +87,11 @@ Browser -> CDN (/static/) -> reverse proxy
 
 Checklist:
 
-1. **Build SPA in CI** — do not rely on `REFLEX_DJANGO_AUTO_EXPORT_ON_START` in production.
+1. **Build SPA in CI**  -  do not rely on `REFLEX_DJANGO_AUTO_EXPORT_ON_START` in production.
 2. **Redis** for `REFLEX_DJANGO_RX_CONFIG["redis_url"]` when multiple Reflex workers serve the same app.
-3. **Sessions** — prefer `cached_db` or cache-backed sessions so Django and Reflex agree on login state.
-4. **Proxy** — WebSocket upgrade on `/_event`, idle timeout >= 300s, `X-Forwarded-Proto` for HTTPS.
-5. **Workers** — start with 2–4 Django ASGI workers; scale Reflex workers with Redis state.
+3. **Sessions**  -  prefer `cached_db` or cache-backed sessions so Django and Reflex agree on login state.
+4. **Proxy**  -  WebSocket upgrade on `/_event`, idle timeout >= 300s, `X-Forwarded-Proto` for HTTPS.
+5. **Workers**  -  start with 2–4 Django ASGI workers; scale Reflex workers with Redis state.
 
 Reference compose layout: [docs/examples/docker-compose.scaling.yml](examples/docker-compose.scaling.yml).
 
@@ -102,7 +102,7 @@ Reference compose layout: [docs/examples/docker-compose.scaling.yml](examples/do
 Documented everywhere; highest wins:
 
 ```text
-1. REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER   (your callable — full control)
+1. REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER   (your callable  -  full control)
 2. State._reflex_django_bridge             (per-class: "full" | "auth_only" | "none")
 3. REFLEX_DJANGO_EVENT_BRIDGE_MODE        (project default: "full" | "smart" | "none")
 4. Built-in smart rules                   (AppState -> full, plain rx.State -> none)
@@ -162,7 +162,7 @@ Upload events always run at least `auth_only`, even when the resolver returns `"
 
 ## Event cache (Django `CACHES`)
 
-Store **post-middleware auth metadata** in Django's cache framework. The cache is **write-only** after middleware runs — it does not bypass session or auth middleware on the next event. Set `REFLEX_DJANGO_EVENT_CACHE_TTL = 0` to disable writes.
+Store **post-middleware auth metadata** in Django's cache framework. The cache is **write-only** after middleware runs  -  it does not bypass session or auth middleware on the next event. Set `REFLEX_DJANGO_EVENT_CACHE_TTL = 0` to disable writes.
 
 ```python
 REFLEX_DJANGO_EVENT_CACHE = "reflex_events"  # CACHES alias; "default" when unset
@@ -241,17 +241,17 @@ When enabled, bridge phases log timing at DEBUG. Zero overhead when `False`.
 
 ## Anti-patterns
 
-- **Debouncing in Python only** — still ships a delta; debounce in the UI or batch server-side.
-- **Huge lists in reactive state** — paginate; every row can cross the WebSocket.
-- **Blocking ORM in async handlers** — use async ORM or `sync_to_async`.
-- **Authorizing from `self.user` snapshot** — check `self.request.user` in handlers.
-- **Running Celery tasks inside `@rx.event`** — enqueue and return; see background-job patterns in Django docs.
+- **Debouncing in Python only**  -  still ships a delta; debounce in the UI or batch server-side.
+- **Huge lists in reactive state**  -  paginate; every row can cross the WebSocket.
+- **Blocking ORM in async handlers**  -  use async ORM or `sync_to_async`.
+- **Authorizing from `self.user` snapshot**  -  check `self.request.user` in handlers.
+- **Running Celery tasks inside `@rx.event`**  -  enqueue and return; see background-job patterns in Django docs.
 
 ---
 
 ## Background jobs (v1: docs only)
 
-Long work belongs in Celery, RQ, or Django Q — not in the event loop:
+Long work belongs in Celery, RQ, or Django Q  -  not in the event loop:
 
 ```python
 @rx.event

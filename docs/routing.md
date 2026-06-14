@@ -17,7 +17,7 @@ reflex-django no longer composes a single outer ASGI dispatcher. Instead:
 
 ```mermaid
 flowchart TB
-  subgraph dev [Dev — browse :3000]
+  subgraph dev [Dev  -  browse :3000]
     Vite[Vite :3000]
     ReflexBE[Reflex backend\nDjango mounted in-process]
     Vite -->|"admin, api, /_event, …"| ReflexBE

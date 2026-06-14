@@ -295,7 +295,7 @@ invalidate_event_cache(session_key=getattr(self.session, "session_key", None))
 
 ## Browser storage: Django `sessionid` vs Reflex `token`
 
-Django session auth uses the **`sessionid` cookie** (backed by the `django_session` table and `request.user`). Reflex stores a separate per-tab UUID in **`sessionStorage` under key `token`** (`router.session.client_token`) for WebSocket state identity — it is **not** login state.
+Django session auth uses the **`sessionid` cookie** (backed by the `django_session` table and `request.user`). Reflex stores a separate per-tab UUID in **`sessionStorage` under key `token`** (`router.session.client_token`) for WebSocket state identity  -  it is **not** login state.
 
 | Storage | Cleared on logout? | Notes |
 |:---|:---|:---|

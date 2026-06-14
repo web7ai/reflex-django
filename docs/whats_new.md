@@ -22,7 +22,7 @@ v3 removes composed ASGI routing (`django_outer`, `reflex_outer`, `reflex_django
 | **Optional dev split** | `RXDJANGO_PROXY_SERVER` when Django runs on separate `runserver` |
 | **Removed** | `REFLEX_DJANGO_URL_ROUTING`, `REFLEX_DJANGO_HTTP_*`, `asgi.entry` |
 | **Restored** | `make_dispatcher` for in-process Django on Reflex backend |
-| **Performance** | Tiered event bridge (`smart` mode), Django event cache, `lean` preset, opt-in metrics — see [Scaling](scaling.md) |
+| **Performance** | Tiered event bridge (`smart` mode), Django event cache, `lean` preset, opt-in metrics  -  see [Scaling](scaling.md) |
 
 ### Upgrade path
 

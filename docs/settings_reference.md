@@ -160,12 +160,12 @@ Event cache is **write-only** after middleware (post-middleware auth metadata). 
 **Override precedence** (highest wins):
 
 1. `REFLEX_DJANGO_EVENT_BRIDGE_RESOLVER`
-2. `State._reflex_django_bridge` (use `_` prefix — public attrs become Reflex vars)
+2. `State._reflex_django_bridge` (use `_` prefix  -  public attrs become Reflex vars)
 3. `REFLEX_DJANGO_EVENT_BRIDGE_MODE`
 4. Smart defaults (`AppState` → `full`, plain `rx.State` → `none`)
 
 ```python
-# settings.py — large apps (opt-in)
+# settings.py  -  large apps (opt-in)
 REFLEX_DJANGO_EVENT_BRIDGE_MODE = "smart"
 
 class FilterState(rx.State):

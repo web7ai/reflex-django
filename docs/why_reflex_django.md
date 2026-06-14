@@ -83,7 +83,7 @@ reflex-django is the plumbing. It does three concrete things:
 **Production:** Django ASGI serves admin, API, static, and the compiled SPA shell. Your edge proxy forwards `/_event` to a Reflex backend (or you serve static export only).
 
 ```text
-  Dev — browse :3000
+  Dev  -  browse :3000
   Browser  →  Vite  →  Reflex backend (:8000)
                            ├── /admin, /api  → Django ASGI (in-process)
                            ├── /_event       → Reflex WebSocket

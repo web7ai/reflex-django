@@ -31,7 +31,7 @@ You do not need this page to build features. You need it when something goes wro
 3. Reflex backend: reserved path → Reflex inner ASGI (not Django HTTP)
 4. Reflex: receives event, calls registered preprocess middleware
 5. Bridge: resolve bridge tier (full / auth_only / none) for handler state class
-6. Bridge (tier none): return early — handler runs with no Django context
+6. Bridge (tier none): return early  -  handler runs with no Django context
 7. Bridge (tier auth_or_full): build synthetic HttpRequest from event.router_data
 8. Bridge: run middleware for tier (full MIDDLEWARE or auth_only subset)
 9. Bridge: eagerly resolves request.user; write optional event cache metadata
@@ -180,7 +180,7 @@ Source: `reflex_django/bridge/event_handler.py`.
 
 ## Step 6b: event cache (write-only)
 
-After middleware runs, the bridge may store **post-middleware auth metadata** in Django's cache (`REFLEX_DJANGO_EVENT_CACHE`, TTL via `REFLEX_DJANGO_EVENT_CACHE_TTL`). This is **write-only** — it does not skip session or auth middleware on the next event. Set `REFLEX_DJANGO_EVENT_CACHE_TTL = 0` to disable.
+After middleware runs, the bridge may store **post-middleware auth metadata** in Django's cache (`REFLEX_DJANGO_EVENT_CACHE`, TTL via `REFLEX_DJANGO_EVENT_CACHE_TTL`). This is **write-only**  -  it does not skip session or auth middleware on the next event. Set `REFLEX_DJANGO_EVENT_CACHE_TTL = 0` to disable.
 
 Invalidate on logout with `from reflex_django.bridge import invalidate_event_cache`.
 

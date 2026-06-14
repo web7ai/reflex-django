@@ -43,7 +43,7 @@ By default it:
 
 --8<-- "snippets/run_reflex_command.md"
 
-Open **`http://localhost:3000/`** for UI work. Admin and API work at **`http://localhost:3000/admin/`** (proxied) or **`http://localhost:8000/admin/`** (direct to Reflex backend). Set **`RXDJANGO_PROXY_SERVER`** only when Django runs on a separate server — see [Routing](routing.md).
+Open **`http://localhost:3000/`** for UI work. Admin and API work at **`http://localhost:3000/admin/`** (proxied) or **`http://localhost:8000/admin/`** (direct to Reflex backend). Set **`RXDJANGO_PROXY_SERVER`** only when Django runs on a separate server  -  see [Routing](routing.md).
 
 For compile dev on one port (no Vite), use **`--env dev`** and browse **`http://localhost:8000/`**. See [Local development](local_development.md).
 
