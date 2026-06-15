@@ -28,14 +28,7 @@ def apply_reflex_plugins_to_app(app: App) -> None:
     from reflex_base.config import get_config
 
     from reflex_django.plugins.reflex_django import is_reflex_django_plugin
-    from reflex_django.runtime.integration.modes import (
-        IntegrationMode,
-        get_active_integration_mode,
-    )
-    from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
 
-    if get_active_integration_mode() == IntegrationMode.DJANGO_FIRST:
-        ensure_rxconfig_from_django()
     apply_django_integration(app)
 
     for plugin in get_config().plugins or ():
@@ -47,7 +40,6 @@ def apply_reflex_plugins_to_app(app: App) -> None:
 
 
 def _ensure_django_api_transformer(app: App) -> None:
-    """Mount Django ASGI inside the Reflex backend for configured URL prefixes."""
     if getattr(app, "_reflex_django_dispatcher_configured", False):
         return
 

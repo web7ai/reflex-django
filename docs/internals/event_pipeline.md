@@ -89,7 +89,7 @@ tier = resolve_bridge_tier(handler_state_cls, event)  # "full" | "auth_only" | "
 When tier is `"none"`, `preprocess` returns immediately and your handler runs without Django context. Otherwise the bridge continues with request building and middleware.
 
 !!! tip "No manual wiring"
-    You do not register a Reflex plugin or wire the bridge manually. `install_reflex_django_integration()` registers `DjangoEventBridge` when the app is built.
+    You do not register the bridge manually. `ReflexDjangoPlugin` bootstrap via `install_plugin_integration()` registers `DjangoEventBridge` when the app is built.
 
 ---
 
@@ -344,7 +344,7 @@ If something feels off, try this order:
 | File | What it does |
 |:---|:---|
 | `reflex_django/asgi/app.py` | `make_dispatcher()` path-prefix ASGI transformer |
-| `reflex_django/runtime/app_factory.py` | Wires dispatcher on `get_or_create_app()` |
+| `reflex_django/runtime/app_factory.py` | `ensure_reflex_app_ready()`, `prepare_pages_for_compile()` |
 | `reflex_django/bootstrap/app_setup.py` | Installs `DjangoEventBridge` on the Reflex app |
 | `reflex_django/bridge/event/preprocess.py` | `DjangoEventBridge` preprocess hook |
 | `reflex_django/bridge/tier.py` | `resolve_bridge_tier`, smart defaults |

@@ -109,7 +109,7 @@ def _db_config_from_url(url: str) -> dict[str, object]:
 RX_AUTO_SETTINGS = True
 
 # Base URL of an optional external Django HTTP server for split-process dev.
-# When unset, Django is mounted in the Reflex backend during ``run_reflex``.
+# When unset, Django is mounted in the Reflex backend during ``reflex run``.
 RX_PROXY_SERVER = os.environ.get("RX_PROXY_SERVER", "")
 
 # Catch-all mount prefix for :func:`reflex_django.django.urls.reflex_mount`.
@@ -124,9 +124,6 @@ RX_AUTO_MOUNT = os.environ.get("RX_AUTO_MOUNT", "1") not in {
 
 # Optional dotted path to a callable returning rx.App (e.g. "myapp.reflex:create_app").
 # RX_CREATE_APP = "myapp.reflex.create_app"
-
-# Django-led: dotted modules to import so @rx.page / decorators register.
-# RX_PAGE_PACKAGES: list[str] = ["myapp.pages"]
 
 # Canned Reflex auth pages (login, register, password reset). See reflex_django.auth.
 RX_AUTH = {
@@ -161,14 +158,6 @@ RX_AUTH = {
         "registration_success": "Account created successfully.",
     },
 }
-
-# Reflex rx.Config overrides (ports, redis_url, frontend_packages, …).
-# Preferred home for runtime options. Merged with reflex_mount(..., rx_config={...}) when provided.
-RX_CONFIG: dict = {}
-
-# Reflex plugin dotted paths or instances for reflex_mount (optional).
-# Example: ["reflex.plugins.RadixThemesPlugin", "reflex.plugins.TailwindV4Plugin"]
-RX_PLUGINS: list = []
 
 # Origin for password-reset links when no HTTP request is bound (optional).
 # RX_SITE_ORIGIN = "http://localhost:3000"
@@ -247,7 +236,7 @@ RX_DEV_PROXY: bool = True
 
 # When True, dev mode matches native Reflex: open the Vite port (default 3000) for
 # the SPA; the backend port (default 8000) serves Django + Reflex endpoints only.
-# ``manage.py run_reflex`` enables this by default.
+# Set ``RX_SEPARATE_DEV_PORTS = True`` in settings for two-port dev with ``reflex run``.
 RX_SEPARATE_DEV_PORTS: bool = False
 
 # When True (default), Django's catch-all view runs the Reflex SPA's
@@ -267,27 +256,16 @@ RX_RENDER_SPA_VIA_TEMPLATE_ENGINE: bool = True
 # ``reflex_mount(rx_config={"show_built_with_reflex": True})``).
 RX_SHOW_BUILT_WITH_REFLEX: bool = False
 
-# Controls the default ``manage.py run_reflex`` dev loop.
+# Controls the optional serve-from-disk dev loop (``RX_SERVE_FROM_BUILD``).
 #
-# When False (default), ``run_reflex`` spawns the Vite dev server for
-# hot-module reload: editing a Reflex page recompiles ``.web`` and Vite
-# hot-reloads only the frontend, while the Django/uvicorn backend keeps
-# running (it does NOT auto-restart). Re-run the command — or restart the
-# backend manually — to pick up backend/state/event-handler edits.
+# When False (default), ``reflex run`` uses the Vite dev server for HMR.
 #
-# When True, ``run_reflex`` skips Vite entirely, re-exports the SPA on each
-# invocation (the equivalent of ``manage.py export_reflex --frontend-only
-# --no-zip --stage-to-static-root``), and serves the resulting bundle from
-# disk just like ``--env prod`` would — no Node sidecar, no HMR. In that mode
-# the ASGI server auto-reloads + re-exports on every ``.py`` change.
-#
-# To opt into the serve-from-disk build loop, set this to ``True`` (or pass
-# ``--from-build`` on the command line, or env ``RX_SERVE_FROM_BUILD=1``).
-# Passing ``--with-vite`` forces the Vite-HMR loop regardless of this setting.
+# When True, ``reflex run`` can serve a pre-built bundle from disk (no Vite HMR).
+# Prefer ``reflex export`` in CI instead of building at runtime.
 RX_SERVE_FROM_BUILD: bool = False
 
 # Whether Django should build the SPA bundle once at startup when none is on disk.
-# Prefer pre-building in CI with ``manage.py export_reflex`` instead.
+# Prefer pre-building in CI with ``reflex export`` instead.
 RX_AUTO_EXPORT_ON_START: bool = False
 
 # Additional reserved Reflex path prefixes (advanced; usually not needed).

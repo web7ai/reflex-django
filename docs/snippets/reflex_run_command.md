@@ -1,6 +1,6 @@
-﻿```bash
-python manage.py migrate
-python manage.py run_reflex
+```bash
+reflex django migrate
+reflex run
 ```
 
 Open **http://localhost:3000/** for the Reflex UI (hot reload).

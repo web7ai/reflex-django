@@ -11,8 +11,4 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", admin.site.urls),
 ]
-urlpatterns += [
-    reflex_mount(
-        rx_config={"app_name": "fixture_app"},
-    )
-]
+urlpatterns += reflex_mount()

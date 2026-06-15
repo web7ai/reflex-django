@@ -7,16 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (breaking — v4.0.0)
+
+- **Django-first integration** — `IntegrationMode`, `install_django_first_integration()`, settings-driven `RX_CONFIG` / `RX_PLUGINS`, synthetic `rxconfig_bridge`, and in-memory `rxconfig` synthesis.
+- **`from reflex_django import app`** and `reflex_django.runtime.reflex_app` singleton.
+- **`get_or_create_app()`**, `{app}/{app}.py` stub materialization, and `RX_PAGE_PACKAGES`.
+- **`manage.py run_reflex`**, **`manage.py export_reflex`**, and the `_run_reflex` command package.
+- **Plugin config keys** `urlconf` and `rx_config` — use `ROOT_URLCONF` and top-level `rx.Config(...)`.
+- **`reflex_mount(..., rx_config=, plugins=)`** — URL overrides only.
+- Re-export shim modules (`runtime/integration.py`, `bridge/django_event.py`, `state/assembly.py`, `state/generic.py`, etc.).
+- Archived dual-mode docs under `docs/_archive/` and `existing_django_project.md`.
+
 ### Added
 
-- **`ReflexDjangoPlugin`** (`reflex_django.plugins`) — Reflex-first integration for existing Reflex projects. Add to `rxconfig.py` `plugins` with `ReflexDjangoPlugin(config={...})` (alias `RXDJANGOPLUGIN`). Enables `reflex run`, `reflex export`, and `reflex deploy` while mounting Django in-process via `api_transformer`. See `docs/getting-started/existing_reflex_project_plugin.md`.
-- **Dual integration modes** — smart `get_config` wrapper detects Reflex-first (plugin) vs Django-first (settings) vs plain Reflex.
-- **`register_mount_from_plugin`** — plugin config registers into the mount registry (`django_plugin` field).
+- **Plugin-only bootstrap** — `install_plugin_integration()` triggered by `ReflexDjangoPlugin` in `rxconfig.py` (four config keys: `settings_module`, `django_prefix`, `mount_prefix`, `auto_mount`).
+- **`docs/reference/migration/v4_plugin_only.md`** — v4 migration guide.
+- **`test_v4_forbidden_strings.py`** — CI guard against reintroducing removed APIs.
 
 ### Changed
 
-- **CLI bootstrap** (`.pth`) — installs only the deferred `get_config` wrapper; mode-specific bootstrap runs when `rxconfig` loads.
-- **`get_or_create_app`** — re-applies Django integration when returning a cached app (fixes dispatcher attach after URLconf import).
+- **Dev workflow** — `reflex run` / `reflex export` only; Vite two-port proxy derives from plugin `django_prefix`.
+- **`get_config` patch** — bootstraps plugin integration but returns on-disk `rx.Config` unchanged.
+- **Public API** — removed lazy `app` export; minimal package surface documented in migration guide.
+- **CLI `.pth` hook** — `reflex_django.bootstrap.cli_patch` replaces deleted `cli_bootstrap`.
 
 ## [3.0.0] - 2026-06-14
 

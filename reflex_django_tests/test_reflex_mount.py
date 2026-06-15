@@ -7,7 +7,7 @@ from django.conf import settings
 from django.test import RequestFactory
 from django.urls import clear_url_caches, resolve
 
-from reflex_django.mount.config import clear_mount_rx_config
+from reflex_django.mount.config import clear_mount_registration
 from reflex_django.mount.registry import MOUNT_REGISTRY, clear_mount_registry
 from reflex_django.django.urls import reflex_mount
 from reflex_django.views.mount import ReflexMountView
@@ -16,10 +16,10 @@ from reflex_django.views.mount import ReflexMountView
 @pytest.fixture(autouse=True)
 def _clear_registry() -> None:
     clear_mount_registry()
-    clear_mount_rx_config()
+    clear_mount_registration()
     yield
     clear_mount_registry()
-    clear_mount_rx_config()
+    clear_mount_registration()
 
 
 def _catchall(handle):

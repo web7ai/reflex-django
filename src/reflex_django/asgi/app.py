@@ -196,7 +196,7 @@ def make_dispatcher(
 ) -> Callable[[ASGIApp], ASGIApp]:
     """Build an ``api_transformer`` that routes Django URL prefixes to Django ASGI.
 
-    Used when ``manage.py run_reflex`` runs the native Reflex backend with Django
+    Used when ``reflex run`` runs the native Reflex backend with Django
     mounted in-process. Set ``RX_PROXY_SERVER`` only when Django runs on a
     separate HTTP server instead.
     """

@@ -5,178 +5,83 @@ tags: [dev, cli]
 
 # Local development
 
-**What you will learn:** Which URLs to open in dev, how the two-port layout works, and how Vite proxies backend traffic when `RX_SEPARATE_DEV_PORTS=True`.
-
-**When you need this:**
-
-- You ran `run_reflex` and are unsure whether to browse `:3000` or `:8000`.
-- Admin, API, or WebSocket calls fail from the SPA, or CSRF errors appear when you use `:3000`.
+**What you will learn:** Which URLs to open in dev and how the two-port layout works with `reflex run`.
 
 ---
 
 ## The short version
 
-**Default (one terminal):**
-
 ```bash
-python manage.py run_reflex
+reflex run
 ```
 
 | Server | Port (default) | Role |
 |:---|:---|:---|
-| **Vite** | `3000` | Reflex UI with HMR  -  **open this for frontend work** |
-| **Reflex backend** | (Reflex default) | Django admin/API, `/_event`, `/_upload`  -  all proxied from Vite |
+| **Vite** | `3000` | Reflex UI with HMR - open this for frontend work |
+| **Reflex backend** | `8000` | Django admin/API, `/_event`, `/_upload` - proxied from Vite |
 
-**Browse `http://localhost:3000/`** for the SPA. Django admin/API and Reflex WebSocket paths are proxied to the Reflex backend (Django is mounted there in-process).
+Browse **`http://localhost:3000/`** for the SPA.
 
-**Optional  -  separate Django server:** run `python manage.py runserver` in another terminal and set:
+---
+
+## Optional split Django server
+
+Run `python manage.py runserver` in another terminal and set:
 
 ```python
-# settings.py
-RX_PROXY_SERVER = "http://127.0.0.1:8000"
+--8<-- "snippets/proxy_server_settings.py"
 ```
 
-Then Vite proxies Django prefixes to that server instead of the Reflex backend.
+Vite proxies Django prefixes to that server instead of the in-process mount.
 
 ---
 
 ## Two-port dev and Vite proxies
 
-Default dev sets `RX_SEPARATE_DEV_PORTS=True`. Vite listens on `:3000` and **proxies backend paths** so the browser stays on one origin for cookies and CSRF.
-
-| Path group | Proxied to (default) | With `RX_PROXY_SERVER` |
-|:---|:---|:---|
-| Django prefixes (`/admin`, `/api`, …) | Reflex backend (`config.api_url`) | External Django server |
-| Reflex paths (`/_event`, `/_upload`, …) | Reflex backend (`config.api_url`) | Reflex backend |
+Default dev sets `RX_SEPARATE_DEV_PORTS=True`. Vite on `:3000` proxies backend paths so cookies and CSRF stay on one origin.
 
 ```mermaid
 flowchart LR
   Browser["Browser :3000"] --> Vite[Vite]
-  Vite -->|"admin, api, static"| Django["Django :8000"]
-  Vite -->|"/_event, /_upload"| Reflex[Reflex backend]
+  Vite -->|"admin, api"| Backend["Reflex backend :8000"]
+  Vite -->|"/_event"| Backend
 ```
 
-!!! warning "Single-port dev strips proxies"
-    When `RX_SEPARATE_DEV_PORTS=False` (for example `--env dev`), reflex-django **removes** Vite proxy rules to avoid request loops. Browse `:8000` for everything in that mode.
-
----
-
-## What `run_reflex` does
-
-When you run the default command (no extra flags):
-
-1. **Validates** Vite proxy routes (Django + Reflex → Reflex backend by default)
-2. **Patches** `.web/vite.config.js` with proxy rules
-3. **Mounts** Django ASGI inside the Reflex backend for configured URL prefixes
-4. **Delegates** to `reflex run` (Vite + native Reflex backend on `:backend_port`)
-
-Hot reload watches your Django project tree (`settings.BASE_DIR`), not the installed `reflex-django` package. On first run, reflex-django creates a thin `{app_name}/{app_name}.py` stub if missing; it is **not** rewritten on later reloads, so your edits are kept.
-
-That entry module satisfies Reflex's toolchain. For page registration, use a `{app_name}/views.py` hub and import it from `urls.py`. See [App entry module and page registration](../guides/app_entry_and_pages.md).
-
-Set `RX_PROXY_SERVER` only when Django runs on a separate HTTP server.
-
-You should see a banner like:
-
-```text
-reflex-django: Reflex dev (Vite + Reflex backend)  -  browse http://localhost:3000/
-    Django must already be running at http://127.0.0.1:8000 ...
-reflex-django patched .web/vite.config.js for backend proxies (1 upstream group(s)).
-```
-
---8<-- "snippets/proxy_server_settings.py"
-
-### Commands to avoid for SPA dev
-
-| Command | Why it breaks the SPA |
-|:---|:---|
-| `python manage.py runserver` | WSGI only. No Vite, no dev proxies. |
-| `uvicorn ...:application` alone | No Vite unless you start and proxy it yourself |
-
-Use `run_reflex` instead.
-
----
-
-## Dev modes at a glance
-
-| Mode | Command | Browse | Vite proxies |
-|:---|:---|:---|:---|
-| **Default two-port HMR** | `run_reflex` | `:3000` for UI | Yes (see table above) |
-| **Compile dev (one port)** | `run_reflex --env dev` | `:8000` | No (stripped) |
-| **From disk, no HMR** | `run_reflex --from-build` | `:8000` | No |
-| **Prod-like local test** | `run_reflex --env prod` | `:8000` | No |
-
-Optional advanced layout: set `RX_DEV_PROXY=True` and `RX_SEPARATE_DEV_PORTS=False` in settings if you want Django on `:8000` to reverse-proxy SPA assets to Vite on `:3000`. There is no CLI flag for that today.
+When `RX_SEPARATE_DEV_PORTS=False`, browse `:8000` for everything (no Vite proxies).
 
 ---
 
 ## Configuring ports
 
-Ports live in `RX_CONFIG` and propagate to Vite, env files, and the backend:
+Set ports in `rxconfig.py`:
 
 ```python
-RX_CONFIG = {
-    "frontend_port": 3000,
-    "backend_port": 8000,
-}
+config = rx.Config(
+    app_name="shop",
+    frontend_port=3000,
+    backend_port=8000,
+    plugins=[ReflexDjangoPlugin(config={...})],
+)
 ```
 
 Environment overrides: `RX_FRONTEND_PORT`, `RX_BACKEND_PORT`.
 
-Wire pages the usual way:
+---
 
-```python
---8<-- "snippets/minimal_urls.py"
-```
+## Commands to avoid for SPA dev
+
+| Command | Why |
+|:---|:---|
+| `python manage.py runserver` alone | No Vite, no dev proxies |
+| `uvicorn ...:application` alone | No Vite unless you wire it yourself |
+
+Use **`reflex run`** for SPA development.
 
 ---
 
-## Django dev middleware and CSRF
+## CSRF and dev middleware
 
-When you browse admin from `:3000`, POST requests need trusted origins for both ports:
-
-```python
-from reflex_django.dev.django_middleware import DEFAULT_DEV_MIDDLEWARE
-
-USE_X_FORWARDED_HOST = True
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
-MIDDLEWARE = [
-    *DEFAULT_DEV_MIDDLEWARE,
-    # ... your middleware ...
-    "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
-]
-```
-
----
-
-## Troubleshooting
-
-**"Reflex SPA bundle not found" on `:8000`**
-In default two-port mode, `:8000` does not serve the SPA shell. Open `:3000`. With `--env dev`, `--from-build`, or `--env prod`, browse `:8000`.
-
-**Port 3000 already in use**
-Stop the other Vite or `run_reflex` instance, then start again.
-
-**Django admin returns 403 CSRF**
-Include both `:3000` and `:8000` in `CSRF_TRUSTED_ORIGINS`, set `USE_X_FORWARDED_HOST = True`, and prepend `DEFAULT_DEV_MIDDLEWARE`.
-
-**`useContext is not a function` in the browser**
-Restart `run_reflex` and hard-refresh. Check the compile log for "frontend stability patches".
-
-**Wrong backend port from `:3000`**
-Confirm `RX_SEPARATE_DEV_PORTS=1` (set automatically in default two-port dev). If admin/API 404, check `django_prefix` and that admin is in `urlpatterns`. List custom API roots in `RX_DJANGO_PREFIX` if auto-detection misses them.
-
----
-
-## What just happened?
-
-Default dev keeps you on `:3000` for the SPA while Vite forwards all backend traffic to the Reflex backend on `:backend_port`. Django admin and API are served from Django ASGI mounted in that process. Set `RX_PROXY_SERVER` only when Django runs separately.
+When browsing admin from `:3000`, include both ports in `CSRF_TRUSTED_ORIGINS`. See [Troubleshooting](../operations/troubleshooting.md).
 
 ---
 

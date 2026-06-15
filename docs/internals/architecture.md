@@ -5,14 +5,9 @@ tags: [architecture, bootstrap]
 
 # Architecture
 
-**What you will learn:** How reflex-django boots a Django + Reflex app, how traffic is routed in dev and production, and how the event bridge puts Django middleware in front of every Reflex handler.
+**What you will learn:** How reflex-django boots via `ReflexDjangoPlugin`, how traffic is routed in dev and production, and how the event bridge puts Django middleware in front of every Reflex handler.
 
-**When you need this:**
-
-- You are onboarding senior developers who want the runtime map.
-- You are debugging startup, ASGI, or "why is `request.user` empty?" issues.
-
-For a gentler intro, read [How they fit together](../overview/concepts.md) first.
+For a gentler intro, read [How it fits together](../overview/concepts.md) first.
 
 ---
 
@@ -20,126 +15,87 @@ For a gentler intro, read [How they fit together](../overview/concepts.md) first
 
 reflex-django optimizes for four properties:
 
-1. **Django-first config.** `settings.py` and `manage.py run_reflex` are the source of truth, not a standalone `rxconfig.py`.
+1. **Plugin-only integration.** `rxconfig.py` with `ReflexDjangoPlugin` is the integration entry; Django `settings.py` holds ORM, middleware, and optional `RX_*` tuning.
 2. **One origin in the browser.** SPA, admin, API, and WebSocket events share cookies on one host in dev (via Vite proxy) and in production (via your edge proxy).
 3. **Real Django requests in handlers.** Every `@rx.event` runs after middleware populated a synthetic `HttpRequest`.
-4. **Mount-only production Django.** Plain `get_asgi_application()` plus `reflex_mount()` catch-all  -  no composed outer ASGI entry.
-
-### Package layout
-
-Source modules live in domain subpackages under `src/reflex_django/` (`asgi/`, `runtime/`, `bridge/`, `django/`, `dev/`, `setup/`, `mount/`, …). Import paths are listed in [Public API](../reference/api.md).
+4. **Mount-only production Django.** Plain `get_asgi_application()` plus `reflex_mount()` catch-all.
 
 ---
 
 ## Boot sequence
 
-### Production Django process
+### Early hook (`.pth`)
 
-When ASGI loads your project's `config.asgi:application`:
+When the Reflex CLI starts, `reflex_django_reflex_cli.pth` imports `bootstrap.cli_patch`, which patches `get_config`. On first `get_config()` call, reflex-django detects `ReflexDjangoPlugin` in `rx.Config` and calls `install_plugin_integration()`.
+
+### Dev (`reflex run`)
 
 ```mermaid
 flowchart TD
-  A["ASGI server imports get_asgi_application()"] --> B["configure_django / Django setup"]
-  B --> C["maybe_auto_mount urlpatterns"]
-  C --> D["Django urlpatterns serve admin, API, static"]
-  D --> E["ReflexMountView catch-all serves SPA shell"]
+  A["reflex run"] --> B["ReflexDjangoPlugin pre_compile"]
+  B --> C["install_plugin_integration()"]
+  C --> D["Vite proxy patch + maybe_auto_mount"]
+  D --> E["Vite :3000 + Reflex backend :8000"]
+  E --> F["post_compile: apply_django_integration(app)"]
+  F --> G["make_dispatcher mounts Django in Reflex backend"]
 ```
 
-### Dev (`manage.py run_reflex`)
+### Production Django process
 
 ```mermaid
 flowchart TD
-  A["run_reflex"] --> B["install_reflex_django_integration()"]
-  B --> C["maybe_auto_mount + Vite proxy patch"]
-  C --> D["reflex run: Vite :3000 + Reflex backend :8000"]
-  D --> E["make_dispatcher mounts Django ASGI in Reflex backend"]
+  A["uvicorn config.asgi:application"] --> B["configure_django"]
+  B --> C["maybe_auto_mount urlpatterns"]
+  C --> D["Django routes: admin, API, static"]
+  D --> E["ReflexMountView catch-all serves SPA shell"]
 ```
 
 Key modules:
 
 | Module | Role |
 |:---|:---|
-| `reflex_django.bootstrap.app_setup` | Attaches `make_dispatcher` (skipped when `RX_PROXY_SERVER` is set), event bridge |
-| `reflex_django.runtime.integration` | `install_reflex_django_integration`, compile hooks, BaseState patches |
-| `reflex_django.mount.auto` | Appends SPA catch-all; auto-wires admin URLs when needed |
-| `reflex_django.asgi.app` | `build_django_asgi`, `make_dispatcher` |
+| `reflex_django.bootstrap.cli_patch` | Early `get_config` patch via `.pth` |
+| `reflex_django.runtime.get_config_patch` | Wraps `get_config` to bootstrap plugin |
+| `reflex_django.plugins.reflex_django` | `ReflexDjangoPlugin` compile hooks |
+| `reflex_django.runtime.integration` | `install_plugin_integration()`, patches |
+| `reflex_django.bootstrap.app_setup` | `apply_django_integration`, event bridge |
+| `reflex_django.mount.auto` | SPA catch-all; auto-wires admin URLs |
+| `reflex_django.asgi.app` | `make_dispatcher`, `build_django_asgi` |
 | `reflex_django.dev.vite_proxy` | Multi-target Vite proxy for two-port dev |
-| `reflex_django.dev.frontend_stability` | Post-compile React/Vite stability patches |
 | `reflex_django.bridge.event` | `DjangoEventBridge` orchestration |
-| `reflex_django.bridge.tier` | `resolve_bridge_tier`, smart defaults |
-| `reflex_django.bridge.registry` | Custom `RX_EVENT_BRIDGE_RESOLVER` hook |
-| `reflex_django.bridge.request_builder` | Synthetic `HttpRequest` from router data |
-| `reflex_django.bridge.event_handler` | Full and auth-only middleware chains |
-| `reflex_django.bridge.cache` | Write-only event cache, `invalidate_event_cache` |
-| `reflex_django.bridge.metrics` | Opt-in bridge phase timings |
 
 ---
 
-## Routing
+## Routing (dev)
 
-### Dev (default): Django inside the Reflex backend
-
-`manage.py run_reflex` delegates to native `reflex run`. reflex-django attaches an `api_transformer` built by `make_dispatcher()`:
+`reflex run` starts Vite on `:3000` and the Reflex backend on `:backend_port`. `make_dispatcher()` attaches Django ASGI for configured prefixes:
 
 ```text
 Browser :3000 (Vite)
-    │ proxy
-    ▼
+    | proxy
+    v
 Reflex backend :8000
-    ├── /_event, /_upload, … ──► Reflex inner ASGI
-    ├── /admin, /api, /static, … ──► Django ASGI (in-process)
-    └── SPA page paths ────────────► Reflex inner ASGI
+    |-- /_event, /_upload --> Reflex inner ASGI
+    |-- /admin, /api, /static --> Django ASGI (in-process)
+    +-- SPA page paths --> Reflex inner ASGI
 ```
 
-Vite sends **all** backend paths to the Reflex backend when `RX_PROXY_SERVER` is unset.
-
-### Dev (optional): separate Django server
-
-Set `RX_PROXY_SERVER = "http://127.0.0.1:8000"` and run `runserver` separately. Vite then splits proxies: Django prefixes → external Django, Reflex prefixes → Reflex backend.
-
-### Production
-
-| Process | Role |
-|:---|:---|
-| **Django ASGI** | Admin, API, static, compiled SPA shell via `ReflexMountView` |
-| **Reflex backend** | `/_event`, `/_upload`, … (or skip if static export only) |
-| **Edge proxy** | Route Reflex paths to Reflex; everything else to Django |
+Set `RX_PROXY_SERVER` to proxy Django prefixes to a separate `runserver` instead.
 
 See [Routing](routing.md) and [Local development](../getting-started/local_development.md).
 
 ---
 
-## Dev orchestration
-
-`manage.py run_reflex` builds a **`RunPlan`** that resolves ports, compile vs `--from-build`, and Vite proxy mode.
-
-Default dev:
-
-1. Compile / refresh `.web/`
-2. Patch `vite.config.js` proxy routes
-3. Start Vite on `:3000` and Reflex backend on `:backend_port` (default `:8000`)
-4. Attach Django ASGI dispatch to the Reflex app
-5. Watch Python files for backend reload
-
-See [Local development](../getting-started/local_development.md) and [CLI](../operations/cli.md).
-
----
-
 ## Event bridge
 
-Reflex events arrive on `/_event` as WebSocket/Socket.IO frames. Django HTTP middleware does **not** run automatically on that ASGI hop.
+Reflex events arrive on `/_event`. **`DjangoEventBridge`** runs before your handler:
 
-**`DjangoEventBridge`** (installed by bootstrap) runs **before** your handler:
+1. Resolve bridge tier (`full`, `auth_only`, or `none`).
+2. Build a synthetic `HttpRequest` from router data.
+3. Run the tier middleware pipeline.
+4. Bind `self.request`, `self.user`, `self.session` on `AppState`.
 
-1. Resolve bridge tier (`full`, `auth_only`, or `none`) from settings, per-State override, or custom resolver.
-2. Build a synthetic `HttpRequest` from cookies, headers, path, and query string.
-3. Run the tier pipeline  -  full `MIDDLEWARE`, auth-only subset, or skip.
-4. Resolve `request.user` asynchronously.
-5. Bind `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token` on `AppState` when the tier requires it.
-
-Default tier is **`full`** (unchanged legacy behavior). Opt into `"smart"` mode from `settings.py` for large apps. See [Scaling and performance](../operations/scaling.md).
-
-Deep trace: [WebSocket event pipeline](event_pipeline.md), [State management](../guides/state.md).
+Deep trace: [Event pipeline](event_pipeline.md).
 
 ---
 
@@ -147,31 +103,17 @@ Deep trace: [WebSocket event pipeline](event_pipeline.md), [State management](..
 
 | Piece | Location | Notes |
 |:---|:---|:---|
-| `RX_CONFIG` | `settings.py` | Ports, `app_name`, redis, packages |
-| `@page` / `app.add_page` | `{app}/views.py` | Registers routes at import time |
+| `rx.Config` + plugin | `rxconfig.py` | Ports, plugins, `ReflexDjangoPlugin` config |
+| `app` | `{app}/{app}.py` | User-owned `app = rx.App()` |
+| `@page` | `{app}/views.py` | Registers routes at import time |
 | `AppState` | subclass in views | Django context on every event |
-| `from reflex_django import app` | singleton | Replaces per-project `{app}/{app}.py` |
+
+Compile loads the app via `import_app_entry_module()` and `prepare_pages_for_compile()`.
 
 ---
 
-## Static files and SPA shell
+## Mental model
 
-Compiled assets land under `.web/` and, after export, under `STATIC_ROOT` (typically `_reflex/`). `ReflexMountView` serves `index.html` through the template engine when `RX_RENDER_SPA_VIA_TEMPLATE_ENGINE=True`.
+In dev, Vite on `:3000` is the browser single origin; the Reflex backend serves both Reflex internals and Django admin/API via `make_dispatcher`. In production, Django ASGI serves the compiled SPA shell; your proxy forwards `/_event` to Reflex. Live UI updates use `/_event`, where reflex-django replays Django middleware on a synthetic request.
 
----
-
-`make_dispatcher` mounts Django in-process on the Reflex dev backend. Production uses plain `get_asgi_application()` plus `reflex_mount()`. See [Routing](routing.md) and [Local development](../getting-started/local_development.md).
-
----
-
-## Mental model (one paragraph)
-
-In dev, Vite on `:3000` is the browser's single origin; the Reflex backend on `:8000` serves both Reflex internals and Django admin/API via an in-process path dispatcher. In production, Django ASGI serves the compiled SPA shell and backend routes; your reverse proxy forwards WebSocket traffic to Reflex. Live UI updates travel over `/_event`, where reflex-django replays Django middleware on a synthetic request so handlers see the same user, session, and CSRF context as a normal view.
-
----
-
-## What just happened?
-
-You traced bootstrap, dev vs production routing, and the event bridge that connects Reflex to Django middleware.
-
-**Next up:** [Routing](routing.md) for URL-level detail, or [Deployment](../operations/deployment.md) to ship it.
+**Next up:** [Routing](routing.md) or [Deployment](../operations/deployment.md).

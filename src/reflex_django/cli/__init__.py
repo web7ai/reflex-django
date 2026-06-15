@@ -122,7 +122,7 @@ def register_django_cli_group_if_needed(
     reflex_cli.add_command(django_cli_group)
 
 
-# Backward-compatible name (historically a single forwarding command).
+# Legacy CLI entry name (forwards to manage.py).
 django_cli = django_cli_group
 
 

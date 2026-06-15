@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.urls import path
 
 from reflex_django.setup.conf import configure_django
-from reflex_django.mount.config import clear_mount_rx_config
+from reflex_django.mount.config import clear_mount_registration
 from reflex_django.mount.registry import clear_mount_registry
 from reflex_django.mount.discovery import discover_django_prefixes, resolve_django_prefix
 from reflex_django.django.urls import reflex_mount
@@ -17,10 +17,10 @@ from reflex_django.django.urls import reflex_mount
 @pytest.fixture(autouse=True)
 def _clear_registry() -> None:
     clear_mount_registry()
-    clear_mount_rx_config()
+    clear_mount_registration()
     yield
     clear_mount_registry()
-    clear_mount_rx_config()
+    clear_mount_registration()
 
 
 def test_discover_django_prefixes_first_segments() -> None:
@@ -90,14 +90,14 @@ def test_reflex_mount_auto_from_module_urlpatterns(
     urlconf_name = "reflex_django_tests.test_prefix_discovery_mount_urls"
     monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
     sys.modules.pop(urlconf_name, None)
-    clear_mount_rx_config()
+    clear_mount_registration()
     urlconf = importlib.import_module(urlconf_name)
     from django.urls import clear_url_caches
 
     clear_url_caches()
-    from reflex_django.mount.config import get_merged_mount_rx_config
+    from reflex_django.mount.config import get_merged_mount_registration
 
-    assert get_merged_mount_rx_config().django_prefix == ("/admin", "/api")
+    assert get_merged_mount_registration().django_prefix == ("/admin", "/api")
     assert len(urlconf.urlpatterns) >= 2
     mount_pattern = urlconf.urlpatterns[-1]
     regex = mount_pattern.pattern.regex.pattern

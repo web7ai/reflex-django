@@ -1,6 +1,6 @@
 """Classify dev file changes for frontend recompile vs backend reload.
 
-``run_reflex`` runs Vite (frontend HMR) and uvicorn (backend) side by side.
+``reflex run`` runs Vite (frontend HMR) and the Reflex backend side by side.
 Without filtering, both watchers react to every ``.py`` save — e.g. editing
 ``settings.py`` would reload uvicorn *and* trigger a doomed SPA recompile.
 
@@ -64,8 +64,8 @@ def resolve_dev_watch_roots() -> list[Path]:
     return roots
 
 
-def django_first_reload_paths() -> Sequence[Path]:
-    """Return Reflex backend ``reload_dirs`` for Django-first projects."""
+def plugin_reload_paths() -> Sequence[Path]:
+    """Return Reflex backend ``reload_dirs`` for plugin-integrated projects."""
     from reflex_base import constants
     from reflex_base.environment import environment
 
@@ -199,7 +199,7 @@ __all__ = [
     "backend_reload_excludes",
     "build_backend_watch_filter",
     "build_frontend_watch_filter",
-    "django_first_reload_paths",
+    "plugin_reload_paths",
     "is_backend_reload_path",
     "is_frontend_recompile_path",
     "resolve_dev_watch_roots",

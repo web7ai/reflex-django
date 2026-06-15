@@ -1,4 +1,4 @@
-"""Load Reflex apps and page modules from Django settings."""
+"""Load Reflex apps and page modules for plugin-only integration."""
 
 from __future__ import annotations
 
@@ -6,29 +6,13 @@ import importlib
 import importlib.util
 import sys
 import types
-from pathlib import Path
 from typing import Any
 
-_APP_INSTANCE: Any | None = None
 _IMPORTED_VIEW_MODULES: set[str] = set()
-_ENTRY_MODULE_PENDING_PAGES: list[tuple[Any, dict[str, Any]]] = []
-
-_REFLEX_APP_MODULE = "reflex_django.runtime.reflex_app"
-_APP_MODULE_STUB_MARKER = "reflex-django Django-first app module stub"
-
-
-def _django_settings() -> Any:
-    from django.conf import settings
-
-    return settings
 
 
 def create_app() -> Any:
-    """Built-in factory: return a default :class:`reflex.app.App` for Django-first projects.
-
-    Returns:
-        A new Reflex application instance.
-    """
+    """Return a default :class:`reflex.app.App` after configuring Django."""
     import reflex as rx
 
     from reflex_django.setup.conf import configure_django
@@ -37,195 +21,44 @@ def create_app() -> Any:
     return rx.App()
 
 
-def _resolve_user_create_app() -> Any | None:
-    """Return ``rx.App`` from ``RX_CREATE_APP`` when configured."""
+def _page_module_name(app_label: str, module_suffix: str) -> str:
+    return f"{app_label}.{module_suffix}"
+
+
+def _views_module_exists(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ModuleNotFoundError, ValueError):
+        return False
+
+
+def discover_page_modules() -> list[str]:
+    """Return page modules to import for ``@page`` / ``@template`` registration."""
+    from reflex_django.mount.config import resolve_app_name
+
+    module_suffix = "views"
     try:
         from django.conf import settings
-        from django.utils.module_loading import import_string
+
+        module_suffix = getattr(settings, "RX_PAGE_MODULE", "views")
     except Exception:
-        return None
+        pass
 
-    dotted = getattr(settings, "RX_CREATE_APP", None)
-    if not isinstance(dotted, str) or not dotted.strip():
-        return None
-    target = import_string(dotted.strip())
-    return target()
-
-
-def get_or_create_app() -> Any:
-    """Return the singleton :class:`reflex.app.App` for Django-first projects.
-
-    Honors a pre-set :data:`reflex_django.runtime.reflex_app._app`, then
-    :data:`~django.conf.settings.RX_CREATE_APP`, else ``rx.App()``.
-    """
-    global _APP_INSTANCE
-    import reflex_django.runtime.reflex_app as reflex_app_module
-
-    if reflex_app_module._app is not None:
-        _APP_INSTANCE = reflex_app_module._app
-        _apply_django_integration_to_app(reflex_app_module._app)
-        return reflex_app_module._app
-
-    if _APP_INSTANCE is not None:
-        reflex_app_module._app = _APP_INSTANCE
-        _apply_django_integration_to_app(_APP_INSTANCE)
-        return _APP_INSTANCE
-
-    user_app = _resolve_user_create_app()
-    created = user_app if user_app is not None else create_app()
-    if reflex_app_module._app is not None:
-        app = reflex_app_module._app
-    else:
-        app = created
-    reflex_app_module._app = app
-    _APP_INSTANCE = app
-    from reflex_django.mount.config import resolve_app_name
-
-    app_name = resolve_app_name()
-    ensure_reflex_app_module_stub(app_name=app_name)
-    import_app_entry_module(app_name=app_name)
-    if reflex_app_module._app is not None:
-        app = reflex_app_module._app
-        _APP_INSTANCE = app
-    _flush_pending_entry_module_pages(app)
-    register_reflex_app_module(app_name, app)
-    _apply_django_integration_to_app(app)
-    return app
+    primary_app = resolve_app_name()
+    if not primary_app:
+        return []
+    primary_module = _page_module_name(primary_app, module_suffix)
+    if _views_module_exists(primary_module):
+        return [primary_module]
+    return []
 
 
-def _apply_django_integration_to_app(app: Any) -> None:
-    """Attach Django ASGI dispatch and optional Reflex API routes to *app*."""
-    from reflex_django.bootstrap.app_setup import apply_reflex_plugins_to_app
-
-    apply_reflex_plugins_to_app(app)
-    _ensure_optional_api_endpoints(app)
-
-
-def reflex_app_module_name(app_name: str) -> str:
-    """Return the Reflex app module path (``{app_name}.{app_name}``)."""
-    return f"{app_name}.{app_name}"
-
-
-def reflex_app_module_import() -> str:
-    """Dotted import path Reflex uses for ``app`` in Django-first mode."""
-    from reflex_django.mount.config import resolve_app_name
-
-    return reflex_app_module_name(resolve_app_name())
-
-
-def register_reflex_app_module(app_name: str, app: Any) -> str:
-    """Expose *app* on ``sys.modules`` so Reflex can import ``{app_name}.{app_name}:app``.
-
-    Args:
-        app_name: Reflex app label from :func:`reflex_django.mount.config.resolve_app_name`.
-        app: The Reflex app instance.
-
-    Returns:
-        The registered module name.
-    """
-    module_name = reflex_app_module_name(app_name)
-    module = sys.modules.get(module_name)
-    if module is None:
-        module = types.ModuleType(module_name)
-        sys.modules[module_name] = module
-    module.app = app  # type: ignore[attr-defined]
-    return module_name
-
-
-def _format_app_module_stub() -> str:
-    return f'''"""Reflex app entry for Django-first projects (auto-maintained by reflex-django).
-
-Pages and state belong in Django ``views.py`` modules. Do not add UI logic here.
-"""
-# {_APP_MODULE_STUB_MARKER}
-
-from reflex_django.runtime.reflex_app import app
-
-__all__ = ["app"]
-'''
-
-
-def ensure_reflex_app_module_stub(*, app_name: str | None = None) -> Path | None:
-    """Materialize ``{app_name}/{app_name}.py`` so Reflex can import the app module.
-
-    Reflex validates ``app_module_import`` with :func:`reflex.utils.misc.get_module_path`,
-    which requires a file on disk. Django-first projects use a thin stub that re-exports
-    the shared :data:`reflex_django.runtime.reflex_app.app` singleton.
-
-    User-owned ``{app_name}/{app_name}.py`` files are never overwritten once they exist.
-    """
-    from reflex_django.mount.config import resolve_app_name
-
-    name = (app_name or resolve_app_name()).strip()
-    if not name:
-        return None
-
-    module_name = reflex_app_module_name(name)
-    package, _, module_file = module_name.partition(".")
-    if not module_file or package != module_file:
-        return None
-
-    settings = _django_settings()
-    base = getattr(settings, "BASE_DIR", None)
-    root = Path(str(base)).resolve() if base else Path.cwd().resolve()
-
-    package_dir = root / package
-    target = package_dir / f"{module_file}.py"
-    body = _format_app_module_stub()
-
-    if target.is_file():
-        return target
-
-    package_dir.mkdir(parents=True, exist_ok=True)
-    init_py = package_dir / "__init__.py"
-    if not init_py.is_file():
-        init_py.write_text("", encoding="utf-8")
-    target.write_text(body, encoding="utf-8")
-    return target
-
-
-def import_app_entry_module(*, app_name: str | None = None) -> types.ModuleType:
-    """Import and execute ``{app_name}/{app_name}.py`` from disk.
-
-    A synthetic placeholder in ``sys.modules`` (no ``__file__``) is removed first
-    so Python runs the on-disk entry module on cold start instead of returning an
-    empty cached module.
-
-    While the singleton app exists, ``app.add_page`` calls are queued and flushed
-    via :func:`_flush_pending_entry_module_pages` so entry-module routes register
-    on the same pre-compile path as ``@page`` in ``views.py``.
-    """
-    from reflex_django.mount.config import resolve_app_name
-
-    name = (app_name or resolve_app_name()).strip()
-    module_name = reflex_app_module_name(name)
-    ensure_reflex_app_module_stub(app_name=name)
-
-    cached = sys.modules.get(module_name)
-    if cached is not None and not getattr(cached, "__file__", None):
-        del sys.modules[module_name]
-
-    import reflex_django.runtime.reflex_app as reflex_app_module
-
-    app = reflex_app_module._app
-    original_add_page = None
-    if app is not None and hasattr(app, "add_page"):
-        original_add_page = app.add_page
-
-        def queued_add_page(component: Any, **kwargs: Any) -> None:
-            _ENTRY_MODULE_PENDING_PAGES.append((component, dict(kwargs)))
-
-        app.add_page = queued_add_page  # type: ignore[method-assign]
-
-    try:
-        return importlib.import_module(module_name)
-    finally:
-        if app is not None and original_add_page is not None:
-            app.add_page = original_add_page  # type: ignore[method-assign]
+def resolve_page_packages() -> list[str]:
+    """Return page modules to import for decorator registration."""
+    return discover_page_modules()
 
 
 def _route_registration_rank(route: str | None) -> tuple[int, int, str]:
-    """Return a sort key where lower values register first (dynamic before static)."""
     if not route:
         return (2, 0, "")
     route_str = str(route)
@@ -247,38 +80,12 @@ def _sort_page_entries(
     )
 
 
-def clear_entry_module_pending_pages() -> None:
-    """Clear the entry-module page queue (tests only)."""
-    _ENTRY_MODULE_PENDING_PAGES.clear()
-
-
-def _flush_pending_entry_module_pages(app: Any) -> None:
-    """Register queued entry-module ``app.add_page`` calls on *app*."""
-    if not _ENTRY_MODULE_PENDING_PAGES or not hasattr(app, "add_page"):
-        clear_entry_module_pending_pages()
-        return
-
-    from reflex.utils import format as route_format
-
-    unevaluated = getattr(app, "_unevaluated_pages", {})
-    for render, kwargs in _sort_page_entries(list(_ENTRY_MODULE_PENDING_PAGES)):
-        route = kwargs.get("route")
-        if route is not None:
-            formatted = route_format.format_route(str(route))
-            if formatted in unevaluated:
-                continue
-        app.add_page(render, **kwargs)
-        unevaluated = getattr(app, "_unevaluated_pages", {})
-    clear_entry_module_pending_pages()
-
-
 def _apply_decorated_pages_to_app(
     app: Any,
     *,
     app_name: str,
     decorated_pages: Any,
 ) -> None:
-    """Apply ``DECORATED_PAGES[app_name]`` in Reflex route registration order."""
     from reflex.utils import format as route_format
 
     unevaluated = getattr(app, "_unevaluated_pages", {})
@@ -293,94 +100,8 @@ def _apply_decorated_pages_to_app(
         unevaluated = getattr(app, "_unevaluated_pages", {})
 
 
-def _page_module_name(app_label: str, module_suffix: str) -> str:
-    return f"{app_label}.{module_suffix}"
-
-
-def _views_module_exists(module_name: str) -> bool:
-    try:
-        return importlib.util.find_spec(module_name) is not None
-    except (ModuleNotFoundError, ValueError):
-        return False
-
-
-def discover_page_modules() -> list[str]:
-    """Return page modules to import for ``@page`` / ``@template`` registration.
-
-    Uses ``RX_PAGE_PACKAGES`` when set; otherwise only the primary app
-    ``{app_name}.views`` module (from ``RX_CONFIG["app_name"]``). Import page
-    modules explicitly in ``urls.py`` so decorators run at Django startup.
-    """
-    settings = _django_settings()
-    explicit = getattr(settings, "RX_PAGE_PACKAGES", None)
-    if explicit:
-        return list(explicit)
-
-    from reflex_django.mount.config import ensure_mount_config_loaded, resolve_app_name
-
-    ensure_mount_config_loaded()
-    module_suffix = getattr(settings, "RX_PAGE_MODULE", "views")
-    primary_app = resolve_app_name()
-    if not primary_app:
-        return []
-    primary_module = _page_module_name(primary_app, module_suffix)
-    if _views_module_exists(primary_module):
-        return [primary_module]
-    return []
-
-
-def resolve_page_packages() -> list[str]:
-    """Return page modules to import for decorator registration."""
-    return discover_page_modules()
-
-
-def prepare_pages_for_compile() -> None:
-    """Import page modules and bucket decorated pages under the mount ``app_name``.
-
-    Call before Reflex compile so ``DECORATED_PAGES`` and backend substates match
-    the compiled ``.web/utils/context.js`` dispatch map (avoids
-    ``dispatch is not a function`` in the browser).
-
-    Adds only routes not already present on the app, so calling this after
-    :func:`ensure_reflex_app_ready` (or repeatedly during compile hooks) does not emit ``Page X is being redefined with
-    the same component.`` warnings from :meth:`reflex.app.App.add_page`.
-    """
-    from reflex_django.mount.config import resolve_app_name
-
-    migrate_decorated_pages_app_name(resolve_app_name())
-    _ensure_runtime_state_classes_registered()
-    from reflex_django.auth.registry import ensure_auth_pages_registered
-
-    ensure_auth_pages_registered()
-    import_page_packages()
-    app = load_app_factory()
-    import_app_entry_module()
-    _flush_pending_entry_module_pages(app)
-    app_name = migrate_decorated_pages_app_name(resolve_app_name())
-    if hasattr(app, "add_page"):
-        try:
-            from reflex.page import DECORATED_PAGES
-        except ImportError:
-            DECORATED_PAGES = None  # type: ignore[assignment]
-        if DECORATED_PAGES is not None:
-            _apply_decorated_pages_to_app(
-                app, app_name=app_name, decorated_pages=DECORATED_PAGES
-            )
-        apply_page_registry_to_app(app)
-        app._reflex_django_decorated_pages_applied = True  # type: ignore[attr-defined]
-    sync_page_load_events(app)
-
-
 def migrate_decorated_pages_app_name(app_name: str | None = None) -> str:
-    """Move pages registered under the wrong ``DECORATED_PAGES`` key to *app_name*.
-
-    ``@page`` / ``@template`` call :func:`reflex.page`, which buckets decorators
-    by :func:`reflex_base.config.get_config`.app_name at import time. In
-    Django-first projects that name is often still ``""`` when ``urls.py`` imports
-    ``views.py``, so pages land in ``DECORATED_PAGES[""]`` while compile later
-    reads ``DECORATED_PAGES["demo"]`` — resulting in a blank UI and
-    ``dispatch is not a function`` frontend errors.
-    """
+    """Move pages registered under the wrong ``DECORATED_PAGES`` key to *app_name*."""
     try:
         from reflex.page import DECORATED_PAGES
         from reflex_django.mount.config import resolve_app_name
@@ -420,7 +141,6 @@ def migrate_decorated_pages_app_name(app_name: str | None = None) -> str:
 
 
 def apply_page_registry_to_app(app: Any) -> None:
-    """Register :data:`~reflex_django.pages.decorators.PAGE_REGISTRY` pages on *app*."""
     from reflex.utils import format as route_format
     from reflex_django.pages.decorators import PAGE_REGISTRY
 
@@ -440,13 +160,6 @@ def apply_page_registry_to_app(app: Any) -> None:
 
 
 def sync_page_load_events(app: Any) -> None:
-    """Ensure ``app._load_events`` matches ``on_load`` from decorated pages.
-
-    Reflex stores page ``on_load`` handlers when :meth:`reflex.app.App.add_page`
-    runs during compile. In Django-first mode the app can be prepared before
-    compile or decorated pages can be registered after an early ``add_page``
-    pass; this syncs ``DECORATED_PAGES`` metadata onto the live app instance.
-    """
     try:
         from reflex.page import DECORATED_PAGES
         from reflex.utils import format
@@ -475,7 +188,6 @@ def sync_page_load_events(app: Any) -> None:
 
 
 def import_mount_app_views(app_name: str | None = None) -> list[str]:
-    """Import ``{app_name}.views`` during ``reflex_mount()`` without re-importing urls."""
     from reflex_django.mount.config import resolve_app_name
 
     name = (app_name or resolve_app_name()).strip()
@@ -494,21 +206,9 @@ def import_mount_app_views(app_name: str | None = None) -> list[str]:
 
 
 def import_page_packages() -> list[str]:
-    """Import discovered page modules so ``@template`` / ``@page`` decorators run.
-
-    Returns:
-        Dotted module paths that were imported successfully.
-    """
     from reflex_django.mount.config import ensure_mount_config_loaded, resolve_app_name
 
     ensure_mount_config_loaded()
-    try:
-        from reflex_django.setup.rxconfig_bridge import ensure_rxconfig_from_django
-
-        ensure_rxconfig_from_django()
-    except Exception:
-        pass
-
     imported: list[str] = []
     for dotted in resolve_page_packages():
         if dotted in _IMPORTED_VIEW_MODULES:
@@ -520,77 +220,61 @@ def import_page_packages() -> list[str]:
     return imported
 
 
-def load_native_reflex_app() -> Any:
-    """Load :class:`reflex.app.App` from the on-disk ``rxconfig`` module (Reflex-first)."""
+def _resolve_app_module_import(*, app_name: str | None = None) -> str:
+    """Return the dotted path to the on-disk Reflex app module."""
     from reflex_base.config import get_config
+    from reflex_django.mount.config import resolve_app_name
 
     config = get_config()
     module_path = getattr(config, "module", None) or getattr(
         config, "app_module_import", None
     )
-    if not isinstance(module_path, str) or not module_path.strip():
-        msg = "Reflex-first mode requires rx.Config app_name / app_module_import."
+    if isinstance(module_path, str) and module_path.strip():
+        return module_path.strip()
+    name = (app_name or resolve_app_name()).strip()
+    if not name:
+        msg = "Cannot resolve Reflex app module path (missing app_name in rx.Config)."
         raise RuntimeError(msg)
-    module = importlib.import_module(module_path.strip())
+    return f"{name}.{name}"
+
+
+def import_app_entry_module(*, app_name: str | None = None) -> types.ModuleType:
+    """Import the on-disk Reflex app module so ``app.add_page`` calls run at compile time."""
+    from reflex_django.mount.config import ensure_mount_config_loaded
+
+    ensure_mount_config_loaded()
+    module_path = _resolve_app_module_import(app_name=app_name)
+    cached = sys.modules.get(module_path)
+    if cached is not None and not getattr(cached, "__file__", None):
+        del sys.modules[module_path]
+    return importlib.import_module(module_path)
+
+
+def load_native_reflex_app() -> Any:
+    """Load :class:`reflex.app.App` from the on-disk app module in ``rx.Config``."""
+    module = import_app_entry_module()
     app = getattr(module, "app", None)
     if app is None:
+        module_path = _resolve_app_module_import()
         msg = f"Module {module_path!r} has no 'app' attribute."
         raise RuntimeError(msg)
     return app
 
 
 def load_app_factory() -> Any:
-    """Load :class:`reflex.app.App` via mode-appropriate factory.
-
-    Returns:
-        The Reflex app instance.
-
-    """
+    """Load :class:`reflex.app.App` from the user's on-disk app module."""
     from reflex_django.mount.config import ensure_mount_config_loaded
-    from reflex_django.runtime.integration.modes import (
-        IntegrationMode,
-        get_active_integration_mode,
-    )
 
     ensure_mount_config_loaded()
-    if get_active_integration_mode() == IntegrationMode.REFLEX_FIRST:
-        return load_native_reflex_app()
-    return get_or_create_app()
-
-
-def ensure_reflex_app_ready() -> Any:
-    """Import pages, build :class:`reflex.app.App`, and apply decorated pages.
-
-    Does not write ``{app_name}/{app_name}.py``; Reflex
-    loads :data:`reflex_django.runtime.reflex_app.app` instead.
-
-    Returns:
-        The configured Reflex app.
-    """
-    from reflex_django.runtime.integration import _ensure_runtime_event_patches
-    from reflex_django.bootstrap.app_setup import apply_reflex_plugins_to_app
-
-    _ensure_runtime_event_patches()
-    # prepare_pages_for_compile deduplicates routes already registered by
-    # @page / @template at import time (avoids "Page X is being redefined").
-    prepare_pages_for_compile()
-    app = load_app_factory()
-    apply_reflex_plugins_to_app(app)
-    _ensure_optional_api_endpoints(app)
-    return app
+    return load_native_reflex_app()
 
 
 def _ensure_runtime_state_classes_registered() -> None:
-    """Eagerly import substates that the middleware would otherwise register late.
-
-    Pre-importing affected classes before Reflex walks the state tree keeps the
-    frontend codegen and runtime in sync (avoids missing dispatcher entries).
-    """
     try:
         from reflex_django.auth.state_builders import get_or_create_django_auth_state
 
         get_or_create_django_auth_state()
-    except Exception:  # noqa: BLE001 — never fail boot on optional substates.
+    except Exception:  # noqa: BLE001
         import logging
 
         logging.getLogger("reflex_django.runtime.app_factory").exception(
@@ -598,22 +282,46 @@ def _ensure_runtime_state_classes_registered() -> None:
         )
 
 
+def prepare_pages_for_compile() -> None:
+    """Import page modules and register decorated pages on the app."""
+    from reflex_django.mount.config import resolve_app_name
+
+    migrate_decorated_pages_app_name(resolve_app_name())
+    _ensure_runtime_state_classes_registered()
+    from reflex_django.auth.registry import ensure_auth_pages_registered
+
+    ensure_auth_pages_registered()
+    import_page_packages()
+    app = load_app_factory()
+    app_name = migrate_decorated_pages_app_name(resolve_app_name())
+    if hasattr(app, "add_page"):
+        try:
+            from reflex.page import DECORATED_PAGES
+        except ImportError:
+            DECORATED_PAGES = None  # type: ignore[assignment]
+        if DECORATED_PAGES is not None:
+            _apply_decorated_pages_to_app(
+                app, app_name=app_name, decorated_pages=DECORATED_PAGES
+            )
+        apply_page_registry_to_app(app)
+        app._reflex_django_decorated_pages_applied = True  # type: ignore[attr-defined]
+    sync_page_load_events(app)
+
+
+def ensure_reflex_app_ready() -> Any:
+    """Import pages, load the app, and apply Django integration."""
+    from reflex_django.bootstrap.app_setup import apply_reflex_plugins_to_app
+    from reflex_django.runtime.integration import _ensure_runtime_event_patches
+
+    _ensure_runtime_event_patches()
+    prepare_pages_for_compile()
+    app = load_app_factory()
+    apply_reflex_plugins_to_app(app)
+    _ensure_optional_api_endpoints(app)
+    return app
+
+
 def _ensure_optional_api_endpoints(app: Any) -> None:
-    """Register Reflex's optional Starlette routes (``/_upload``, …) on ``app._api``.
-
-    :meth:`reflex.app.App._add_optional_endpoints` is normally called from
-    :func:`reflex.compiler.compiler.compile_app`, which only runs inside the
-    SPA export subprocess. In the Django-outer ASGI process we build a fresh
-    :class:`~reflex.app.App` via :func:`ensure_reflex_app_ready` without
-    compiling it (the SPA is already on disk), so those routes are missing
-    from ``app._api`` and ``POST /_upload`` returns ``404 Not Found`` when
-    optional endpoints were not registered during app bootstrap.
-
-    The check ``Upload.is_used or upload_is_used_marker.exists()`` makes the
-    method a no-op when no page uses :func:`rx.upload`, so it is safe to
-    always invoke. A per-app guard keeps it idempotent across repeat calls
-    (e.g. plugin ``post_compile`` re-invocations during dev).
-    """
     if app is None:
         return
     if getattr(app, "_reflex_django_optional_endpoints_applied", False):
@@ -623,36 +331,19 @@ def _ensure_optional_api_endpoints(app: Any) -> None:
         return
     try:
         add()
-    except Exception:  # noqa: BLE001 — optional endpoints must not fail boot.
+    except Exception:  # noqa: BLE001
         import logging
 
         logging.getLogger("reflex_django.runtime.app_factory").exception(
-            "Failed to register Reflex optional API endpoints (`/_upload`, …) — "
-            "uploads and codespace auth may return 404."
+            "Failed to register Reflex optional API endpoints (`/_upload`, …)."
         )
         return
     app._reflex_django_optional_endpoints_applied = True  # type: ignore[attr-defined]
 
 
 def reset_app_factory_cache() -> None:
-    """Clear cached app instance (tests only)."""
-    global _APP_INSTANCE
-    if _APP_INSTANCE is not None:
-        if hasattr(_APP_INSTANCE, "_reflex_django_decorated_pages_applied"):
-            delattr(_APP_INSTANCE, "_reflex_django_decorated_pages_applied")
-    _APP_INSTANCE = None
+    """Clear import caches (tests only)."""
     _IMPORTED_VIEW_MODULES.clear()
-    clear_entry_module_pending_pages()
-    import reflex_django.runtime.reflex_app as reflex_app
+    from reflex_django.mount.config import clear_mount_registration
 
-    reflex_app._app = None
-    try:
-        from reflex_django.mount.config import resolve_app_name
-
-        module_name = reflex_app_module_name(resolve_app_name())
-        sys.modules.pop(module_name, None)
-    except Exception:  # noqa: BLE001 — test cleanup only.
-        pass
-    from reflex_django.mount.auto import clear_auto_mount_state
-
-    clear_auto_mount_state()
+    clear_mount_registration()

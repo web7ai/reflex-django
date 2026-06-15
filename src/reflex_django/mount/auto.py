@@ -1,11 +1,10 @@
-"""Settings-driven SPA mount and :func:`reflex_django.django.urls.reflex_mount` helpers."""
+"""SPA mount and :func:`reflex_django.django.urls.reflex_mount` helpers."""
 
 from __future__ import annotations
 
 import logging
 import os
-import warnings
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from django.urls import URLPattern
@@ -14,7 +13,6 @@ logger = logging.getLogger("reflex_django.mount.auto")
 
 _MOUNT_BOOT_COMPLETED = False
 _MOUNT_HANDLE: ReflexMountHandle | None = None
-_SETTINGS_MOUNT_REGISTERED = False
 _ADMIN_AUTODISCOVER_COMPLETE = False
 
 
@@ -52,66 +50,13 @@ def _auto_mount_enabled() -> bool:
     env = os.environ.get("RX_AUTO_MOUNT")
     if env is not None:
         return str(env).strip().lower() not in {"0", "false", "no"}
-    try:
-        from django.conf import settings
-
-        return bool(getattr(settings, "RX_AUTO_MOUNT", True))
-    except Exception:
-        return True
-
-
-def _should_auto_mount_urls() -> bool:
     return True
 
 
 def has_reflex_mount(urlpatterns: Sequence[Any]) -> bool:
-    """Return whether *urlpatterns* already contains a :class:`~reflex_django.views.mount.ReflexMountView` pattern."""
     from reflex_django.mount.discovery import _is_reflex_mount_pattern
 
     return any(_is_reflex_mount_pattern(p) for p in urlpatterns)
-
-
-def register_mount_from_settings(**overrides: Any) -> None:
-    """Register rx config from settings + *overrides* (idempotent, no URL append)."""
-    global _SETTINGS_MOUNT_REGISTERED
-    from reflex_django.mount.config import has_mount_rx_config, register_mount_rx_config
-    from reflex_django.setup.rxconfig_bridge import _coerce_rx_config_dict
-
-    if has_mount_rx_config() and _SETTINGS_MOUNT_REGISTERED:
-        return
-
-    try:
-        from django.conf import settings as django_settings
-
-        settings_rx = getattr(django_settings, "RX_CONFIG", None) or {}
-        mount_prefix = getattr(
-            django_settings,
-            "RX_MOUNT_PREFIX",
-            os.environ.get("RX_MOUNT_PREFIX", "/"),
-        )
-        settings_django_prefix = getattr(
-            django_settings,
-            "RX_DJANGO_PREFIX",
-            None,
-        )
-    except Exception:
-        settings_rx = {}
-        mount_prefix = os.environ.get("RX_MOUNT_PREFIX", "/")
-        settings_django_prefix = None
-
-    opts = dict(overrides)
-    merged_rx = _coerce_rx_config_dict(
-        {**dict(settings_rx), **dict(opts.get("rx_config") or {})}
-    )
-
-    register_mount_rx_config(
-        app_name=merged_rx.get("app_name"),
-        plugins=opts.get("plugins"),
-        rx_config=merged_rx,
-        mount_prefix=opts.get("mount_prefix", mount_prefix),
-        django_prefix=opts.get("django_prefix", settings_django_prefix),
-    )
-    _SETTINGS_MOUNT_REGISTERED = True
 
 
 def ensure_reflex_mount(
@@ -119,51 +64,25 @@ def ensure_reflex_mount(
     mount_prefix: str | None = None,
     django_prefix: str | tuple[str, ...] | None = None,
     urlpatterns: Sequence[Any] | None = None,
-    plugins: Sequence[Any] | None = None,
-    rx_config: Mapping[str, Any] | None = None,
     append_to_urlconf: bool = False,
 ) -> ReflexMountHandle:
-    """Register mount config and return the catch-all URL handle."""
+    """Register mount prefixes and return the catch-all URL handle."""
     global _MOUNT_HANDLE
 
-    from reflex_django.mount.config import register_mount_rx_config
+    from reflex_django.mount.config import register_mount
     from reflex_django.mount.discovery import resolve_django_prefix
     from reflex_django.mount.prefixes import export_prefix_env, export_rx_port_env, resolve_prefixes
-    from reflex_django.setup.rxconfig_bridge import _coerce_rx_config_dict
-    from reflex_django.django.urls import _reflex_catchall_pattern  # lazy: urls imports auto_mount in reflex_mount only
+    from reflex_django.django.urls import _reflex_catchall_pattern
 
     if mount_prefix is None:
-        try:
-            from django.conf import settings as django_settings
-
-            mount_prefix = str(
-                getattr(
-                    django_settings,
-                    "RX_MOUNT_PREFIX",
-                    os.environ.get("RX_MOUNT_PREFIX", "/"),
-                )
-            )
-        except Exception:
-            mount_prefix = os.environ.get("RX_MOUNT_PREFIX", "/")
+        mount_prefix = os.environ.get("RX_MOUNT_PREFIX", "/")
 
     resolved_django_prefix = resolve_django_prefix(
         django_prefix,
         urlpatterns=urlpatterns,
     )
 
-    try:
-        from django.conf import settings as django_settings
-
-        settings_rx = getattr(django_settings, "RX_CONFIG", None) or {}
-    except Exception:
-        settings_rx = {}
-
-    merged_rx = _coerce_rx_config_dict({**dict(settings_rx), **dict(rx_config or {})})
-
-    register_mount_rx_config(
-        app_name=merged_rx.get("app_name"),
-        plugins=plugins,
-        rx_config=merged_rx,
+    register_mount(
         mount_prefix=mount_prefix,
         django_prefix=resolved_django_prefix,
     )
@@ -203,7 +122,7 @@ def _append_mount_to_root_urlconf(
 
     urlconf_name = getattr(settings, "ROOT_URLCONF", None)
     if not isinstance(urlconf_name, str) or not urlconf_name:
-        logger.warning("reflex-django: RX_AUTO_MOUNT skipped — ROOT_URLCONF unset.")
+        logger.warning("reflex-django: auto_mount skipped — ROOT_URLCONF unset.")
         return
 
     from importlib import import_module
@@ -215,7 +134,7 @@ def _append_mount_to_root_urlconf(
     mod_urlpatterns = getattr(mod, "urlpatterns", None)
     if not isinstance(mod_urlpatterns, list):
         logger.warning(
-            "reflex-django: RX_AUTO_MOUNT skipped — %s.urlpatterns is not a list.",
+            "reflex-django: auto_mount skipped — %s.urlpatterns is not a list.",
             urlconf_name,
         )
         return
@@ -229,13 +148,6 @@ def _append_mount_to_root_urlconf(
 
 
 def refresh_reflex_mount_catchall() -> ReflexMountHandle | None:
-    """Rebuild the SPA catch-all after runtime env overrides (e.g. ``run_reflex``).
-
-    ``AppConfig.ready()`` mounts the catch-all while Django boots, which is
-    before ``manage.py run_reflex`` sets ``RX_SEPARATE_DEV_PORTS``.
-    Projects that set ``RX_SEPARATE_DEV_PORTS = True`` in dev
-    settings would otherwise keep ``/`` reserved even in ``--env prod`` mode.
-    """
     global _MOUNT_HANDLE
 
     from django.urls import clear_url_caches
@@ -273,7 +185,6 @@ def refresh_reflex_mount_catchall() -> ReflexMountHandle | None:
 
 
 def _reflex_before_admin_in_installed_apps() -> bool:
-    """Return whether ``reflex_django`` is listed before ``django.contrib.admin``."""
     try:
         from django.conf import settings
 
@@ -284,18 +195,15 @@ def _reflex_before_admin_in_installed_apps() -> bool:
 
 
 def admin_autodiscover_complete() -> bool:
-    """Return whether ``django.contrib.admin`` autodiscover has finished."""
     return _ADMIN_AUTODISCOVER_COMPLETE
 
 
 def mark_admin_autodiscover_complete() -> None:
-    """Record that admin autodiscover finished (internal)."""
     global _ADMIN_AUTODISCOVER_COMPLETE
     _ADMIN_AUTODISCOVER_COMPLETE = True
 
 
 def should_defer_urlconf_import() -> bool:
-    """Return whether ``ROOT_URLCONF`` must wait for admin autodiscover."""
     try:
         from django.conf import settings
     except Exception:
@@ -306,7 +214,6 @@ def should_defer_urlconf_import() -> bool:
 
 
 def refresh_urlconf_after_admin() -> None:
-    """Load or reload ``ROOT_URLCONF`` once admin models are registered."""
     from reflex_django.mount import config as mount_config
     from reflex_django.mount.config import (
         load_root_urlconf,
@@ -323,21 +230,13 @@ def refresh_urlconf_after_admin() -> None:
 
 
 def schedule_auto_mount_after_admin() -> None:
-    """Schedule :func:`maybe_auto_mount` once admin autodiscover has finished.
-
-    ``ReflexDjangoConfig.ready()`` can run before ``django.contrib.admin``
-    autodiscover. Importing ``ROOT_URLCONF`` at that point evaluates
-    ``admin.site.urls`` while the admin registry is still empty, so Django
-    never registers the per-app ``app_list`` routes and ``/admin/`` raises
-    ``NoReverseMatch`` for ``admin:app_list``.
-    """
     from django.contrib.admin.apps import AdminConfig
 
     if getattr(AdminConfig, "_reflex_auto_mount_scheduled", False):
         return
     AdminConfig._reflex_auto_mount_scheduled = True
 
-    if not _auto_mount_enabled() or not _should_auto_mount_urls():
+    if not _auto_mount_enabled():
         return
 
     if not _reflex_before_admin_in_installed_apps():
@@ -358,7 +257,6 @@ def _ensure_default_admin_urlpatterns(
     mod: Any,
     patterns: list[Any],
 ) -> list[Any]:
-    """Prepend default admin URLs when admin is installed but not yet wired."""
     try:
         from django.conf import settings
     except Exception:
@@ -389,17 +287,14 @@ def _ensure_default_admin_urlpatterns(
 
 
 def maybe_auto_mount() -> ReflexMountHandle | None:
-    """Append SPA catch-all from settings when enabled (boot-only, idempotent)."""
     global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE
 
     if _MOUNT_BOOT_COMPLETED:
         return _MOUNT_HANDLE
 
-    if not _auto_mount_enabled() or not _should_auto_mount_urls():
+    if not _auto_mount_enabled():
         _MOUNT_BOOT_COMPLETED = True
         return _MOUNT_HANDLE
-
-    register_mount_from_settings()
 
     try:
         from django.conf import settings
@@ -437,12 +332,9 @@ def maybe_auto_mount() -> ReflexMountHandle | None:
 
 
 def clear_auto_mount_state() -> None:
-    """Reset auto-mount module state (tests only)."""
-    global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE, _SETTINGS_MOUNT_REGISTERED
-    global _ADMIN_AUTODISCOVER_COMPLETE
+    global _MOUNT_BOOT_COMPLETED, _MOUNT_HANDLE, _ADMIN_AUTODISCOVER_COMPLETE
     _MOUNT_BOOT_COMPLETED = False
     _MOUNT_HANDLE = None
-    _SETTINGS_MOUNT_REGISTERED = False
     _ADMIN_AUTODISCOVER_COMPLETE = False
     try:
         from django.contrib.admin.apps import AdminConfig
@@ -462,7 +354,6 @@ __all__ = [
     "maybe_auto_mount",
     "refresh_reflex_mount_catchall",
     "refresh_urlconf_after_admin",
-    "register_mount_from_settings",
     "schedule_auto_mount_after_admin",
     "should_defer_urlconf_import",
 ]

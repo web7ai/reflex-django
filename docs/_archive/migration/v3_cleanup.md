@@ -1,3 +1,5 @@
+> **Historical - pre-v4 only.** Current integration uses ReflexDjangoPlugin in xconfig.py. See [v4 migration](v4_plugin_only.md).
+
 # Migrating to reflex-django 3.0
 
 **Breaking change:** v3 removes legacy plugin/bootstrap APIs, tightens page discovery, and reorganizes internal modules. Most Django-first projects need only import and settings tweaks.

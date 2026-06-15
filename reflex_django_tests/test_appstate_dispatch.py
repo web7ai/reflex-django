@@ -20,7 +20,7 @@ from reflex_django.runtime.compile_validate import (  # noqa: E402
     missing_frontend_dispatchers,
 )
 from reflex_django.pages.decorators import clear_page_registry, page
-from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
+from reflex_django.mount.config import clear_mount_registration, register_mount
 from reflex_django.state.auth_bridge import (  # noqa: E402
     _handler_state_class_chain,
     _sync_auth_snapshots_in_tree,
@@ -38,14 +38,29 @@ class _HomeState(AppState):
 
 @pytest.fixture(autouse=True)
 def _reset() -> None:
-    clear_mount_rx_config()
-    register_mount_rx_config(app_name="demo")
+    clear_mount_registration()
+    register_mount(app_name="demo")
     reset_app_factory_cache()
     clear_page_registry()
     yield
     reset_app_factory_cache()
     clear_page_registry()
-    clear_mount_rx_config()
+    clear_mount_registration()
+
+
+@pytest.fixture(autouse=True)
+def _mock_test_reflex_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    import reflex as rx
+
+    app = rx.App()
+    monkeypatch.setattr(
+        "reflex_django.runtime.app_factory.load_native_reflex_app",
+        lambda: app,
+    )
+    monkeypatch.setattr(
+        "reflex_django.runtime.app_factory.load_app_factory",
+        lambda: app,
+    )
 
 
 def test_handler_state_class_chain_includes_appstate_ancestors() -> None:

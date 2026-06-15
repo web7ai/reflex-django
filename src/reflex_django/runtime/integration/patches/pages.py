@@ -52,9 +52,9 @@ def _resolve_decorated_pages_app_name() -> str:
     from reflex_base.config import get_config
 
     try:
-        from reflex_django.mount.config import has_mount_rx_config, resolve_app_name
+        from reflex_django.mount.config import has_mount_registration, resolve_app_name
 
-        if has_mount_rx_config():
+        if has_mount_registration():
             return resolve_app_name()
     except ImportError:
         pass

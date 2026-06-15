@@ -104,7 +104,7 @@ def filter_delta_to_compiled_dispatch_keys(
             f"{len(removed)} uncompiled substate(s): "
             + ", ".join(removed[:3])
             + (" …" if len(removed) > 3 else "")
-            + ". Re-run `python manage.py run_reflex` from the project root and "
+            + ". Re-run `reflex run` from the project root and "
             "hard-refresh the browser (Ctrl+Shift+R)."
         )
     return filtered
@@ -170,8 +170,8 @@ def warn_if_frontend_dispatchers_out_of_sync(
         + ", ".join(missing[:5])
         + (" …" if len(missing) > 5 else "")
         + ". This causes 'dispatch is not a function' in the browser. "
-        "Stop the dev server, run `python manage.py run_reflex` from the Django "
-        "project root (so pages recompile), then hard-refresh http://localhost:3000/ "
-        "(Ctrl+Shift+R). If the warning persists, delete `.web/` and run `run_reflex` again."
+        "Stop the dev server, run `reflex run` from the project root "
+        "(so pages recompile), then hard-refresh http://localhost:3000/ "
+        "(Ctrl+Shift+R). If the warning persists, delete `.web/` and run `reflex run` again."
     )
     return missing

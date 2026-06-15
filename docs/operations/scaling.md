@@ -32,9 +32,7 @@ RX_EVENT_BRIDGE_MODE = "smart"
 RX_PERFORMANCE_PRESET = "lean"
 
 # Multi-worker Reflex state (required when running >1 Reflex backend worker)
-RX_CONFIG = {
-    "redis_url": os.environ["REDIS_URL"],
-}
+redis_url in rx.Config (see rxconfig.py)
 
 # Session cache between events (choose backend via CACHES)
 CACHES = {
@@ -88,7 +86,7 @@ Browser -> CDN (/static/) -> reverse proxy
 Checklist:
 
 1. **Build SPA in CI**  -  do not rely on `RX_AUTO_EXPORT_ON_START` in production.
-2. **Redis** for `RX_CONFIG["redis_url"]` when multiple Reflex workers serve the same app.
+2. **Redis** for `redis_url in rx.Config` when multiple Reflex workers serve the same app.
 3. **Sessions**  -  prefer `cached_db` or cache-backed sessions so Django and Reflex agree on login state.
 4. **Proxy**  -  WebSocket upgrade on `/_event`, idle timeout >= 300s, `X-Forwarded-Proto` for HTTPS.
 5. **Workers**  -  start with 2–4 Django ASGI workers; scale Reflex workers with Redis state.
@@ -233,7 +231,7 @@ When enabled, bridge phases log timing at DEBUG. Zero overhead when `False`.
 | Smaller WebSocket deltas | `RX_PERFORMANCE_PRESET = "lean"` |
 | Session cache between events | `RX_EVENT_CACHE` + `CACHES` + TTL |
 | Flush cache on logout | `invalidate_event_cache()` |
-| Multi-worker Reflex | `RX_CONFIG["redis_url"]` |
+| Multi-worker Reflex | `redis_url in rx.Config` |
 | Skip URL resolve on events | `RX_EVENT_RESOLVE_URL = False` |
 | Debug timings | `RX_EVENT_METRICS = True` |
 

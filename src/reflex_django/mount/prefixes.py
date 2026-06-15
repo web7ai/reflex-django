@@ -119,10 +119,10 @@ def _resolve_django_prefix(
 
 
 def _mount_registry() -> Any:
-    from reflex_django.mount.config import ensure_mount_config_loaded, get_merged_mount_rx_config
+    from reflex_django.mount.config import ensure_mount_config_loaded, get_merged_mount_registration
 
     ensure_mount_config_loaded()
-    return get_merged_mount_rx_config()
+    return get_merged_mount_registration()
 
 
 def resolve_prefixes(
@@ -130,30 +130,13 @@ def resolve_prefixes(
     mount_prefix: str | None = None,
     django_prefix: str | tuple[str, ...] | None = None,
 ) -> DjangoPrefixConfig:
-    """Resolve path prefixes for django_led routing.
-
-    Prefer :func:`reflex_django.django.urls.reflex_mount` in ``urls.py`` with ``django_prefix``
-    listing every Django-owned path (``/admin``, ``/api``, webhooks, …).
-
-    Returns:
-        A frozen :class:`DjangoPrefixConfig`.
-    """
+    """Resolve path prefixes from plugin config and ``reflex_mount()``."""
     mount = _mount_registry()
-    registry_mount_prefix = mount.mount_prefix
-    registry_django_prefix = mount.django_prefix
-    if registry_django_prefix is None and mount.django_plugin:
-        plugin_prefix = mount.django_plugin.get("django_prefix")
-        if plugin_prefix is not None:
-            registry_django_prefix = _coerce_django_prefix(plugin_prefix)
-    if registry_mount_prefix is None and mount.django_plugin:
-        plugin_mount = mount.django_plugin.get("mount_prefix")
-        if isinstance(plugin_mount, str) and plugin_mount.strip():
-            registry_mount_prefix = plugin_mount.strip()
     return DjangoPrefixConfig(
         mount_prefix=_normalize_path_prefix(
             _resolve_prefix(
                 mount_prefix,
-                registry_value=registry_mount_prefix,
+                registry_value=mount.mount_prefix,
                 env_key="RX_MOUNT_PREFIX",
                 default="/",
             )
@@ -161,7 +144,7 @@ def resolve_prefixes(
         or "/",
         django_prefix=_resolve_django_prefix(
             django_prefix,
-            registry_value=registry_django_prefix,
+            registry_value=mount.django_prefix,
         ),
     )
 
@@ -180,20 +163,16 @@ def export_prefix_env(config: DjangoPrefixConfig) -> None:
 
 
 def export_rx_port_env() -> None:
-    """Sync ``frontend_port`` / ``backend_port`` from ``reflex_mount()`` to the env."""
+    """Sync ``frontend_port`` / ``backend_port`` from ``rx.Config`` to the env."""
     try:
-        from reflex_django.mount.config import (
-            ensure_mount_config_loaded,
-            get_merged_mount_rx_config,
-        )
+        from reflex_base.config import get_config
 
-        ensure_mount_config_loaded()
-        rx_config = get_merged_mount_rx_config().rx_config
+        cfg = get_config()
     except Exception:
         return
 
-    frontend_port = rx_config.get("frontend_port")
-    backend_port = rx_config.get("backend_port")
+    frontend_port = getattr(cfg, "frontend_port", None)
+    backend_port = getattr(cfg, "backend_port", None)
     if isinstance(frontend_port, int) and frontend_port > 0:
         os.environ.setdefault("RX_FRONTEND_PORT", str(frontend_port))
     if isinstance(backend_port, int) and backend_port > 0:

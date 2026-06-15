@@ -1,6 +1,6 @@
 ---
 level: intermediate
-tags: [integration, django]
+tags: [integration, django, plugin]
 ---
 
 # Add reflex-django to an existing Django project
@@ -12,11 +12,11 @@ tags: [integration, django]
 - You already run Django in production and want reactive pages on the same origin.
 - You want to keep DRF, webhooks, and management commands exactly as they are.
 
-Good news: you add reflex-django like any other Django app. Your models stay put. Your API stays put. You drop `@page` functions into an app's `views.py`.
+You add reflex-django like any other Django app. Your models stay put. Your API stays put. You register pages in `{app_name}/{app_name}.py` or with `@page` in `views.py`.
 
-**Coming from plain Reflex?** See [Add to an existing Reflex project](existing_reflex_project.md) (settings path) or [Plugin path](existing_reflex_project_plugin.md) (keep `rxconfig.py` and `reflex run`).
+**Coming from plain Reflex?** See [Plugin path](existing_reflex_project_plugin.md) (same integration model; you already have `rxconfig.py`).
 
-**Not sure which guide?** See [Getting started — brownfield](index.md#brownfield-integration).
+**Not sure which guide?** See [Getting started - brownfield](index.md#brownfield-integration).
 
 ---
 
@@ -25,11 +25,11 @@ Good news: you add reflex-django like any other Django app. Your models stay put
 - [ ] `uv add reflex reflex-django` (or `pip install`)
 - [ ] `"reflex_django"` in `INSTALLED_APPS`
 - [ ] `AsyncStreamingMiddleware` last in `MIDDLEWARE`
-- [ ] `RX_CONFIG` in `settings.py`
-- [ ] `import yourapp.views` in `urls.py` (so `@page` registers)
-- [ ] `config/asgi.py` → plain `get_asgi_application()` (see `snippets/minimal_asgi.py` in the repo docs)
-- [ ] First `@page` in `{app}/views.py` with optional `AppState`
-- [ ] `python manage.py run_reflex` (not `runserver` + `reflex run`)
+- [ ] `rxconfig.py` with `ReflexDjangoPlugin` and `rx.Config(...)`
+- [ ] `{app_name}/{app_name}.py` with `app = rx.App()` (and `app.add_page(...)` or imports)
+- [ ] `import yourapp.views` in `urls.py` when using `@page` in `views.py`
+- [ ] `config/asgi.py` → plain `get_asgi_application()`
+- [ ] `reflex run` for dev; `reflex export` for production builds
 
 ---
 
@@ -38,11 +38,11 @@ Good news: you add reflex-django like any other Django app. Your models stay put
 | You keep | You add |
 |:---|:---|
 | `manage.py`, models, migrations, admin | `reflex_django` in `INSTALLED_APPS` |
-| Existing `/api/` and templates | `RX_CONFIG`; page imports in `urls.py` |
-| Custom middleware | `AsyncStreamingMiddleware` at the bottom; optional `DEFAULT_DEV_MIDDLEWARE` in dev |
-| DRF views, webhooks, scripts | `@page` pages in any app's `views.py` |
+| Existing `/api/` and templates | `rxconfig.py` + `{app_name}/{app_name}.py` |
+| Custom middleware | `AsyncStreamingMiddleware` at the bottom |
+| DRF views, webhooks, scripts | Reflex pages (`app.add_page` or `@page`) |
 
-You do **not** add `rxconfig.py`. You do **not** add `{app}/{app}.py`.
+You **do** add `rxconfig.py` and `{app_name}/{app_name}.py`. You **do not** add `RX_CONFIG` to `settings.py` (removed in v4).
 
 ---
 
@@ -50,169 +50,107 @@ You do **not** add `rxconfig.py`. You do **not** add `{app}/{app}.py`.
 
 ```bash
 uv add reflex reflex-django
-# or
-pip install reflex reflex-django
 ```
 
 ---
 
 ## 2. Register the app
 
+In `settings.py`:
+
 ```python
---8<-- "snippets/minimal_settings.py"
+INSTALLED_APPS = [
+    # ...
+    "reflex_django",
+]
+
+MIDDLEWARE = [
+    # ...
+    "reflex_django.middleware.AsyncStreamingMiddleware",  # must be last
+]
 ```
-
-For local dev (admin from `:3000`), prepend dev middleware and CSRF origins. See [Local development](local_development.md).
-
-The streaming middleware must be **last**. It keeps Django admin streaming responses ASGI-safe. See [Async streaming middleware](../internals/streaming_middleware.md).
 
 ---
 
-## 3. Configure Reflex and import pages
+## 3. Add `rxconfig.py`
+
+At the project root (next to `manage.py`):
 
 ```python
---8<-- "snippets/minimal_urls.py"
-```
-
-Auto-detection reads the **first segment** of each top-level `path()` (`path("api/", include(...))` covers `/api/products/`, and so on). Pass explicit `RX_DJANGO_PREFIX` only if auto-detection misses a prefix. See [The three knobs](../overview/concepts.md).
-
----
-
-## 4. Point ASGI at reflex-django
-
-```python
---8<-- "snippets/minimal_asgi.py"
-```
-
-If you deploy with WSGI today (`gunicorn` sync workers), plan a move to an ASGI server (uvicorn, granian, hypercorn). See [Deployment](../operations/deployment.md).
-
----
-
-## 5. Add a Reflex page
-
-Pick any app in `INSTALLED_APPS` (usually the one in `app_name`):
-
-```python
-# shop/views.py
 import reflex as rx
-from reflex_django.pages.decorators import page
-from reflex_django.states import AppState
+from reflex_django.plugins import ReflexDjangoPlugin
 
-# ... existing Django views can stay unchanged ...
-
-
-class CatalogState(AppState):
-    products: list[dict] = []
-
-    @rx.event
-    async def load(self):
-        from shop.models import Product
-        self.products = [
-            {"id": p.id, "name": p.name, "price": str(p.price)}
-            async for p in Product.objects.filter(is_active=True)
-        ]
-
-
-@page(route="/catalog", title="Catalog", on_load=CatalogState.load)
-def catalog() -> rx.Component:
-    return rx.vstack(
-        rx.heading("Catalog"),
-        rx.foreach(
-            CatalogState.products,
-            lambda p: rx.text(p["name"], " - $", p["price"]),
-        ),
-    )
+config = rx.Config(
+    app_name="myshop",
+    frontend_port=3000,
+    backend_port=8000,
+    plugins=[
+        ReflexDjangoPlugin(config={
+            "settings_module": "config.settings",
+            "django_prefix": ("/admin", "/api"),
+            "mount_prefix": "/",
+            "auto_mount": True,
+        }),
+        rx.plugins.RadixThemesPlugin(),
+    ],
+)
 ```
 
-This file can hold both Django views (`HttpResponse`) and Reflex pages (`rx.Component`). They do not collide.
+Plugin `config` keys (v4): `settings_module`, `django_prefix`, `mount_prefix`, `auto_mount` only.
 
-!!! tip "Import models inside handlers"
-    `views.py` may import before Django's app registry is ready. Importing models inside `@rx.event` handlers avoids `AppRegistryNotReady`.
+---
+
+## 4. Add the Reflex app module
+
+Create `myshop/myshop.py` (match `app_name` in `rxconfig.py`):
+
+```python
+import reflex as rx
+
+app = rx.App()
+app.add_page(lambda: rx.text("Hello from Django + Reflex"), route="/")
+```
+
+For `@page` decorators in Django `views.py`, see [App entry and pages](../guides/app_entry_and_pages.md).
+
+---
+
+## 5. Wire URLs and ASGI
+
+Import page modules in `urls.py` so `@page` registers at startup:
+
+```python
+from django.urls import path, include
+import myshop.views  # noqa: F401
+
+urlpatterns = [
+  path("admin/", admin.site.urls),
+  # reflex_mount catch-all is added by the plugin when auto_mount=True
+]
+```
+
+`asgi.py` stays standard:
+
+```python
+import os
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+application = get_asgi_application()
+```
 
 ---
 
 ## 6. Run
 
---8<-- "snippets/run_reflex_command.md"
-
-- `http://localhost:3000/`: new Reflex pages (SPA + hot reload)
-- `http://localhost:3000/admin/` or `http://localhost:8000/admin/`: admin (Django mounted in Reflex backend)
-- `http://localhost:3000/api/...` or `http://localhost:8000/api/...`: existing API
-
-With `RX_SEPARATE_DEV_PORTS=True`, Vite on `:3000` proxies admin, API, and `/_event` to the Reflex backend. Optional: `--env dev` to browse only `:8000`.
-
----
-
-## How it sits beside your API
-
-| Path | Who handles it |
-|:---|:---|
-| `/admin/...` | Your admin |
-| `/api/...` | Your DRF / function views |
-| `/webhooks/...` | Your webhook handlers |
-| `/_event`, `/_upload`, `/_health` | Reflex internals |
-| `/`, `/catalog`, `/about`, ... | Reflex SPA |
-
-Same origin, same cookies. Mobile clients can keep hitting `/api/` while browsers get the SPA at `/`. See [Routing](../internals/routing.md).
-
----
-
-## Optional split-process dev
-
-If you need Django on `runserver` separately from Reflex, set `RX_PROXY_SERVER` and run both processes. See [Routing](../internals/routing.md) and [Local development](local_development.md).
-
---8<-- "snippets/proxy_server_settings.py"
-
----
-
-## Pages in a different package
-
-**Option A (recommended):** Use a page registry hub in `{app_name}/views.py` that imports every `@page` module, then import that hub from `urls.py`:
-
-```python
-# shop/views.py  ({app_name}/views.py)
-import frontend.pages.home  # noqa: F401
-import frontend.pages.catalog  # noqa: F401
+```bash
+reflex run
 ```
 
-```python
-# urls.py
-import shop.views  # noqa: F401
-```
-
-**Option B:** List explicit modules in settings (compile imports only these modules):
-
-```python
-RX_PAGE_PACKAGES = ["frontend.pages.home", "frontend.pages.catalog"]
-```
-
-When `RX_PAGE_PACKAGES` is non-empty, compile time imports only the listed modules instead of default `{app_name}.views`. See [App entry module and page registration](../guides/app_entry_and_pages.md).
+Use `reflex django migrate` or `python manage.py migrate` for Django tasks.
 
 ---
 
-## Common bumps
+**Migrating from v3 django-first?** See [v4: Plugin-only integration](../reference/migration/v4_plugin_only.md).
 
-**`AppRegistryNotReady`**
-Move model imports inside handlers.
-
-**404 on `/api/orders/`**
-Ensure `path("api/", ...)` appears in `urlpatterns` before the SPA catch-all. Auto-detection should pick up `/api`. For unusual layouts, set `RX_DJANGO_PREFIX`.
-
-**Port conflict**
-Do not run `runserver 8000` alongside `run_reflex`.
-
-**Leftover `rxconfig.py`**
-Delete it. Config lives in `settings.py` now.
-
-**Middleware not running on Reflex events**
-It does run by default. See [Custom middleware in events](../guides/middleware.md) if something specific is skipped.
-
----
-
-## What just happened?
-
-You treated reflex-django as another Django app: installed it, pointed ASGI at the combined entry, imported pages from `urls.py`, and started the default two-port dev loop. Your existing models and API stayed untouched while Reflex pages joined the same origin.
-
----
-
-**Next up:** [Add to an existing Reflex project](existing_reflex_project.md) · [Project structure](project_structure.md)
+**Next:** [Plugin path details](existing_reflex_project_plugin.md) · [Local development](local_development.md)

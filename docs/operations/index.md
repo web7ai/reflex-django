@@ -1,14 +1,11 @@
 # Operations
 
-Run, test, deploy, and tune reflex-django in real environments.
+Run, build, deploy, and debug reflex-django projects.
 
-| Page | When to open it |
+| Topic | Guide |
 |:---|:---|
-| [CLI](cli.md) | `manage.py` commands and `run_reflex` flags |
-| [Testing](testing.md) | Pytest patterns for pages and state |
-| [Deployment](deployment.md) | Production ASGI, static export, one port |
-| [Scaling](scaling.md) | Event bridge tiers, cache, lean preset, metrics |
-| [Troubleshooting](troubleshooting.md) | Common errors and fixes |
-| [Best practices](best_practices.md) | Project hygiene and performance tips |
-
-**Deep dives:** [Internals](../internals/index.md) | **Settings tables:** [Reference settings](../reference/settings.md)
+| Commands | [CLI](cli.md) |
+| Local dev | [Local development](../getting-started/local_development.md) |
+| Deploy | [Deployment](deployment.md) |
+| Debug | [Troubleshooting](troubleshooting.md) |
+| Tests | [Testing](testing.md) |

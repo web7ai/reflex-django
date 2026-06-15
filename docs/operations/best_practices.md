@@ -102,11 +102,11 @@ These are defaults that work well for most projects, not hard rules.
 
 ## Dev workflow
 
-**`run_reflex`** when iterating on Reflex pages (Vite HMR on `:3000`).
+**`reflex run`** when iterating on Reflex pages (Vite HMR on `:3000`).
 
-**`run_reflex --from-build --skip-rebuild`** when you only touch Django models or admin.
+**`reflex run --from-build --skip-rebuild`** when you only touch Django models or admin.
 
-**`run_reflex --env prod --skip-rebuild`** to validate the production bundle locally before ship (browse `:8000`). See [Deployment](deployment.md).
+**`reflex run --env prod --skip-rebuild`** to validate the production bundle locally before ship (browse `:8000`). See [Deployment](deployment.md).
 
 **Keep `.web/` and `.reflex/` in `.gitignore`.**
 

@@ -25,10 +25,10 @@ In standalone Reflex, one file (`myapp/myapp.py`) holds the app object and impor
 |:---|:---|:---|
 | `myapp/myapp.py` | `{app_name}/{app_name}.py` | **Entry module** - Reflex's toolchain expects `{app_name}.{app_name}:app` on disk |
 | Page imports in `myapp.py` | Imports in `{app_name}/views.py` | **Page registry hub** - import every module that defines `@page` |
-| `rxconfig.py` | `RX_CONFIG` in `settings.py` | Ports, plugins, compile label (`app_name`) |
+| `rxconfig.py` | `rxconfig.py` | Ports, plugins, compile label (`app_name`) |
 | N/A | `RX_PAGE_PACKAGES` | Optional explicit list of modules to import at **compile time** |
 
-Example with `RX_CONFIG = {"app_name": "shop"}`:
+Example with `app_name in rx.Config`:
 
 ```text
 myproject/
@@ -60,10 +60,10 @@ You can wire imports through:
 
 ### Job B - Satisfy Reflex
 
-Reflex still expects a file at `{app_name}/{app_name}.py`. On first `run_reflex`, reflex-django creates a thin stub if missing. Keep it small: re-export the shared `app` object. **Do not treat it as your main place for product pages** in larger projects.
+Reflex expects a file at `{app_name}/{app_name}.py` with your own `app = rx.App()`. You own this module in v4 (no auto-generated stub). Keep product `@page` modules in `views.py`; use the entry module for `app.add_page(...)` only in small apps.
 
 !!! tip "Do not mix up entry module and page registry"
-    **`{app_name}/{app_name}.py`** = Reflex entry stub (toolchain requirement).
+    **`{app_name}/{app_name}.py`** = your Reflex app module (`app = rx.App()`).
 
     **`{app_name}/views.py`** = where you import modules so `@page` runs (Django-friendly page hub).
 
@@ -73,7 +73,7 @@ Reflex still expects a file at `{app_name}/{app_name}.py`. On first `run_reflex`
 
 ## Recommended pattern (default)
 
-Use one **page registry hub** in `{app_name}/views.py`. Keep the entry module as a stub.
+Use one **page registry hub** in `{app_name}/views.py`. Define `app` in the entry module.
 
 **1. Page hub** - import every module that defines `@page`:
 
@@ -83,13 +83,14 @@ import blog.views  # noqa: F401
 import frontend.pages.home  # noqa: F401
 ```
 
-**2. Entry stub** - satisfy Reflex, do not put product pages here:
+**2. Entry module** - your Reflex app (match `app_name` in `rxconfig.py`):
 
 ```python
 # shop/shop.py  ({app_name}/{app_name}.py)
-from reflex_django.runtime.reflex_app import app
+import reflex as rx
 
-__all__ = ["app"]
+app = rx.App()
+# optional: app.add_page(...) or import shop.views
 ```
 
 **3. Django URLs** - run decorators at startup:
@@ -106,7 +107,7 @@ import shop.views  # noqa: F401
 RX_PAGE_PACKAGES = ["shop.views"]
 ```
 
-When `RX_PAGE_PACKAGES` is empty, compile time imports `{app_name}.views` automatically (from `RX_CONFIG["app_name"]`). When it is non-empty, **only** the listed modules are imported at compile time - so the hub must import all page submodules, or you must list them explicitly.
+When `RX_PAGE_PACKAGES` is empty, compile time imports `{app_name}.views` automatically (from `app_name in rx.Config`). When it is non-empty, **only** the listed modules are imported at compile time - so the hub must import all page submodules, or you must list them explicitly.
 
 ---
 
@@ -119,7 +120,7 @@ flowchart TD
   urlsImport["urls.py imports app_name.views hub"]
   hubImport["app_name/views.py imports page modules"]
   pageDec["@page decorators run"]
-  compile["run_reflex compile"]
+  compile["reflex run compile"]
   prepare["prepare_pages_for_compile"]
   packages["import RX_PAGE_PACKAGES or app_name.views"]
   entry["import_app_entry_module app_name/app_name.py"]
@@ -136,7 +137,7 @@ At compile time, reflex-django calls `prepare_pages_for_compile()`, which:
 
 1. Imports page packages (`RX_PAGE_PACKAGES` or default `{app_name}.views`)
 2. Imports the entry module (`{app_name}/{app_name}.py`)
-3. Syncs decorated pages onto the shared `app` and builds `.web/`
+3. Syncs decorated pages onto your `app` from `{app_name}/{app_name}.py` and builds `.web/`
 
 Both `urls.py` imports and compile imports matter. If compile never sees a module, the SPA bundle will miss that route even if Django imported it earlier.
 
@@ -156,36 +157,19 @@ Both `urls.py` imports and compile imports matter. If compile never sees a modul
 
 ## Custom `rx.App` configuration
 
-To set `theme`, `head_components`, or other `rx.App(...)` options:
-
-**Option A - factory setting (recommended):**
+Set `theme`, `head_components`, and other options on `app = rx.App(...)` in `{app_name}/{app_name}.py`:
 
 ```python
-# settings.py
-RX_CREATE_APP = "myproject.reflex.create_app"
-```
-
-```python
-# myproject/reflex.py
+# shop/shop.py
 import reflex as rx
 
-def create_app() -> rx.App:
-    return rx.App(
-        theme=rx.theme(accent_color="blue"),
-        head_components=[rx.el.link(rel="stylesheet", href="/static/custom.css")],
-    )
+app = rx.App(
+    theme=rx.theme(accent_color="blue"),
+    head_components=[rx.el.link(rel="stylesheet", href="/static/custom.css")],
+)
 ```
 
-**Option B - assign before first compile (advanced):**
-
-```python
-import reflex as rx
-import reflex_django.runtime.reflex_app as reflex_app_module
-
-reflex_app_module._app = rx.App(theme=rx.theme(accent_color="green"))
-```
-
-Do **not** write `app._app = rx.App(...)` after `from reflex_django import app`. That sets a random attribute on the existing App instance; Reflex still compiles the default app.
+Or use `create_app()` from `reflex_django` when Django must be configured before constructing the app. See [Public API](../reference/api.md).
 
 See [Configuration](../getting-started/configuration.md) for other `RX_*` settings.
 
@@ -195,11 +179,9 @@ See [Configuration](../getting-started/configuration.md) for other `RX_*` settin
 
 | Do not | Why |
 |:---|:---|
-| Assign `app._app = rx.App(...)` in `{app_name}/{app_name}.py` | Does not replace the singleton; theme/CSS never reach compile |
 | Put all product pages only in `{app_name}/{app_name}.py` without importing other apps | Other apps' `@page` modules never run; routes like `/` may be missing |
-| Expect reflex-django to scan every `INSTALLED_APPS` entry for `views.py` | Removed in v3; you must import page modules explicitly |
+| Expect reflex-django to scan every `INSTALLED_APPS` entry for `views.py` | You must import page modules explicitly |
 | Set `RX_PAGE_PACKAGES = ["shop.views"]` but forget to import submodules inside the hub | Compile imports only `shop.views`; nested pages are skipped |
-| Register the same route in both entry module and views without understanding compile order | Confusing duplicates; pick one primary location |
 | Skip `import {app_name}.views` in `urls.py` | Decorators may not run at Django startup; state and routing can drift |
 
 ---
@@ -212,11 +194,11 @@ See [Configuration](../getting-started/configuration.md) for other `RX_*` settin
 
 **Fix checklist:**
 
-1. List routes reflex-django registered - restart `run_reflex` and check compile logs, or inspect `.web/` after build.
+1. List routes reflex-django registered - restart `reflex run` and check compile logs, or inspect `.web/` after build.
 2. Is every `@page` module imported from `{app_name}/views.py` (or listed in `RX_PAGE_PACKAGES`)?
 3. Does `urls.py` import the hub? (e.g. `import shop.views  # noqa: F401` when `app_name` is `"shop"`)
 4. If using `RX_PAGE_PACKAGES`, does each listed module import all page submodules?
-5. Restart `run_reflex`. If still broken, delete `.web/` and run again.
+5. Restart `reflex run`. If still broken, delete `.web/` and run again.
 
 **Related:** [Troubleshooting - Blank SPA](../operations/troubleshooting.md#blank-spa-or-missing-home-route), [Pages in views.py](pages.md)
 
@@ -240,7 +222,7 @@ As long as `shop/views/__init__.py` imports every page submodule, a single `impo
 
 ## What just happened?
 
-You learned that **`{app_name}/{app_name}.py` is the Reflex entry stub**, **`{app_name}/views.py` is your page registry hub**, and **`RX_PAGE_PACKAGES` is an optional compile-time import list**. Use one hub that imports every `@page` module, keep the entry module thin, and import the hub from `urls.py`.
+You learned that **`{app_name}/{app_name}.py` holds your `app = rx.App()`**, **`{app_name}/views.py` is your page registry hub**, and **`RX_PAGE_PACKAGES` is an optional compile-time import list**.
 
 ---
 

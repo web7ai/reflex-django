@@ -5,14 +5,12 @@ tags: [setup]
 
 # Install
 
-**What you will learn:** How to add reflex-django to a Django project so one command runs Vite and the ASGI backend together.
+**What you will learn:** How to add reflex-django to a Django project and run `reflex run` for local dev.
 
 **When you need this:**
 
 - You are starting a new hybrid Django + Reflex app, or you are about to follow the todo tutorial.
 - You already have Django and want the minimum wiring before writing your first `@page`.
-
-If you want the "why" before the "how", read [Why reflex-django exists](../overview/concepts.md) first. Otherwise, dive in. (Three packages and you are most of the way there.)
 
 ---
 
@@ -31,17 +29,14 @@ If you want the "why" before the "how", read [Why reflex-django exists](../overv
 
 | You already have | Read |
 |:---|:---|
-| A **Django** project (models, admin, API) | [Add to an existing Django project](existing_django_project.md) |
-| A **Reflex** project — move config to settings | [Add to an existing Reflex project](existing_reflex_project.md) |
-| A **Reflex** project — keep `rxconfig.py` and `reflex run` | [Plugin path for existing Reflex](existing_reflex_project_plugin.md) |
+| A **Django** project | [Add to an existing Django project](existing_django_project.md) |
+| A **Reflex** project | [Plugin path](existing_reflex_project_plugin.md) |
 
-All three paths share the same Django shell, session cookies, and event bridge. Only the config source and dev entry command differ.
+Both use `ReflexDjangoPlugin` in `rxconfig.py` and `reflex run` for dev.
 
 ---
 
 ## 1. Install the packages
-
-We recommend [`uv`](https://github.com/astral-sh/uv), but `pip` works fine too.
 
 === "uv (recommended)"
 
@@ -55,71 +50,71 @@ We recommend [`uv`](https://github.com/astral-sh/uv), but `pip` works fine too.
     pip install django reflex reflex-django
     ```
 
-That installs Django, Reflex, and reflex-django. Nothing else to install.
-
 ---
 
 ## 2. Register `reflex_django` in settings
-
-Add `"reflex_django"` to `INSTALLED_APPS`, your app, and append streaming middleware last in `MIDDLEWARE`:
 
 ```python
 --8<-- "snippets/minimal_settings.py"
 ```
 
-**Why the streaming middleware?** Django admin sometimes streams large responses. Under ASGI, that needs a small shim at the end of the middleware stack. It is harmless on plain HTTP servers. See [Async streaming middleware](../internals/streaming_middleware.md) if you are curious.
+Append `AsyncStreamingMiddleware` last. See [Async streaming middleware](../internals/streaming_middleware.md).
 
 ---
 
-## 3. Wire `urls.py` and import pages
+## 3. Add `rxconfig.py`
 
-Import your page module so `@page` decorators register at startup. The SPA catch-all mounts automatically when `RX_AUTO_MOUNT=True` (the default):
+At the project root (next to `manage.py`):
+
+```python
+--8<-- "snippets/minimal_rxconfig.py"
+```
+
+---
+
+## 4. Add the Reflex app module
+
+Create `shop/shop.py` (match `app_name` in `rxconfig.py`):
+
+```python
+import reflex as rx
+
+app = rx.App()
+```
+
+---
+
+## 5. Wire `urls.py`
 
 ```python
 --8<-- "snippets/minimal_urls.py"
 ```
 
-`RX_CONFIG` in settings tells reflex-django which Django app owns the Reflex pages and which dev ports to use. See [Configuration](configuration.md) for every option.
-
 ---
 
-## 4. Point ASGI at reflex-django
+## 6. Point ASGI at Django
 
 ```python
 --8<-- "snippets/minimal_asgi.py"
 ```
 
-This is your Django ASGI entry for production. Dev uses `manage.py run_reflex`, which runs the Reflex backend with Django mounted in-process.
-
 ---
 
-## 5. Run
+## 7. Run
 
---8<-- "snippets/run_reflex_command.md"
+--8<-- "snippets/reflex_run_command.md"
 
-The first run compiles the SPA and starts Vite. That can take a minute. After that, edits hot-reload on `:3000`.
-
-!!! warning "Production settings"
-    In production, always set `DJANGO_SETTINGS_MODULE` to your real settings module. Do not rely on `reflex_django.setup.default_settings` (insecure dev `SECRET_KEY`). See [Deployment](../operations/deployment.md).
+The first run compiles the SPA and starts Vite. That can take a minute.
 
 ---
 
 ## Common bumps
 
 **`AppRegistryNotReady` at import time**
-You imported a Django model at the top of `views.py`. Move the import inside your `@rx.event` handler.
-
-**Settings seem ignored**
-`DJANGO_SETTINGS_MODULE` from your shell wins over everything. Run `python -c "import os; print(os.environ.get('DJANGO_SETTINGS_MODULE'))"` to see what is set.
+Move Django model imports inside `@rx.event` handlers.
 
 **`ModuleNotFoundError: shop.shop`**
-Delete any leftover `rxconfig.py`. Set `"app_name": "shop"` in `RX_CONFIG` and import `shop.views` in `urls.py`. You do not need `{app}/{app}.py`.
-
----
-
-## What just happened?
-
-You installed three packages, registered one Django app, pointed ASGI at plain Django, and started the default two-port dev loop. Vite serves the SPA on `:3000`; the Reflex backend on `:8000` serves admin, API, and `/_event` with Django mounted in-process.
+Create `shop/shop.py` with `app = rx.App()` and set `app_name="shop"` in `rxconfig.py`.
 
 ---
 

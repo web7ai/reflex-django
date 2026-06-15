@@ -1,4 +1,6 @@
-﻿# RX settings rename
+> **Historical - pre-v4 only.** Current integration uses ReflexDjangoPlugin in xconfig.py. See [v4 migration](v4_plugin_only.md).
+
+# RX settings rename
 
 **Breaking change:** all `REFLEX_DJANGO_*` Django settings and environment variables are now `RX_*`. There are no deprecated aliases.
 

@@ -444,7 +444,7 @@ class ProductState(ModelState):
 ```
 
 !!! tip "Class body vs inner Meta"
-    v1.0 prefers settings on the class body (`paginate_by = 10`) for IDE autocomplete. An inner `class Meta(ModelCRUDMeta):` still works for overrides.
+    Prefer settings on the class body (`paginate_by = 10`) for IDE autocomplete. An inner `class Meta(ModelCRUDMeta):` still works for overrides.
 
 ### UI (excerpt)
 

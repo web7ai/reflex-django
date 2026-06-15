@@ -18,8 +18,6 @@ ALLOWED_PLUGIN_CONFIG_KEYS: frozenset[str] = frozenset(
         "django_prefix",
         "mount_prefix",
         "auto_mount",
-        "urlconf",
-        "rx_config",
     }
 )
 
@@ -90,12 +88,12 @@ class ReflexDjangoPlugin(Plugin):
         self._ensure_bootstrap()
 
     def _ensure_bootstrap(self) -> None:
-        from reflex_django.runtime.integration import install_reflex_first_integration
+        from reflex_django.runtime.integration import install_plugin_integration
         from reflex_django.runtime.integration.registry import is_installed
 
         if is_installed():
             return
-        install_reflex_first_integration(self)
+        install_plugin_integration(self)
 
 
 RXDJANGOPLUGIN = ReflexDjangoPlugin

@@ -1,16 +1,14 @@
-﻿"""Tests for Django-first dev reload path resolution."""
+﻿"""Tests for plugin dev reload path resolution."""
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import pytest
 
-from reflex_django.mount.config import clear_mount_rx_config, register_mount_rx_config
-from reflex_django.runtime.app_factory import _APP_MODULE_STUB_MARKER
+from reflex_django.mount.config import clear_mount_registration
 from reflex_django.runtime.integration import (
-    install_reflex_django_integration,
+    install_bootstrap_patches,
     reset_integration_for_tests,
 )
 
@@ -19,10 +17,10 @@ from reflex_django.runtime.integration import (
 def _reset_integration() -> None:
     yield
     reset_integration_for_tests()
-    clear_mount_rx_config()
+    clear_mount_registration()
 
 
-def test_reload_paths_watch_django_project_not_reflex_django_package(
+def test_plugin_reload_paths_watch_django_project(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -42,34 +40,16 @@ def test_reload_paths_watch_django_project_not_reflex_django_package(
     from django.conf import settings
 
     monkeypatch.setattr(settings, "BASE_DIR", project, raising=False)
-    register_mount_rx_config(app_name="myapp")
 
-    install_reflex_django_integration()
+    install_bootstrap_patches(patch_get_config=False)
 
-    from reflex_base.config import get_config
-    from reflex.utils.exec import get_reload_paths
-    from reflex.utils.prerequisites import _check_app_name
+    from reflex_django.dev.watch import plugin_reload_paths
 
-    cfg = get_config()
-    assert cfg.app_module_import == "myapp.myapp"
-    assert cfg.module == "myapp.myapp"
-
-    stub = project / "myapp" / "myapp.py"
-    assert stub.is_file()
-    assert _APP_MODULE_STUB_MARKER in stub.read_text(encoding="utf-8")
-
-    _check_app_name(cfg)
-
-    app_mod = importlib.import_module("myapp.myapp")
-    assert app_mod.app is not None
-
-    reload_paths = [p.resolve() for p in get_reload_paths()]
+    reload_paths = [p.resolve() for p in plugin_reload_paths()]
     assert shop.resolve() in reload_paths
 
     reflex_pkg_root = (
-        Path(importlib.import_module("reflex_django.runtime.reflex_app").__file__)
-        .resolve()
-        .parent.parent
+        Path(__import__("reflex_django").__file__).resolve().parent
     )
     assert reflex_pkg_root not in reload_paths
 

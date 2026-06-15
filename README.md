@@ -28,25 +28,40 @@ You love Django. You also want a modern, reactive UI in Python, not a separate R
 
 | You already have | Integration guide | Dev command |
 |:---|:---|:---|
-| **A Django project** | [Existing Django project](https://web7ai.github.io/reflex-django/getting-started/existing_django_project/) | `python manage.py run_reflex` |
-| **A Reflex project** (move config to settings) | [Existing Reflex project](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project/) | `python manage.py run_reflex` |
-| **A Reflex project** (keep `rxconfig.py`) | [Reflex plugin path](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project_plugin/) | `reflex run` |
+| **A Reflex + Django project** | [Plugin integration](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project_plugin/) | `reflex run` |
 
-**Django-first** (default): config in `settings.py` (`RX_CONFIG`), pages in `views.py`, `from reflex_django import app`.
-
-**Reflex-first** (plugin): add `ReflexDjangoPlugin(config={...})` to `rxconfig.py`, keep `app = rx.App()`, use `reflex run` / `reflex export`.
-
-Both paths need a Django shell (`manage.py`, `settings.py`, `urls.py`) for ORM, admin, and migrations.
+Add `ReflexDjangoPlugin` to `rxconfig.py`, keep `app = rx.App()` in `{app}/{app}.py`, and use normal Django settings for ORM, admin, and migrations.
 
 ---
 
-## Minimal setup (new Django project)
+## Minimal setup
 
 ```bash
 uv add django reflex reflex-django
 ```
 
-`config/settings.py`:
+`rxconfig.py`:
+
+```python
+import reflex as rx
+from reflex_django.plugins import ReflexDjangoPlugin
+
+config = rx.Config(
+    app_name="shop",
+    frontend_port=3000,
+    backend_port=8000,
+    plugins=[
+        ReflexDjangoPlugin(config={
+            "settings_module": "config.settings",
+            "django_prefix": ("/admin", "/api"),
+            "mount_prefix": "/",
+            "auto_mount": True,
+        }),
+    ],
+)
+```
+
+`config/settings.py` (Django only — no `RX_CONFIG`):
 
 ```python
 INSTALLED_APPS = [
@@ -70,12 +85,14 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "reflex_django.bridge.streaming.AsyncStreamingMiddleware",
 ]
+```
 
-RX_CONFIG = {
-    "app_name": "shop",
-    "frontend_port": 3000,
-    "backend_port": 8000,
-}
+`shop/shop.py`:
+
+```python
+import reflex as rx
+
+app = rx.App()
 ```
 
 `config/urls.py`:
@@ -131,58 +148,56 @@ def index() -> rx.Component:
 Run:
 
 ```bash
-python manage.py migrate
-python manage.py run_reflex
+reflex django migrate
+reflex run
 ```
 
 Open **http://localhost:3000/** for the Reflex UI. Admin at **http://localhost:8000/admin/** (or via `:3000` when Vite proxies are active).
 
 ---
 
-## Existing Django project
+## Dev proxy: `RX_PROXY_SERVER` (optional)
 
-You keep models, admin, DRF, and webhooks. You add:
+**Default — leave unset.** `reflex run` mounts Django inside the Reflex backend on `:8000`. Vite on `:3000` proxies admin, API, `/_event`, and the SPA to that single backend. One command, shared cookies on the browser origin.
 
-1. `reflex-django` to `INSTALLED_APPS` and `RX_CONFIG` in `settings.py`
-2. `@page` functions in `{app}/views.py` (import the module in `urls.py`)
-3. `python manage.py run_reflex` for local dev
+**Split Django — set when Django runs separately.** If you prefer `python manage.py runserver` in its own terminal (or Django on another host), point reflex-django at it:
 
-Full walkthrough: **[Add to an existing Django project](https://web7ai.github.io/reflex-django/getting-started/existing_django_project/)**
+```python
+# config/settings.py
+RX_PROXY_SERVER = "http://127.0.0.1:8000"
+```
+
+Then:
+
+```bash
+# Terminal 1
+python manage.py runserver
+
+# Terminal 2
+reflex run
+```
+
+Vite still serves the SPA on `:3000`, but `/admin` and `/api` proxy to your Django server; `/_event` and other Reflex paths stay on the Reflex backend. reflex-django skips in-process Django dispatch when `RX_PROXY_SERVER` is set.
+
+| | Default (unset) | `RX_PROXY_SERVER` set |
+|:---|:---|:---|
+| Django | Mounted in Reflex backend | Separate `runserver` (or other HTTP server) |
+| Dev commands | `reflex run` only | `runserver` + `reflex run` |
+| Typical use | Most projects | Django-only debugging, familiar two-process dev |
+
+This is a **dev-only** setting. Production uses your reverse proxy and plain Django ASGI — not `RX_PROXY_SERVER`.
+
+More: [Local development](https://web7ai.github.io/reflex-django/getting-started/local_development/) · [Routing](https://web7ai.github.io/reflex-django/internals/routing/)
 
 ---
 
-## Existing Reflex project
+## Existing projects
 
-You keep page components and most event handlers. You wrap the app in a Django shell for ORM, admin, and sessions.
+Add Django (`manage.py`, `settings.py`, `urls.py`), put `ReflexDjangoPlugin` in `rxconfig.py`, and use `reflex run`.
 
-**Option A — settings path** (recommended for long-term Django-first layout):
+Guide: **[Plugin integration](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project_plugin/)**
 
-- Move `rxconfig.py` fields → `RX_CONFIG` in `settings.py`
-- Replace `app = rx.App()` with `from reflex_django import app` (or keep pages in `views.py` with `@page`)
-- Dev: `python manage.py run_reflex`
-
-Guide: **[Add to an existing Reflex project](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project/)**
-
-**Option B — plugin path** (minimal change, keep Reflex CLI):
-
-```python
-# rxconfig.py
-from reflex_django.plugins import ReflexDjangoPlugin
-
-config = rx.Config(
-    app_name="myshop",
-    plugins=[
-        ReflexDjangoPlugin(config={
-            "settings_module": "config.settings",
-            "django_prefix": ("/admin", "/api"),
-        }),
-    ],
-)
-```
-
-Keep `app = rx.App()` in `{app}/{app}.py`. Dev: `reflex run`, `reflex export`, `reflex deploy`.
-
-Guide: **[Plugin path for existing Reflex](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project_plugin/)**
+v3 → v4 migration: **[v4 plugin-only](https://web7ai.github.io/reflex-django/reference/migration/v4_plugin_only/)**
 
 ---
 
@@ -198,9 +213,8 @@ More essentials:
 
 - [How it fits](https://web7ai.github.io/reflex-django/overview/concepts/) — settings, app, URLs
 - [Local development](https://web7ai.github.io/reflex-django/getting-started/local_development/) — `:3000` vs `:8000`
-- [Add to an existing Django project](https://web7ai.github.io/reflex-django/getting-started/existing_django_project/)
-- [Add to an existing Reflex project](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project/)
-- [Reflex plugin path](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project_plugin/) — keep `rxconfig.py` and `reflex run`
+- [Plugin integration](https://web7ai.github.io/reflex-django/getting-started/existing_reflex_project_plugin/)
+- [v4 migration](https://web7ai.github.io/reflex-django/reference/migration/v4_plugin_only/)
 
 Full site: **https://web7ai.github.io/reflex-django/**
 
@@ -210,30 +224,22 @@ Full site: **https://web7ai.github.io/reflex-django/**
 
 | | Version |
 |:---|:---|
-| reflex-django | 3.0+ |
+| reflex-django | 4.0+ |
 | Python | 3.12+ |
 | Django | 6.0+ |
 | Reflex | 0.9.4+ |
 
-Upgrading from 2.x? See the [v3 migration guide](https://web7ai.github.io/reflex-django/reference/migration/v3_cleanup/).
+Upgrading from 3.x? See the [v4 migration guide](https://web7ai.github.io/reflex-django/reference/migration/v4_plugin_only/).
 
 ---
 
 ## Common commands
 
 ```bash
-# Django-first (default)
-python manage.py run_reflex
-python manage.py run_reflex --env dev      # single-port compile dev
-python manage.py export_reflex             # build SPA for deploy
-
-# Reflex-first (with ReflexDjangoPlugin in rxconfig.py)
 reflex run
 reflex export
-
-# Django (both paths)
-python manage.py migrate
-python manage.py createsuperuser
+reflex django migrate
+reflex django createsuperuser
 ```
 
 ---

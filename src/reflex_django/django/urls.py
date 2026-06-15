@@ -91,26 +91,17 @@ def reflex_mount(
     mount_prefix: str | None = None,
     django_prefix: str | tuple[str, ...] | None = None,
     urlpatterns: Sequence[Any] | None = None,
-    plugins: Sequence[Any] | None = None,
-    rx_config: Mapping[str, Any] | None = None,
 ):
-    """Register mount config and return the SPA catch-all URL handle.
+    """Register mount prefixes and return the SPA catch-all URL handle.
 
-    Prefer settings (``RX_CONFIG``, ``RX_AUTO_MOUNT``).
-    Use this for URL overrides only::
+    Use for URL overrides only::
 
         urlpatterns += reflex_mount(mount_prefix="/app")
 
-    Or::
-
-        urlpatterns += reflex_mount().urlpatterns
-
     Args:
-        mount_prefix: SPA catch-all prefix (default from ``RX_MOUNT_PREFIX``).
+        mount_prefix: SPA catch-all prefix (default ``/``).
         django_prefix: Django-owned prefixes; ``None`` auto-detects from ``urlpatterns``.
         urlpatterns: Optional pattern list for prefix auto-detection.
-        plugins: Reflex plugin instances.
-        rx_config: Per-mount ``rx.Config`` overrides (merged over settings).
 
     Returns:
         :class:`~reflex_django.mount.auto.ReflexMountHandle` (iterable; ``.urlpatterns``).
@@ -123,8 +114,6 @@ def reflex_mount(
         mount_prefix=mount_prefix,
         django_prefix=django_prefix,
         urlpatterns=urlpatterns,
-        plugins=plugins,
-        rx_config=rx_config,
     )
 
 

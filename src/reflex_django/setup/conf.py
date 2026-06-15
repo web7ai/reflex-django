@@ -100,19 +100,12 @@ def configure_django(settings_module: str | None = None) -> str:
             maybe_auto_mount()
         except Exception:
             pass
-        _bootstrap_reflex_integration_for_django_mode()
+        _bootstrap_reflex_integration_for_plugin()
         return active
 
 
-def _bootstrap_reflex_integration_for_django_mode() -> None:
-    """Ensure Reflex config/plugins load in Granian/Uvicorn worker processes.
-
-    ``manage.py run_reflex`` calls :func:`~reflex_django.runtime.integration.install_reflex_django_integration`
-    in the parent process, but Granian reload workers re-import the app module with a
-    fresh interpreter and only run :func:`configure_django` (via ``create_app``). Without
-    this hook, frontend stability patches and Django prefix routing may not apply in
-    reload workers, and ``/admin`` can 404 inside the Reflex backend.
-    """
+def _bootstrap_reflex_integration_for_plugin() -> None:
+    """Install plugin integration when ``rxconfig`` is loaded in worker processes."""
     try:
         from reflex_django.runtime.integration import install_reflex_django_integration
 

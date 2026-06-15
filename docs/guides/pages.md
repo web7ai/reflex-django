@@ -20,7 +20,7 @@ Open this page when you added a page but it does not show up, or when you are un
 --8<-- "snippets/minimal_views.py"
 ```
 
-After `python manage.py run_reflex`, visit `http://localhost:3000/` (default two-port dev). You never add a Django `path()` for SPA routes. Do import the views module so `@page` runs.
+After `reflex run`, visit `http://localhost:3000/` (default two-port dev). You never add a Django `path()` for SPA routes. Do import the views module so `@page` runs.
 
 !!! tip "Reflex pages are not Django views"
     Django does not need a `path(...)` for `/` or `/about`. The Reflex client-side router handles SPA navigation. Django only needs explicit routes for admin, API, media, and similar prefixes.
@@ -42,7 +42,7 @@ urls.py loads
         -> @page decorators run
             -> routes recorded in DECORATED_PAGES
 
-run_reflex / compile
+reflex run / compile
     -> prepare_pages_for_compile()
         -> import page packages (RX_PAGE_PACKAGES or {app_name}.views)
         -> app.add_page(...) for each route
@@ -161,7 +161,7 @@ Explicit `import shop.views` (or `RX_PAGE_PACKAGES`) loads these modules at impo
 
 ## Entry module (`{app_name}/{app_name}.py`)
 
-Reflex expects an entry module on disk at `{app_name}/{app_name}.py` (from `RX_CONFIG["app_name"]`). In most projects, keep it as a thin stub that re-exports `app`. Put page imports in `{app_name}/views.py` instead.
+Reflex expects an entry module on disk at `{app_name}/{app_name}.py` (from `app_name in rx.Config`). In most projects, keep it as a thin stub that re-exports `app`. Put page imports in `{app_name}/views.py` instead.
 
 You *can* register pages in the entry module (`@page` or `app.add_page`), but for larger apps that splits registration across two places and causes confusion. See [App entry module and page registration](app_entry_and_pages.md) for the recommended pattern, custom `rx.App` config, and anti-patterns.
 
@@ -179,12 +179,15 @@ For explicit control, call `add_auth_pages(app)` in an advanced setup.
 
 ---
 
-## The shared `app` object
+## The app module
 
-Classic Reflex projects have a `shop/shop.py` with `app = rx.App()`. In reflex-django v1, use the built-in singleton:
+In v4 you own `{app_name}/{app_name}.py` with `app = rx.App()`, same as plain Reflex:
 
 ```python
-from reflex_django import app  # same object as reflex_django.runtime.reflex_app.app
+# shop/shop.py
+import reflex as rx
+
+app = rx.App()
 
 def about() -> rx.Component:
     return rx.text("About")
@@ -192,7 +195,7 @@ def about() -> rx.Component:
 app.add_page(about, route="/about")
 ```
 
-Reflex compile loads `reflex_django.runtime.reflex_app:app`. The singleton is created on first access; compile preparation merges `@page` decorators onto the same instance.
+At compile time, reflex-django imports this module via `import_app_entry_module()` and loads the `app` object. `@page` decorators in `views.py` are merged onto the same instance during `prepare_pages_for_compile()`.
 
 **Recommended:** import page modules in `urls.py` so decorators run before the catch-all mounts.
 
@@ -241,16 +244,16 @@ class HomeState(AppState):
 
 1. Is the page module imported in `urls.py` (or listed in `RX_PAGE_PACKAGES`)?
 2. If the page lives in another app, is that module imported from your `{app_name}/views.py` hub? See [App entry and pages](app_entry_and_pages.md).
-3. If the page is in `{app_name}/{app_name}.py`, restart `run_reflex` once (cold start)  -  it should not require a second save after restart.
+3. If the page is in `{app_name}/{app_name}.py`, restart `reflex run` once (cold start)  -  it should not require a second save after restart.
 4. Did you save the file? The SPA rebuild can take a few seconds.
-5. Restart `run_reflex`. If still missing, delete `.web/` and run again.
+5. Restart `reflex run`. If still missing, delete `.web/` and run again.
 
 ---
 
 ## Running it
 
 ```bash
-python manage.py run_reflex
+reflex run
 ```
 
 Open **`http://localhost:3000/`** for Reflex pages (default two-port dev). Admin and API are on `:8000`. See [Local development](../getting-started/local_development.md).
@@ -261,7 +264,7 @@ For the URL dispatcher, SPA catch-all, and WebSocket routing details, see [Routi
 
 ## What just happened?
 
-You learned that `@page` in `views.py` registers SPA routes at **import and compile time**, that Django `urlpatterns` only need explicit prefixes like admin and API, and that the shared `from reflex_django import app` replaces a per-project `shop.py`.
+You learned that `@page` in `views.py` registers SPA routes at **import and compile time**, that Django `urlpatterns` only need explicit prefixes like admin and API, and that your `app` lives in `{app_name}/{app_name}.py`.
 
 ---
 

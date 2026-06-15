@@ -28,15 +28,15 @@ Start with the symptom below. Each section points to the long guide when you nee
 
 **Fix:**
 
-1. Stop all `run_reflex` / Vite processes. Start fresh:
+1. Stop all `reflex run` / Vite processes. Start fresh:
 
 ```bash
-python manage.py run_reflex
+reflex run
 ```
 
 2. Wait for both lines in the log: Vite ready on `:3000` and Reflex backend on `:8000`.
 3. If using `RX_PROXY_SERVER`, confirm Django is running at that URL.
-4. If proxies disappeared after compile, restart `run_reflex` so `ensure_vite_django_dev_proxy_from_config()` repatches Vite.
+4. If proxies disappeared after compile, restart `reflex run` so `ensure_vite_django_dev_proxy_from_config()` repatches Vite.
 
 **Related:** [Local development](../getting-started/local_development.md), [Routing](../internals/routing.md)
 
@@ -72,7 +72,7 @@ MIDDLEWARE = [
 ]
 ```
 
-Restart `run_reflex` and hard-refresh the browser.
+Restart `reflex run` and hard-refresh the browser.
 
 **Related:** [Local development (CSRF)](../getting-started/local_development.md#django-dev-middleware-and-csrf), [Authentication](../guides/authentication.md)
 
@@ -112,7 +112,7 @@ RX_PAGE_PACKAGES = ["shop.views"]
 ```
 
 4. Keep `{app_name}/{app_name}.py` as a thin entry stub (do not rely on it alone for multi-app pages).
-5. Restart `run_reflex`. If still broken, delete `.web/` and run again.
+5. Restart `reflex run`. If still broken, delete `.web/` and run again.
 
 **Related:** [App entry module and page registration](../guides/app_entry_and_pages.md), [Pages in views.py](../guides/pages.md)
 
@@ -129,15 +129,15 @@ RX_PAGE_PACKAGES = ["shop.views"]
 
 **Fix:**
 
-1. Stop `run_reflex` / uvicorn and Vite.
+1. Stop `reflex run` / uvicorn and Vite.
 2. Delete the compiled frontend cache and recompile:
 
 ```bash
 rmdir /s /q .web
-python manage.py run_reflex
+reflex run
 ```
 
-On Linux/macOS: `rm -rf .web` then `python manage.py run_reflex`.
+On Linux/macOS: `rm -rf .web` then `reflex run`.
 
 3. Hard-refresh the browser (or open a private window).
 
@@ -157,7 +157,7 @@ If you only changed Python code and are on reflex-django 2.0+, restarting the ba
 2. Custom API route registered **after** the SPA catch-all (catch-all wins).
 3. Browsing `:8000` in default two-port mode expecting the Vite shell (admin still works on `:8000`, but `/` may not be the SPA).
 4. `RX_DJANGO_PREFIX` omits `/admin`, so Vite proxies admin to the wrong upstream.
-5. **After saving a Reflex page**, Vite restarted on a stripped ``vite.config.js`` before the proxy plugin was re-applied (fixed in recent releases - restart ``run_reflex`` if you still see this on an older build).
+5. **After saving a Reflex page**, Vite restarted on a stripped ``vite.config.js`` before the proxy plugin was re-applied (fixed in recent releases - restart ``reflex run`` if you still see this on an older build).
 
 **Fix:**
 
@@ -176,7 +176,7 @@ urlpatterns = [
 
 ```bash
 export RX_DJANGO_PREFIX="/admin,/api,/static"
-python manage.py run_reflex
+reflex run
 ```
 
 **Related:** [Pages in views.py (URL split)](../guides/pages.md#the-url-split-django-routes-vs-reflex-routes), [Settings reference](../reference/settings.md#rx_django_prefix)
@@ -209,7 +209,7 @@ location /_event {
 }
 ```
 
-3. Clean rebuild: stop server, delete `.web/`, run `python manage.py run_reflex` again.
+3. Clean rebuild: stop server, delete `.web/`, run `reflex run` again.
 4. Read the event path in [WebSocket event pipeline](../internals/event_pipeline.md).
 
 **Related:** [Deployment](deployment.md), [Routing (reserved prefixes)](../internals/routing.md#reserved-reflex-prefixes)
@@ -236,7 +236,7 @@ export RX_DJANGO_PREFIX="/admin,/api,/internal"
 ```
 
 2. Or pass explicit prefixes to `reflex_mount(django_prefix=(...))`.
-3. Restart `run_reflex` so compile re-exports prefixes into `env.json` and Vite.
+3. Restart `reflex run` so compile re-exports prefixes into `env.json` and Vite.
 
 **Related:** [Routing](../internals/routing.md#django-prefix-detection), [Settings reference](../reference/settings.md#rx_django_prefix)
 
@@ -250,11 +250,11 @@ export RX_DJANGO_PREFIX="/admin,/api,/internal"
 |:---|:---|
 | Blank UI on `:8000` in default dev | Open `:3000` for the SPA. `:8000` is backend-only unless you use `--env dev`. |
 | Vite silently on `:3001` | Stop the process holding `:3000`. reflex-django sets `strictPort: true`. |
-| API works on `:8000` but not `:3000` | Confirm two-port mode: `RX_SEPARATE_DEV_PORTS=1` (default for `run_reflex`). |
-| Admin/API 404 from `:3000` or `:8000` | Confirm admin is in `urlpatterns`, `django_prefix` includes `/admin`, and you restarted `run_reflex` after URL changes. |
+| API works on `:8000` but not `:3000` | Confirm two-port mode: `RX_SEPARATE_DEV_PORTS=1` (default for `reflex run`). |
+| Admin/API 404 from `:3000` or `:8000` | Confirm admin is in `urlpatterns`, `django_prefix` includes `/admin`, and you restarted `reflex run` after URL changes. |
 | Split-process dev 502 | When using `RX_PROXY_SERVER`, confirm Django is running at that URL. |
 
-**Fix:** Use `python manage.py run_reflex` (not bare `runserver` or lone uvicorn) for SPA dev. Override ports with `RX_CONFIG` or `RX_FRONTEND_PORT` / `RX_BACKEND_PORT`.
+**Fix:** Use `reflex run` (not bare `runserver` or lone uvicorn) for SPA dev. Override ports in `rxconfig.py` or `RX_FRONTEND_PORT` / `RX_BACKEND_PORT`.
 
 **Related:** [Local development](../getting-started/local_development.md), [CLI](cli.md)
 
@@ -264,10 +264,10 @@ export RX_DJANGO_PREFIX="/admin,/api,/internal"
 
 | Symptom | Fix |
 |:---|:---|
-| `Reflex SPA bundle not found` | Run `run_reflex` or `export_reflex`. In two-port dev, use `:3000`. |
+| `Reflex SPA bundle not found` | Run `reflex run` or `reflex export`. In two-port dev, use `:3000`. |
 | `AppRegistryNotReady` | Import models inside handlers, not at module top in `views.py`. |
 | `SynchronousOnlyOperation` | Use `await Model.objects.aget(...)` in async handlers. |
-| White page / `dispatch is not a function` | Delete `.web/`, restart `run_reflex`. |
+| White page / `dispatch is not a function` | Delete `.web/`, restart `reflex run`. |
 | Anonymous user in handlers | Subclass `AppState`, ensure session middleware runs. See [State management](../guides/state.md). |
 | Slow or high-frequency events | `RX_EVENT_BRIDGE_MODE = "smart"`; `_rx_bridge = "none"` on hot `rx.State` classes. See [Scaling](scaling.md). |
 

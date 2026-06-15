@@ -184,7 +184,7 @@ class RequestProxy:
             return getattr(http, name)
         msg = (
             f"No active Reflex event request (attribute {name!r}). "
-            "Ensure install_reflex_django_integration() is enabled (via manage.py run_reflex)."
+            "Ensure install_reflex_django_integration() is enabled (add ReflexDjangoPlugin to rxconfig.py and run `reflex run`)."
         )
         raise AttributeError(msg)
 

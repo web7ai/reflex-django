@@ -186,7 +186,7 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --frozen
       - run: uv run python manage.py migrate --noinput
-      - run: uv run python manage.py export_reflex --frontend-only --no-zip --stage-to-static-root
+      - run: uv run reflex export
       - run: uv run pytest -v
 ```
 

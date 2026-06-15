@@ -147,7 +147,7 @@ class DjangoEventBridge(Middleware):
 
     Install automatically via
     :func:`reflex_django.runtime.integration.install_reflex_django_integration`
-    (called from ``manage.py run_reflex``). The bridge is a no-op when Django's
+    (called during ``reflex run``). The bridge is a no-op when Django's
     auth/session apps are not installed.
     """
 

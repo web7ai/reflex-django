@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from reflex_django.asgi.app import build_django_asgi
-from reflex_django.cli import django_cli
-from reflex_django.setup.conf import configure_django
-from reflex_django.runtime.app_factory import create_app
 if TYPE_CHECKING:
+    from reflex_django.asgi.app import build_django_asgi
+    from reflex_django.cli import django_cli
+    from reflex_django.setup.conf import configure_django
+    from reflex_django.runtime.app_factory import create_app
     from reflex_django.django.admin import register as register_admin
     from reflex_django.auth import (
         AuthPageMeta,
@@ -72,7 +72,6 @@ __all__ = [
     "begin_event_request",
     "begin_event_response",
     "build_django_asgi",
-    "app",
     "configure_django",
     "create_app",
     "current_csrf_token",
@@ -108,7 +107,10 @@ __all__ = [
 # ``INSTALLED_APPS``). Resolve them on first attribute access instead so the
 # package can be safely imported at any time.
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
-    "app": ("reflex_django.runtime.reflex_app", "app"),
+    "build_django_asgi": ("reflex_django.asgi.app", "build_django_asgi"),
+    "configure_django": ("reflex_django.setup.conf", "configure_django"),
+    "create_app": ("reflex_django.runtime.app_factory", "create_app"),
+    "django_cli": ("reflex_django.cli", "django_cli"),
     "begin_event_response": ("reflex_django.bridge.context", "begin_event_response"),
     "current_csrf_token": ("reflex_django.bridge.context", "current_csrf_token"),
     "current_messages": ("reflex_django.bridge.context", "current_messages"),

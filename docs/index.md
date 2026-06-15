@@ -11,8 +11,28 @@
 You already run Django. reflex-django lets you build the UI in [Reflex](https://reflex.dev) without a separate frontend repo. One process in production, shared session cookies, and `request.user` inside button handlers.
 
 - **Same origin** - admin, API, and SPA on one host in production
-- **Django-first or Reflex-first** - settings-driven default, or `ReflexDjangoPlugin` in `rxconfig.py`
-- **One dev command** - `python manage.py run_reflex` (Django-first) or `reflex run` (plugin path)
+- **Plugin-only integration** - `ReflexDjangoPlugin` in `rxconfig.py` (v4)
+- **One dev command** - `reflex run` (optional split Django via `RX_PROXY_SERVER`)
+
+## Dev proxy: `RX_PROXY_SERVER`
+
+By default you only need **`reflex run`**. Django admin and API are mounted **inside** the Reflex backend; Vite on `:3000` proxies everything there so the browser stays on one origin.
+
+Set **`RX_PROXY_SERVER`** in `settings.py` when Django runs on a **separate** HTTP server (for example `python manage.py runserver`):
+
+```python
+RX_PROXY_SERVER = "http://127.0.0.1:8000"
+```
+
+| | Default (unset) | `RX_PROXY_SERVER` set |
+|:---|:---|:---|
+| Django | In-process on Reflex backend | Your `runserver` URL |
+| Commands | `reflex run` | `runserver` + `reflex run` |
+| Vite proxies | Admin/API/`/_event` → Reflex backend | Admin/API → Django; `/_event` → Reflex |
+
+Leave it unset for the usual single-command workflow. Use split mode when you want classic Django dev in a second terminal. Production does not use this setting.
+
+Details: [Local development](getting-started/local_development.md) · [Routing](internals/routing.md) · [Settings](reference/settings.md)
 
 ## Start here
 
@@ -31,13 +51,14 @@ You already run Django. reflex-django lets you build the UI in [Reflex](https://
 
 | You already have | Guide | Dev command |
 |:---|:---|:---|
-| **Django** project | [Existing Django project](getting-started/existing_django_project.md) | `python manage.py run_reflex` |
-| **Reflex** project (settings path) | [Existing Reflex project](getting-started/existing_reflex_project.md) | `python manage.py run_reflex` |
-| **Reflex** project (keep `rxconfig.py`) | [Plugin path](getting-started/existing_reflex_project_plugin.md) | `reflex run` |
+| **Django** project | [Existing Django project](getting-started/existing_django_project.md) | `reflex run` |
+| **Reflex** project | [Plugin path](getting-started/existing_reflex_project_plugin.md) | `reflex run` |
 
-See [Brownfield integration](getting-started/index.md#brownfield-integration) for a full comparison.
+## The files you touch most
 
-## The three files you touch most
+```python
+--8<-- "snippets/minimal_rxconfig.py"
+```
 
 ```python
 --8<-- "snippets/minimal_settings.py"
@@ -47,15 +68,9 @@ See [Brownfield integration](getting-started/index.md#brownfield-integration) fo
 --8<-- "snippets/minimal_urls.py"
 ```
 
-```python
---8<-- "snippets/minimal_views.py"
-```
-
 Then run:
 
---8<-- "snippets/run_reflex_command.md"
-
-In dev, Vite listens on `:3000` and proxies to the backend on `:8000`. See [Local development](getting-started/local_development.md).
+--8<-- "snippets/reflex_run_command.md"
 
 ## Quick lookup
 
@@ -63,8 +78,8 @@ In dev, Vite listens on `:3000` and proxies to the backend on `:8000`. See [Loca
 |:---|:---|
 | See how Django and Reflex fit | [How it fits](overview/concepts.md) |
 | Add Reflex to my Django project | [Existing Django project](getting-started/existing_django_project.md) |
-| Add Django to my Reflex project | [Existing Reflex project](getting-started/existing_reflex_project.md) |
-| Keep `rxconfig.py` and `reflex run` | [Plugin path](getting-started/existing_reflex_project_plugin.md) |
+| Add Django to my Reflex project | [Plugin path](getting-started/existing_reflex_project_plugin.md) |
 | Read `request.user` in a handler | [State](guides/state.md) |
 | Deploy to one container | [Deployment](operations/deployment.md) |
 | Look up a setting | [Settings reference](reference/settings.md) |
+| Run Django on `runserver` while using Reflex HMR | [Local development](getting-started/local_development.md) (`RX_PROXY_SERVER`) |
