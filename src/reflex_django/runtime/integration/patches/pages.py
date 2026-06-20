@@ -74,12 +74,8 @@ def _patch_apply_decorated_pages() -> None:
     original = reflex_app_module.App._apply_decorated_pages
 
     def _apply_decorated_pages(self) -> None:  # noqa: ANN001
-        from reflex_django.runtime.app_factory import (
-            import_app_entry_module,
-            prepare_pages_for_compile,
-        )
+        from reflex_django.runtime.app_factory import prepare_pages_for_compile
 
-        import_app_entry_module()
         if getattr(self, "_reflex_django_decorated_pages_applied", False):
             return
 

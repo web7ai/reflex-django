@@ -204,4 +204,6 @@ Set `RX_USER_SNAPSHOT_INCLUDE_GROUPS = True` to add group names.
 
 **Works on WebSocket events?** Yes. The bridge runs the configured event tier and binds the request/user to `AppState`. See [Bridge](../learn/bridge.md).
 
+**Login shows "Session unavailable. Reload the page."?** Built-in auth pages use `DjangoAuthState`, which requires a bridged Django request on login/register events. In `bridge.mode: "smart"`, ensure you are on a reflex-django version that treats `DjangoAuthState` as Django-aware. As a temporary workaround, set `bridge.mode: "full"` in `rxconfig.py` or `RX_EVENT_BRIDGE_MODE = "full"` in Django settings.
+
 **Next:** [Bridge utilities](bridge-utilities.md), [Security](security.md), and [Pages and state](pages-and-state.md).

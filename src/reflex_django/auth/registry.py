@@ -1,1 +1,348 @@
-"""Register canned auth pages on a Reflex app."""from __future__ import annotationsfrom collections.abc import Callablefrom typing import TYPE_CHECKING, Anyfrom reflex_django.auth.pages.base import BaseAuthPagefrom reflex_django.auth.settings import AuthSettings, get_auth_settingsfrom reflex_django.setup.conf import configure_django_AUTH_REGISTRY_ROUTES: set[str] = set()if TYPE_CHECKING:    from reflex.app import App    from reflex_django.auth.pages import (        LoginPage,        PasswordResetConfirmPage,        PasswordResetPage,        RegisterPage,    )_UNSET: Any = object()def _register_page(    app: App,    page: type[BaseAuthPage] | Callable[[], Any],    *,    route: str,    title: str,    on_load: Any = _UNSET,) -> None:    kwargs: dict[str, Any] = {"route": route, "title": title}    if on_load is not _UNSET:        kwargs["on_load"] = on_load    app.add_page(page, **kwargs)def _resolve_on_load(    page: type[BaseAuthPage] | Callable[[], Any],    on_load: Any,) -> Any:    if on_load is not _UNSET:        return on_load    if isinstance(page, type) and issubclass(page, BaseAuthPage):        return page.default_on_load    return _UNSETdef register_login_page(    app: App,    page: type[BaseAuthPage] | Callable[[], Any] | None = None,    *,    route: str | None = None,    title: str | None = None,    on_load: Any = _UNSET,    settings: AuthSettings | None = None,) -> None:    """Register the login page on ``app``.    Uses ``page.default_on_load`` and ``page.default_title`` when kwargs are omitted.    Set ``page.state_cls`` on a subclass to wire a custom auth state class.    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.    """    from reflex_django.auth.pages.login import LoginPage    auth = settings or get_auth_settings()    if not auth.enabled:        return    resolved_page = page or LoginPage    resolved_on_load = _resolve_on_load(resolved_page, on_load)    _register_page(        app,        resolved_page,        route=route or auth.login_url,        title=title or LoginPage.default_title,        on_load=resolved_on_load,    )def register_register_page(    app: App,    page: type[BaseAuthPage] | Callable[[], Any] | None = None,    *,    route: str | None = None,    title: str | None = None,    on_load: Any = _UNSET,    settings: AuthSettings | None = None,) -> None:    """Register the signup page on ``app``.    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.    """    from reflex_django.auth.pages.register import RegisterPage    auth = settings or get_auth_settings()    if not auth.enabled:        return    resolved_page = page or RegisterPage    resolved_on_load = _resolve_on_load(resolved_page, on_load)    _register_page(        app,        resolved_page,        route=route or auth.signup_url,        title=title or RegisterPage.default_title,        on_load=resolved_on_load,    )def register_password_reset_page(    app: App,    page: type[BaseAuthPage] | Callable[[], Any] | None = None,    *,    route: str | None = None,    title: str | None = None,    on_load: Any = _UNSET,    settings: AuthSettings | None = None,) -> None:    """Register the forgot-password page on ``app``.    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.    By default no ``on_load`` handler is attached (``page.default_on_load`` is ``None``).    """    from reflex_django.auth.pages.password_reset import PasswordResetPage    auth = settings or get_auth_settings()    if not auth.enabled:        return    resolved_page = page or PasswordResetPage    resolved_on_load = _resolve_on_load(resolved_page, on_load)    _register_page(        app,        resolved_page,        route=route or auth.password_reset_url,        title=title or PasswordResetPage.default_title,        on_load=resolved_on_load,    )def register_password_reset_confirm_page(    app: App,    page: type[BaseAuthPage] | Callable[[], Any] | None = None,    *,    route: str | None = None,    title: str | None = None,    on_load: Any = _UNSET,    settings: AuthSettings | None = None,) -> None:    """Register the set-new-password page on ``app``.    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.    """    from reflex_django.auth.pages.password_reset import PasswordResetConfirmPage    auth = settings or get_auth_settings()    if not auth.enabled:        return    resolved_page = page or PasswordResetConfirmPage    resolved_on_load = _resolve_on_load(resolved_page, on_load)    _register_page(        app,        resolved_page,        route=route or auth.password_reset_confirm_url,        title=title or PasswordResetConfirmPage.default_title,        on_load=resolved_on_load,    )def add_auth_pages(app: App, *, settings: AuthSettings | None = None) -> None:    """Add login, register, and password-reset pages from Django settings.    Respects ``signup_enabled`` and ``password_reset_enabled``. For per-page control,    import :class:`~reflex_django.auth.pages.LoginPage` (etc.) and call    :func:`register_login_page` or ``app.add_page`` directly.    Args:        app: The Reflex application instance.        settings: Optional pre-resolved settings; defaults to            :func:`get_auth_settings`.    """    configure_django()    auth = settings or get_auth_settings()    if not auth.enabled:        return    register_login_page(app, settings=auth)    if auth.signup_enabled:        register_register_page(app, settings=auth)    if auth.password_reset_enabled:        register_password_reset_page(app, settings=auth)        register_password_reset_confirm_page(app, settings=auth)def _import_page_class(dotted: str) -> type[BaseAuthPage]:    from django.utils.module_loading import import_string    imported = import_string(dotted)    if not isinstance(imported, type) or not issubclass(imported, BaseAuthPage):        msg = f"PAGE_CLASSES entry must be a BaseAuthPage subclass: {dotted!r}"        raise TypeError(msg)    return importeddef _resolve_page_class(    key: str,    default: type[BaseAuthPage],    auth: AuthSettings,) -> type[BaseAuthPage]:    dotted = auth.page_classes.get(key, "").strip()    if not dotted:        return default    return _import_page_class(dotted)def _register_auth_page_via_decorator(    page_cls: type[BaseAuthPage],    *,    route: str,) -> None:    from reflex_django.pages.decorators import page    if route in _AUTH_REGISTRY_ROUTES:        return    kwargs: dict[str, Any] = {"route": route, "title": page_cls.default_title}    on_load = page_cls.default_on_load    if on_load is not None:        kwargs["on_load"] = on_load    page(**kwargs)(page_cls)    _AUTH_REGISTRY_ROUTES.add(route)def ensure_auth_pages_registered(*, settings: AuthSettings | None = None) -> None:    """Register auth pages via :func:`~reflex_django.pages.decorators.page` when enabled.    Called automatically during page discovery when ``RX_AUTH["ENABLED"]``    is true. Uses ``PAGE_CLASSES`` overrides and default canned pages otherwise.    """    from reflex_django.auth.pages.login import LoginPage    from reflex_django.auth.pages.password_reset import (        PasswordResetConfirmPage,        PasswordResetPage,    )    from reflex_django.auth.pages.register import RegisterPage    configure_django()    auth = settings or get_auth_settings()    if not auth.enabled:        return    login_cls = _resolve_page_class("login", LoginPage, auth)    _register_auth_page_via_decorator(login_cls, route=auth.login_url)    if auth.signup_enabled:        register_cls = _resolve_page_class("register", RegisterPage, auth)        _register_auth_page_via_decorator(register_cls, route=auth.signup_url)    if auth.password_reset_enabled:        reset_cls = _resolve_page_class("password_reset", PasswordResetPage, auth)        _register_auth_page_via_decorator(reset_cls, route=auth.password_reset_url)        confirm_cls = _resolve_page_class(            "password_reset_confirm",            PasswordResetConfirmPage,            auth,        )        _register_auth_page_via_decorator(            confirm_cls,            route=auth.password_reset_confirm_url,        )def clear_auth_registry_routes() -> None:    """Clear auth route registration guard (tests only)."""    _AUTH_REGISTRY_ROUTES.clear()def autoload() -> None:    """Register auth pages on the app from ``rxconfig`` if importable.    Intended for advanced setups; prefer calling :func:`add_auth_pages` explicitly    in your app module.    """    from reflex_base.config import get_config    app_name = get_config().app_name    mod = __import__(app_name, fromlist=[app_name])    app = getattr(mod, "app", None)    if app is None:        msg = f"Could not find rx.App in {app_name}.{app_name}"        raise RuntimeError(msg)    add_auth_pages(app)__all__ = [    "add_auth_pages",    "autoload",    "clear_auth_registry_routes",    "ensure_auth_pages_registered",    "register_login_page",    "register_password_reset_confirm_page",    "register_password_reset_page",    "register_register_page",]
+"""Register canned auth pages on a Reflex app."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+from reflex_django.auth.pages.base import BaseAuthPage
+from reflex_django.auth.settings import AuthSettings, get_auth_settings
+from reflex_django.setup.conf import configure_django
+
+_AUTH_REGISTRY_ROUTES: set[str] = set()
+
+if TYPE_CHECKING:
+    from reflex.app import App
+
+    from reflex_django.auth.pages import (
+        LoginPage,
+        PasswordResetConfirmPage,
+        PasswordResetPage,
+        RegisterPage,
+    )
+
+_UNSET: Any = object()
+
+
+def _register_page(
+    app: App,
+    page: type[BaseAuthPage] | Callable[[], Any],
+    *,
+    route: str,
+    title: str,
+    on_load: Any = _UNSET,
+) -> None:
+    from reflex.utils import format as route_format
+
+    formatted = route_format.format_route(str(route))
+    if formatted in getattr(app, "_unevaluated_pages", {}):
+        return
+
+    kwargs: dict[str, Any] = {"route": route, "title": title}
+
+    if on_load is not _UNSET:
+        kwargs["on_load"] = on_load
+
+    app.add_page(page, **kwargs)
+
+
+def _resolve_on_load(
+    page: type[BaseAuthPage] | Callable[[], Any],
+    on_load: Any,
+) -> Any:
+    if on_load is not _UNSET:
+        return on_load
+
+    if isinstance(page, type) and issubclass(page, BaseAuthPage):
+        return page.default_on_load
+
+    return _UNSET
+
+
+def register_login_page(
+    app: App,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
+    *,
+    route: str | None = None,
+    title: str | None = None,
+    on_load: Any = _UNSET,
+    settings: AuthSettings | None = None,
+) -> None:
+    """Register the login page on ``app``.
+
+    Uses ``page.default_on_load`` and ``page.default_title`` when kwargs are omitted.
+
+    Set ``page.state_cls`` on a subclass to wire a custom auth state class.
+
+    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
+    """
+    from reflex_django.auth.pages.login import LoginPage
+
+    auth = settings or get_auth_settings()
+
+    if not auth.enabled:
+        return
+
+    resolved_page = page or LoginPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
+
+    _register_page(
+        app,
+        resolved_page,
+        route=route or auth.login_url,
+        title=title or LoginPage.default_title,
+        on_load=resolved_on_load,
+    )
+
+
+def register_register_page(
+    app: App,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
+    *,
+    route: str | None = None,
+    title: str | None = None,
+    on_load: Any = _UNSET,
+    settings: AuthSettings | None = None,
+) -> None:
+    """Register the signup page on ``app``.
+
+    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
+    """
+    from reflex_django.auth.pages.register import RegisterPage
+
+    auth = settings or get_auth_settings()
+
+    if not auth.enabled:
+        return
+
+    resolved_page = page or RegisterPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
+
+    _register_page(
+        app,
+        resolved_page,
+        route=route or auth.signup_url,
+        title=title or RegisterPage.default_title,
+        on_load=resolved_on_load,
+    )
+
+
+def register_password_reset_page(
+    app: App,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
+    *,
+    route: str | None = None,
+    title: str | None = None,
+    on_load: Any = _UNSET,
+    settings: AuthSettings | None = None,
+) -> None:
+    """Register the forgot-password page on ``app``.
+
+    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
+
+    By default no ``on_load`` handler is attached (``page.default_on_load`` is ``None``).
+    """
+    from reflex_django.auth.pages.password_reset import PasswordResetPage
+
+    auth = settings or get_auth_settings()
+
+    if not auth.enabled:
+        return
+
+    resolved_page = page or PasswordResetPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
+
+    _register_page(
+        app,
+        resolved_page,
+        route=route or auth.password_reset_url,
+        title=title or PasswordResetPage.default_title,
+        on_load=resolved_on_load,
+    )
+
+
+def register_password_reset_confirm_page(
+    app: App,
+    page: type[BaseAuthPage] | Callable[[], Any] | None = None,
+    *,
+    route: str | None = None,
+    title: str | None = None,
+    on_load: Any = _UNSET,
+    settings: AuthSettings | None = None,
+) -> None:
+    """Register the set-new-password page on ``app``.
+
+    When ``settings`` is omitted or ``settings.enabled`` is false, this is a no-op.
+    """
+    from reflex_django.auth.pages.password_reset import PasswordResetConfirmPage
+
+    auth = settings or get_auth_settings()
+
+    if not auth.enabled:
+        return
+
+    resolved_page = page or PasswordResetConfirmPage
+    resolved_on_load = _resolve_on_load(resolved_page, on_load)
+
+    _register_page(
+        app,
+        resolved_page,
+        route=route or auth.password_reset_confirm_url,
+        title=title or PasswordResetConfirmPage.default_title,
+        on_load=resolved_on_load,
+    )
+
+
+def add_auth_pages(app: App, *, settings: AuthSettings | None = None) -> None:
+    """Add login, register, and password-reset pages from Django settings.
+
+    Respects ``signup_enabled`` and ``password_reset_enabled``. For per-page control,
+
+    import :class:`~reflex_django.auth.pages.LoginPage` (etc.) and call
+
+    :func:`register_login_page` or ``app.add_page`` directly.
+
+    Args:
+        app: The Reflex application instance.
+        settings: Optional pre-resolved settings; defaults to
+            :func:`get_auth_settings`.
+    """
+    configure_django()
+    auth = settings or get_auth_settings()
+
+    if not auth.enabled:
+        return
+
+    register_login_page(app, settings=auth)
+
+    if auth.signup_enabled:
+        register_register_page(app, settings=auth)
+
+    if auth.password_reset_enabled:
+        register_password_reset_page(app, settings=auth)
+        register_password_reset_confirm_page(app, settings=auth)
+
+
+def _import_page_class(dotted: str) -> type[BaseAuthPage]:
+    from django.utils.module_loading import import_string
+
+    imported = import_string(dotted)
+
+    if not isinstance(imported, type) or not issubclass(imported, BaseAuthPage):
+        msg = f"PAGE_CLASSES entry must be a BaseAuthPage subclass: {dotted!r}"
+        raise TypeError(msg)
+
+    return imported
+
+
+def _resolve_page_class(
+    key: str,
+    default: type[BaseAuthPage],
+    auth: AuthSettings,
+) -> type[BaseAuthPage]:
+    dotted = auth.page_classes.get(key, "").strip()
+
+    if not dotted:
+        return default
+
+    return _import_page_class(dotted)
+
+
+def _register_auth_page_via_decorator(
+    page_cls: type[BaseAuthPage],
+    *,
+    route: str,
+) -> None:
+    from reflex_django.pages.decorators import page
+
+    if route in _AUTH_REGISTRY_ROUTES:
+        return
+
+    kwargs: dict[str, Any] = {"route": route, "title": page_cls.default_title}
+
+    on_load = page_cls.default_on_load
+
+    if on_load is not None:
+        kwargs["on_load"] = on_load
+
+    page(**kwargs)(page_cls)
+    _AUTH_REGISTRY_ROUTES.add(route)
+
+
+def ensure_auth_pages_registered(*, settings: AuthSettings | None = None) -> None:
+    """Register auth pages via :func:`~reflex_django.pages.decorators.page` when enabled.
+
+    Called automatically during page discovery when ``RX_AUTH["ENABLED"]``
+
+    is true. Uses ``PAGE_CLASSES`` overrides and default canned pages otherwise.
+    """
+    from reflex_django.auth.pages.login import LoginPage
+    from reflex_django.auth.pages.password_reset import (
+        PasswordResetConfirmPage,
+        PasswordResetPage,
+    )
+    from reflex_django.auth.pages.register import RegisterPage
+
+    configure_django()
+    auth = settings or get_auth_settings()
+
+    if not auth.enabled:
+        return
+
+    login_cls = _resolve_page_class("login", LoginPage, auth)
+    _register_auth_page_via_decorator(login_cls, route=auth.login_url)
+
+    if auth.signup_enabled:
+        register_cls = _resolve_page_class("register", RegisterPage, auth)
+        _register_auth_page_via_decorator(register_cls, route=auth.signup_url)
+
+    if auth.password_reset_enabled:
+        reset_cls = _resolve_page_class("password_reset", PasswordResetPage, auth)
+        _register_auth_page_via_decorator(reset_cls, route=auth.password_reset_url)
+
+        confirm_cls = _resolve_page_class(
+            "password_reset_confirm",
+            PasswordResetConfirmPage,
+            auth,
+        )
+        _register_auth_page_via_decorator(
+            confirm_cls,
+            route=auth.password_reset_confirm_url,
+        )
+
+
+def clear_auth_registry_routes() -> None:
+    """Clear auth route registration guard (tests only)."""
+    _AUTH_REGISTRY_ROUTES.clear()
+
+
+def autoload() -> None:
+    """Register auth pages on the app from ``rxconfig`` if importable.
+
+    Intended for advanced setups; prefer calling :func:`add_auth_pages` explicitly
+
+    in your app module.
+    """
+    from reflex_base.config import get_config
+
+    app_name = get_config().app_name
+    mod = __import__(app_name, fromlist=[app_name])
+    app = getattr(mod, "app", None)
+
+    if app is None:
+        msg = f"Could not find rx.App in {app_name}.{app_name}"
+        raise RuntimeError(msg)
+
+    add_auth_pages(app)
+
+
+__all__ = [
+    "add_auth_pages",
+    "autoload",
+    "clear_auth_registry_routes",
+    "ensure_auth_pages_registered",
+    "register_login_page",
+    "register_password_reset_confirm_page",
+    "register_password_reset_page",
+    "register_register_page",
+]

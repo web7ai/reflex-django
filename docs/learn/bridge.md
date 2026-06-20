@@ -79,7 +79,7 @@ ReflexDjangoPlugin(config={
 | `none` | All events use `none`, except uploads are raised to `auth_only` |
 | `smart` | Django-aware state uses `full`; plain `rx.State` uses `none`; uploads are at least `auth_only` |
 
-Django-aware state means `AppState`, `DjangoUserState`, or `ModelState`.
+Django-aware state means `AppState`, `DjangoUserState`, `ModelState`, `DjangoAuthState`, or any state class that mixes in `AuthBridgeMixin` (including built-in auth page handlers such as `submit_login_form`).
 
 Choose `full` first when correctness matters. Choose `smart` when you have UI-only state classes that do not need Django. Choose `none` only when Reflex events should not use Django request context by default.
 

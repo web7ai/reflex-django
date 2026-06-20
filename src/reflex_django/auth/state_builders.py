@@ -118,6 +118,7 @@ def build_django_auth_state(*, auth: AuthSettings | None = None) -> type:
 
     def exec_body(ns: dict[str, Any]) -> None:
         ns["__module__"] = _STATE_MODULE
+        ns["_rx_bridge"] = "full"
         annotations = _django_user_snapshot_annotations()
         ns.update(_AUTH_SNAPSHOT_DEFAULTS)
 

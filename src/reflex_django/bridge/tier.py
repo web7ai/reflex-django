@@ -95,6 +95,13 @@ def _is_django_aware_state(handler_state_cls: type | None) -> bool:
             return True
     except (ImportError, TypeError):
         pass
+    try:
+        from reflex_django.state.auth_bridge import AuthBridgeMixin
+
+        if issubclass(handler_state_cls, AuthBridgeMixin):
+            return True
+    except (ImportError, TypeError):
+        pass
     return False
 
 

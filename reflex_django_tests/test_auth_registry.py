@@ -138,6 +138,41 @@ def test_register_login_page_skips_when_disabled() -> None:
     assert len(app._unevaluated_pages) == 0
 
 
+def test_register_login_page_is_idempotent() -> None:
+    from reflex_django.auth.registry import register_login_page
+    from reflex_django.auth.settings import AuthSettings
+
+    app = rx.App()
+    auth = AuthSettings(enabled=True, login_url="/login")
+    register_login_page(app, settings=auth)
+    register_login_page(app, settings=auth)
+
+    routes = _routes(app)
+    assert routes == {"login"}
+    assert len(app._unevaluated_pages) == 1
+
+
+def test_add_auth_pages_is_idempotent() -> None:
+    from reflex_django.auth.registry import add_auth_pages
+    from reflex_django.auth.settings import AuthSettings
+
+    app = rx.App()
+    auth = AuthSettings(
+        enabled=True,
+        signup_enabled=True,
+        password_reset_enabled=True,
+    )
+    add_auth_pages(app, settings=auth)
+    add_auth_pages(app, settings=auth)
+
+    routes = _routes(app)
+    assert _norm(auth.login_url) in routes
+    assert _norm(auth.signup_url) in routes
+    assert _norm(auth.password_reset_url) in routes
+    assert _norm(auth.password_reset_confirm_url) in routes
+    assert len(routes) == 4
+
+
 def test_ensure_auth_pages_registered_via_page_decorator() -> None:
     from reflex_django.auth.registry import (
         clear_auth_registry_routes,

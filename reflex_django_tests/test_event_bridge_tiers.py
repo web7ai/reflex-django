@@ -54,6 +54,25 @@ def test_smart_mode_uses_full_for_app_state() -> None:
 
 
 @override_settings(RX_EVENT_BRIDGE_MODE="smart")
+def test_smart_mode_uses_full_for_django_auth_state() -> None:
+    from reflex_django.auth.state import DjangoAuthState
+
+    assert resolve_bridge_tier(DjangoAuthState, _StubEvent()) == "full"
+
+
+@override_settings(RX_EVENT_BRIDGE_MODE="smart")
+def test_smart_mode_uses_full_for_auth_bridge_mixin_subclass() -> None:
+    import reflex as rx
+
+    from reflex_django.state.auth_bridge import AuthBridgeMixin
+
+    class CustomAuthState(AuthBridgeMixin, rx.State):
+        pass
+
+    assert resolve_bridge_tier(CustomAuthState, _StubEvent()) == "full"
+
+
+@override_settings(RX_EVENT_BRIDGE_MODE="smart")
 def test_per_class_override_wins_over_smart_mode() -> None:
     import reflex as rx
 
@@ -133,6 +152,41 @@ def test_preprocess_runs_bridge_for_app_state_in_smart_mode() -> None:
     event = _StubEvent(
         router_data={"headers": {}, "ip": "", "pathname": "/"},
         state_cls=CartState,
+    )
+
+    async def _go() -> None:
+        with (
+            mock.patch(
+                "reflex_django.bridge.event.preprocess.bridge_request_for_state",
+                new=mock.AsyncMock(return_value=(mock.Mock(), None)),
+            ) as bridge_call,
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
+        ):
+            await bridge.preprocess(
+                app=mock.Mock(),
+                state=mock.Mock(spec=["get_state"]),
+                event=cast(Any, event),
+            )
+            bridge_call.assert_awaited_once()
+            assert bridge_call.await_args.kwargs["tier"] == "full"
+
+    import asyncio
+
+    asyncio.run(_go())
+
+
+@override_settings(RX_EVENT_BRIDGE_MODE="smart", RX_EVENT_CACHE_TTL=0)
+def test_preprocess_runs_bridge_for_django_auth_state_in_smart_mode() -> None:
+    from reflex_django.auth.state import DjangoAuthState
+
+    bridge = DjangoEventBridge()
+    event = _StubEvent(
+        router_data={"headers": {}, "ip": "", "pathname": "/login"},
+        state_cls=DjangoAuthState,
+        name="reflex_django.auth.state.djangoauthstate.submit_login_form",
     )
 
     async def _go() -> None:
