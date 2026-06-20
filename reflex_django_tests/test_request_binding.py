@@ -112,3 +112,65 @@ def test_process_event_is_patched_after_integration_install() -> None:
     import reflex_base.event.processor.base_state_processor as bsp
 
     assert getattr(bsp, "_reflex_django_process_event_patched", False) is True
+
+
+def test_resolve_state_root_unwraps_background_proxy() -> None:
+    from reflex_django.bridge.state_tree import resolve_state_root
+
+    inner = HomeState()
+    inner.router_data = {  # type: ignore[attr-defined]
+        "headers": {"cookie": ""},
+        "ip": "127.0.0.1",
+        "pathname": "/",
+    }
+
+    class StateProxy:
+        __name__ = "StateProxy"
+
+        def __init__(self, wrapped: HomeState) -> None:
+            self.__wrapped__ = wrapped
+
+        def _get_root_state(self) -> None:
+            msg = (
+                "Background task StateProxy is immutable outside of a context manager."
+            )
+            raise type("ImmutableStateError", (Exception,), {})(msg)
+
+    proxy = StateProxy(inner)
+    assert resolve_state_root(proxy) is inner
+
+
+def test_bind_django_request_for_handler_state_with_state_proxy() -> None:
+    from reflex_django.bridge.event import bind_django_request_for_handler_state
+
+    inner = HomeState()
+    inner.router_data = {  # type: ignore[attr-defined]
+        "headers": {"cookie": ""},
+        "ip": "127.0.0.1",
+        "pathname": "/",
+    }
+    root = HomeState()
+    root.router_data = inner.router_data  # type: ignore[attr-defined]
+
+    class StateProxy:
+        __name__ = "StateProxy"
+
+        def __init__(self, wrapped: HomeState) -> None:
+            self.__wrapped__ = wrapped
+
+        def _get_root_state(self) -> None:
+            raise type("ImmutableStateError", (Exception,), {})("immutable")
+
+    proxy = StateProxy(inner)
+
+    async def _go() -> None:
+        end_event_request()
+        await bind_django_request_for_handler_state(
+            proxy,
+            root_state=root,
+        )
+        assert inner.request.user.is_authenticated is False
+        end_event_request()
+
+    ctx = contextvars.copy_context()
+    ctx.run(asyncio.run, _go())

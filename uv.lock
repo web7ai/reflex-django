@@ -1026,7 +1026,7 @@ wheels = [
 
 [[package]]
 name = "reflex-django"
-version = "3.0.1"
+version = "4.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "asgiref" },

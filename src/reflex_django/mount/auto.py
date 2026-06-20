@@ -47,10 +47,9 @@ class ReflexMountHandle:
 
 
 def _auto_mount_enabled() -> bool:
-    env = os.environ.get("RX_AUTO_MOUNT")
-    if env is not None:
-        return str(env).strip().lower() not in {"0", "false", "no"}
-    return True
+    from reflex_django.mount.integration_config import mount_enabled
+
+    return mount_enabled()
 
 
 def has_reflex_mount(urlpatterns: Sequence[Any]) -> bool:
@@ -293,6 +292,7 @@ def maybe_auto_mount() -> ReflexMountHandle | None:
         return _MOUNT_HANDLE
 
     if not _auto_mount_enabled():
+        logger.debug("reflex-django: auto_mount disabled — skipping reflex_mount catch-all.")
         _MOUNT_BOOT_COMPLETED = True
         return _MOUNT_HANDLE
 

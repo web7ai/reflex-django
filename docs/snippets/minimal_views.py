@@ -1,9 +1,13 @@
-﻿import reflex as rx
+﻿# shop/views.py — optional. Auto-imported at compile when this file exists.
+# Or put pages directly on app in shop/shop.py with app.add_page (see minimal_app_entry.py).
+import reflex as rx
 from reflex_django.pages.decorators import page
 from reflex_django.states import AppState
 
 
 class HomeState(AppState):
+    greeting: str = ""
+
     @rx.event
     async def on_load(self):
         user = self.request.user

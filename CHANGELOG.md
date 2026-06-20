@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Four-pillar integration config** — `ReflexDjangoPlugin` accepts nested `embed`, `mount`, `proxy`, and `bridge` blocks (plus `profile` presets: `integrated`, `split_dev`, `reflex_only`). Unified resolver in `reflex_django.mount.integration_config`.
+- Legacy flat keys (`auto_mount`, `mount_prefix`, `django_prefix`) remain supported.
+
 ### Removed (breaking — v4.0.0)
 
 - **Django-first integration** — `IntegrationMode`, `install_django_first_integration()`, settings-driven `RX_CONFIG` / `RX_PLUGINS`, synthetic `rxconfig_bridge`, and in-memory `rxconfig` synthesis.

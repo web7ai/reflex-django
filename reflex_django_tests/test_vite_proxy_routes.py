@@ -97,6 +97,10 @@ def test_resolve_routes_falls_back_to_urlpatterns(
         lambda: _PrefixConfig(),
     )
     monkeypatch.setattr(
+        "reflex_django.mount.integration_config.mount_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
         "reflex_django.mount.discovery._root_urlconf_urlpatterns",
         lambda: [object()],
     )
@@ -120,3 +124,36 @@ def test_resolve_routes_falls_back_to_urlpatterns(
     assert len(routes) == 1
     assert "/admin" in routes[0].prefixes
     assert "/api" in routes[0].prefixes
+
+
+def test_resolve_routes_skips_plugin_django_prefix_when_mount_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reflex_django.mount.config import register_mount_from_plugin
+    from reflex_django.mount.integration_config import resolve_and_cache_integration_config
+    from reflex_django.plugins import ReflexDjangoPlugin
+
+    plugin = ReflexDjangoPlugin(
+        config={
+            "mount": {"enabled": False, "django_prefix": ("/admin", "/api")},
+            "proxy": {"server": "http://127.0.0.1:8000"},
+        }
+    )
+    resolve_and_cache_integration_config(plugin)
+    register_mount_from_plugin(plugin)
+    monkeypatch.setenv("RX_PROXY_SERVER", "http://127.0.0.1:8000")
+    monkeypatch.delenv("RX_DJANGO_PREFIX", raising=False)
+
+    class _Cfg:
+        api_url = "http://127.0.0.1:8010"
+        frontend_port = 3000
+        backend_port = 8010
+
+    monkeypatch.setattr(
+        "reflex_base.config.get_config",
+        lambda: _Cfg(),
+    )
+
+    routes = resolve_vite_dev_proxy_routes()
+    django_routes = [r for r in routes if "/admin" in r.prefixes or "/api" in r.prefixes]
+    assert django_routes == []

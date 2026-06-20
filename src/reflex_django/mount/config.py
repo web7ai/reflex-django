@@ -52,10 +52,23 @@ def register_mount_from_plugin(plugin: Any) -> None:
     if not is_reflex_django_plugin(plugin):
         return
 
-    cfg = getattr(plugin, "config", None) or {}
+    from reflex_django.mount.integration_config import (
+        IntegrationConfig,
+        get_integration_config,
+        integration_config_is_cached,
+    )
+
+    if integration_config_is_cached():
+        mount = get_integration_config().mount
+    else:
+        mount = IntegrationConfig.from_plugin(plugin).mount
+
+    if not mount.enabled:
+        return
+
     register_mount(
-        django_prefix=_coerce_django_prefix(cfg.get("django_prefix")),
-        mount_prefix=cfg.get("mount_prefix"),
+        django_prefix=mount.django_prefix,
+        mount_prefix=mount.mount_prefix,
     )
 
 
@@ -121,11 +134,13 @@ def clear_mount_registration() -> None:
     """Clear mount-time config (tests only)."""
     global _URLCONF_IMPORTED, _URLCONF_IMPORT_DEFERRED, _URLCONF_IMPORTED_BEFORE_ADMIN
     from reflex_django.mount.auto import clear_auto_mount_state
+    from reflex_django.mount.integration_config import clear_integration_config
 
     _REGISTRATIONS.clear()
     _URLCONF_IMPORTED = False
     _URLCONF_IMPORT_DEFERRED = False
     _URLCONF_IMPORTED_BEFORE_ADMIN = False
+    clear_integration_config()
     clear_auto_mount_state()
 
 

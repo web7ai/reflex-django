@@ -56,27 +56,13 @@ def setting_or_env_bool(
         return default
 
 
-_PROXY_SERVER_ENV = "RX_PROXY_SERVER"
-_PROXY_SERVER_SETTING = "RX_PROXY_SERVER"
-
-
 def resolve_rxdjango_proxy_server(*, required: bool = False) -> str:
     """Return the externally managed Django HTTP server base URL for dev proxy."""
-    env_value = os.environ.get(_PROXY_SERVER_ENV, "").strip()
-    if env_value:
-        return env_value.rstrip("/")
+    from reflex_django.mount.integration_config import proxy_server_url
 
-    try:
-        from django.conf import settings
-
-        if settings.configured:
-            settings_value = str(
-                getattr(settings, _PROXY_SERVER_SETTING, "") or ""
-            ).strip()
-            if settings_value:
-                return settings_value.rstrip("/")
-    except Exception:
-        pass
+    value = proxy_server_url()
+    if value:
+        return value
 
     if required:
         from reflex_django.setup.errors import ConfigurationError
@@ -85,10 +71,11 @@ def resolve_rxdjango_proxy_server(*, required: bool = False) -> str:
             "RX_PROXY_SERVER is not set.\n"
             "When Django runs on a separate HTTP server, start it first, for example:\n"
             "    python manage.py runserver\n"
-            "Then set in settings.py:\n"
-            '    RX_PROXY_SERVER = "http://127.0.0.1:8000"\n'
-            "Or export RX_PROXY_SERVER=http://127.0.0.1:8000.\n"
-            "Leave it unset when Django is mounted in the Reflex backend (default)."
+            "Then set in rxconfig.py:\n"
+            '    ReflexDjangoPlugin(config={"embed": {"enabled": False}, '
+            '"proxy": {"server": "http://127.0.0.1:8000"}})\n'
+            "Or set RX_PROXY_SERVER in settings.py.\n"
+            "Leave embed enabled when Django is mounted in the Reflex backend (default)."
         )
     return ""
 

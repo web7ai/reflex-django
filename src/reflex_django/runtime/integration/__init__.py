@@ -100,29 +100,47 @@ def install_plugin_integration(plugin: Any) -> None:
     try:
         _apply_plugin_settings_module(plugin)
         _ensure_settings_env()
-        configure_django()
-        _ensure_runtime_event_patches()
-        install_bootstrap_patches(patch_get_config=False)
 
         from reflex_django.mount.config import (
             ensure_mount_config_loaded,
             register_mount_from_plugin,
         )
+        from reflex_django.mount.integration_config import (
+            IntegrationConfig,
+            mount_enabled,
+            resolve_and_cache_integration_config,
+            set_integration_config,
+        )
 
+        # Cache plugin intent before django.setup() so AdminConfig.ready and other
+        # hooks respect mount.enabled=False during bootstrap.
+        early = IntegrationConfig.from_plugin(plugin)
+        early.validate(runtime=False)
+        set_integration_config(early)
+
+        configure_django()
+        _ensure_runtime_event_patches()
+        install_bootstrap_patches(patch_get_config=False)
+
+        integration = resolve_and_cache_integration_config(plugin)
         register_mount_from_plugin(plugin)
         ensure_mount_config_loaded()
 
-        auto_mount = (getattr(plugin, "config", None) or {}).get("auto_mount", True)
-        if auto_mount is not False:
+        if mount_enabled():
             from reflex_django.mount.auto import maybe_auto_mount
 
             maybe_auto_mount()
+        else:
+            logger.info(
+                "reflex-django: mount.enabled=False — skipping reflex_mount auto-mount."
+            )
 
         install_runtime_patches()
         set_installed(True)
         logger.info(
-            "reflex-django: plugin integration active via ReflexDjangoPlugin. "
-            "Use reflex run / reflex export; Django routes mount in the Reflex backend."
+            "reflex-django: plugin integration active (%s). "
+            "Use reflex run / reflex export.",
+            integration.summary(),
         )
     finally:
         _BOOTSTRAP_IN_PROGRESS = False

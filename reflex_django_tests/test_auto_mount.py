@@ -13,6 +13,11 @@ from reflex_django.mount.auto import (
     clear_auto_mount_state,
     maybe_auto_mount,
 )
+from reflex_django.mount.integration_config import (
+    IntegrationConfig,
+    clear_integration_config,
+    set_integration_config,
+)
 from reflex_django.mount.config import clear_mount_registration, register_mount
 from reflex_django.mount.registry import clear_mount_registry
 from reflex_django.views.mount import ReflexMountView
@@ -23,10 +28,12 @@ def _reset_mount_state() -> None:
     clear_mount_registry()
     clear_mount_registration()
     clear_auto_mount_state()
+    clear_integration_config()
     yield
     clear_mount_registry()
     clear_mount_registration()
     clear_auto_mount_state()
+    clear_integration_config()
 
 
 def test_maybe_auto_mount_appends_catchall(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,6 +91,31 @@ def test_maybe_auto_mount_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
 
     clear_auto_mount_state()
     sys.modules.pop(urlconf_name, None)
+
+    maybe_auto_mount()
+    urlconf = importlib.import_module(urlconf_name)
+    assert len(urlconf.urlpatterns) == 1
+
+
+def test_maybe_auto_mount_skips_when_plugin_mount_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import django
+
+    django.setup()
+    urlconf_name = "reflex_django_tests.test_auto_mount_urls"
+    monkeypatch.setattr(settings, "ROOT_URLCONF", urlconf_name, raising=False)
+    monkeypatch.setattr(settings, "RX_AUTO_MOUNT", True, raising=False)
+    monkeypatch.setenv("RX_AUTO_MOUNT", "1")
+    import sys
+
+    sys.modules.pop(urlconf_name, None)
+    register_mount(app_name="demo")
+
+    config = IntegrationConfig.from_plugin(
+        type("_Plugin", (), {"config": {"mount": {"enabled": False}}})()
+    )
+    set_integration_config(config)
 
     maybe_auto_mount()
     urlconf = importlib.import_module(urlconf_name)

@@ -21,12 +21,7 @@ _FORBIDDEN: tuple[str, ...] = (
     "Django-first config",
 )
 
-_ALLOWED_PATH_FRAGMENTS: tuple[str, ...] = (
-    "reference/migration/v4_plugin_only.md",
-    "getting-started/existing_reflex_project.md",
-    "getting-started/configuration.md",
-    "getting-started/existing_django_project.md",
-)
+_ALLOWED_PATH_FRAGMENTS: tuple[str, ...] = ()
 
 
 def _iter_doc_files() -> list[Path]:

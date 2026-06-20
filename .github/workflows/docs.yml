@@ -31,6 +31,9 @@ jobs:
       - name: Docs encoding check
         run: uv run --python 3.12 python scripts/check_docs_encoding.py
 
+      - name: Docs link check
+        run: uv run --python 3.12 python scripts/check_docs_links.py
+
       - name: Build Docs
         run: |
           uv run --python 3.12 --with mkdocs-material mkdocs build --strict

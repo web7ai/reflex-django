@@ -8,20 +8,16 @@ from reflex_django.bridge.context import (
     current_request,
     current_response,
 )
+from reflex_django.bridge.state_tree import unwrap_state_proxy
 from reflex_django.state.request import DjangoStateRequest
 
 REQUEST_WRAPPER_ATTR = "_rx_request_wrapper"
 RESPONSE_ATTR = "_rx_response"
 
-_PROXY_TYPE_NAMES = frozenset({"StateProxy", "ReadOnlyStateProxy"})
-
 
 def _binding_target(state: Any) -> Any:
     """Return the real state instance when *state* is a Reflex background proxy."""
-    wrapped = getattr(state, "__wrapped__", None)
-    if wrapped is not None and type(state).__name__ in _PROXY_TYPE_NAMES:
-        return wrapped
-    return state
+    return unwrap_state_proxy(state)
 
 
 def bind_request_on_state(

@@ -45,7 +45,12 @@ def _patch_vite_config_generation() -> None:
                 patch_vite_config_content,
                 resolve_vite_dev_proxy_routes,
             )
+            from reflex_django.mount.integration_config import (
+                vite_proxy_patching_enabled,
+            )
 
+            if not vite_proxy_patching_enabled():
+                return content
             if not dev_uses_separate_ports():
                 return content
             routes = resolve_vite_dev_proxy_routes()

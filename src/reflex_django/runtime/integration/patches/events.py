@@ -20,7 +20,10 @@ def _patch_process_event() -> None:
     async def process_event(handler, payload, state, root_state):  # noqa: ANN001
         from reflex_django.bridge.event import bind_django_request_for_handler_state
 
-        await bind_django_request_for_handler_state(state)
+        await bind_django_request_for_handler_state(
+            state,
+            root_state=root_state,
+        )
         await original(handler, payload, state, root_state)
 
     bsp.process_event = process_event

@@ -18,7 +18,7 @@ from reflex_django.bridge.event.request_builder import (
     _build_request_from_router_data,
 )
 from reflex_django.bridge.event.router_data import _router_data_from_state_chain
-from reflex_django.bridge.state_tree import resolve_state_root
+from reflex_django.bridge.state_tree import resolve_state_root, unwrap_state_proxy
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -126,6 +126,7 @@ async def bind_django_request_for_handler_state(
     *,
     event: Event | None = None,
     tier: str = "full",
+    root_state: Any | None = None,
 ) -> None:
     """Ensure *handler_state* can use ``self.request`` in the current event."""
     from reflex_django.bridge.context import begin_event_request, current_request
@@ -133,8 +134,12 @@ async def bind_django_request_for_handler_state(
 
     http = current_request()
     if http is None:
-        root = resolve_state_root(handler_state) or handler_state
-        bridged = await bridge_request_for_state(root, event, tier=tier)
+        bridge_state = (
+            root_state
+            or resolve_state_root(handler_state)
+            or unwrap_state_proxy(handler_state)
+        )
+        bridged = await bridge_request_for_state(bridge_state, event, tier=tier)
         if bridged is not None:
             http, response = bridged
             begin_event_request(http)

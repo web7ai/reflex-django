@@ -94,12 +94,6 @@ def configure_django(settings_module: str | None = None) -> str:
             apply_performance_preset()
         except Exception:
             pass
-        try:
-            from reflex_django.mount.auto import maybe_auto_mount
-
-            maybe_auto_mount()
-        except Exception:
-            pass
         _bootstrap_reflex_integration_for_plugin()
         return active
 

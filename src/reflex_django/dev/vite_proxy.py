@@ -399,11 +399,15 @@ def _vite_proxy_is_complete(
 
 def _resolve_django_backend_prefixes() -> tuple[str, ...]:
     """Return Django-owned URL prefixes for the Vite dev proxy."""
+    from reflex_django.mount.integration_config import mount_enabled
     from reflex_django.mount.prefixes import resolve_prefixes
 
     prefixes = _normalized_prefixes(resolve_prefixes().backend_prefixes_for_asgi())
     if prefixes:
         return prefixes
+
+    if not mount_enabled():
+        return ()
 
     from reflex_django.mount.discovery import (
         _root_urlconf_urlpatterns,
@@ -561,10 +565,20 @@ def finalize_web_dev_layout(*, force: bool = True) -> bool:
 
     from reflex_django.dev.frontend_stability import apply_frontend_stability_patches
     from reflex_django.dev.proxy import dev_uses_separate_ports
+    from reflex_django.mount.integration_config import vite_proxy_patching_enabled
 
     web_dir = Path(prerequisites.get_web_dir())
     if not web_dir.is_dir():
         return False
+
+    if not vite_proxy_patching_enabled():
+        changed = strip_vite_django_dev_proxy(web_dir)
+        if changed:
+            console.info(
+                "reflex-django removed Vite proxy rules from .web/ "
+                "(ReflexDjangoPlugin proxy.enabled=False)."
+            )
+        return changed
 
     if not dev_uses_separate_ports():
         changed = strip_vite_django_dev_proxy(web_dir)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from reflex_django.dev.vite_proxy import (
     ViteProxyRoute,
     ensure_vite_django_dev_proxy,
@@ -100,3 +102,54 @@ def test_ensure_vite_django_dev_proxy_force_restores_stripped_config(
     restored = vite.read_text(encoding="utf-8")
     assert "reflexDjangoProxyPlugin()" in restored
     assert "rx-django-proxy-rev:" in restored
+
+
+def test_finalize_web_dev_layout_strips_when_proxy_disabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reflex_django.dev.vite_proxy import finalize_web_dev_layout
+    from reflex_django.mount.integration_config import (
+        BridgeConfig,
+        EmbedConfig,
+        IntegrationConfig,
+        MountConfig,
+        ProxyConfig,
+        set_integration_config,
+    )
+
+    vite = tmp_path / "vite.config.js"
+    vite.write_text(
+        patch_vite_config(
+            _SAMPLE,
+            target="http://localhost:8000",
+            prefixes=("/admin",),
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "vite-plugin-reflex-django-proxy.js").write_text(
+        "export {}",
+        encoding="utf-8",
+    )
+
+    set_integration_config(
+        IntegrationConfig(
+            embed=EmbedConfig(enabled=True),
+            mount=MountConfig(),
+            proxy=ProxyConfig(enabled=False),
+            bridge=BridgeConfig(),
+        )
+    )
+    monkeypatch.setattr(
+        "reflex_django.dev.proxy.dev_uses_separate_ports",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "reflex.utils.prerequisites.get_web_dir",
+        lambda: tmp_path,
+    )
+
+    changed = finalize_web_dev_layout(force=True)
+    assert changed is True
+    assert "reflexDjangoProxyPlugin()" not in vite.read_text(encoding="utf-8")
+    assert not (tmp_path / "vite-plugin-reflex-django-proxy.js").is_file()

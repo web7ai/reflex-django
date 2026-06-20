@@ -1,168 +1,277 @@
 site_name: reflex-django
+
 site_url: https://web7ai.github.io/reflex-django/
+
 site_description: Run Django and Reflex together. One process, shared sessions, Python UI.
+
 site_author: Mohannad Irshedat
+
 repo_url: https://github.com/web7ai/reflex-django
+
 repo_name: web7ai/reflex-django
 
+
+
 theme:
+
   name: material
+
   logo: assets/logo.svg
+
   palette:
+
     - media: "(prefers-color-scheme: light)"
+
       scheme: default
+
       primary: green
+
       accent: deep purple
+
       toggle:
+
         icon: material/weather-sunny
+
         name: Switch to dark mode
+
     - media: "(prefers-color-scheme: dark)"
+
       scheme: slate
+
       primary: black
+
       accent: deep purple
+
       toggle:
+
         icon: material/weather-night
+
         name: Switch to light mode
+
   font:
+
     text: Inter
+
     code: JetBrains Mono
+
   icon:
+
     repo: fontawesome/brands/github
+
   features:
+
     - navigation.tabs
+
     - navigation.tabs.sticky
+
     - navigation.sections
-    - navigation.expand
-    - navigation.indexes
+
     - navigation.top
+
     - navigation.tracking
+
     - navigation.instant
+
     - navigation.instant.progress
+
     - navigation.footer
+
     - navigation.path
+
     - search.suggest
+
     - search.highlight
+
     - search.share
+
     - content.code.copy
+
     - content.code.annotate
+
     - content.tabs.link
+
     - toc.follow
 
+
+
 extra:
+
   generator: false
+
   social:
+
     - icon: fontawesome/brands/github
+
       link: https://github.com/web7ai/reflex-django
+
     - icon: fontawesome/brands/python
+
       link: https://pypi.org/project/reflex-django/
 
+
+
 markdown_extensions:
+
   - markdown.extensions.admonition
+
   - markdown.extensions.attr_list
+
   - markdown.extensions.def_list
+
   - markdown.extensions.footnotes
+
   - markdown.extensions.meta
+
   - markdown.extensions.toc:
+
       permalink: true
+
   - markdown.extensions.md_in_html
+
   - pymdownx.arithmatex:
+
       generic: true
+
   - pymdownx.betterem:
+
       smart_enable: all
+
   - pymdownx.caret
+
   - pymdownx.details
+
   - pymdownx.emoji:
+
       emoji_index: !!python/name:material.extensions.emoji.twemoji
+
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
   - pymdownx.highlight:
+
       anchor_linenums: true
+
       line_spans: __span
+
       pygments_lang_class: true
+
   - pymdownx.inlinehilite
+
   - pymdownx.keys
+
   - pymdownx.magiclink:
+
       normalize_issue_symbols: true
+
       repo_url_shorthand: true
+
       user: web7ai
+
       repo: reflex-django
+
   - pymdownx.mark
+
   - pymdownx.smartsymbols
+
   - pymdownx.snippets:
+
       check_paths: true
+
       base_path: docs
+
   - pymdownx.superfences:
+
       custom_fences:
+
         - name: mermaid
+
           class: mermaid
+
           format: !!python/name:pymdownx.superfences.fence_code_format
+
   - pymdownx.tabbed:
+
       alternate_style: true
+
   - pymdownx.tasklist:
+
       custom_checkbox: true
+
   - pymdownx.tilde
 
+
+
 extra_css:
+
   - stylesheets/extra.css
 
+
+
 extra_javascript:
+
   - https://unpkg.com/mermaid@11/dist/mermaid.min.js
+
   - javascripts/mermaid-init.js
 
+
+
 exclude_docs: |
+
   STYLE.md
+
   snippets/
+
   auth_branding.md
-  _archive/**
+
+
 
 nav:
+
   - Home: index.md
-  - Overview:
-    - overview/index.md
-    - How it fits: overview/concepts.md
-  - Getting started:
-    - getting-started/index.md
-    - Install: getting-started/installation.md
-    - Your first app: getting-started/quickstart.md
-    - Project structure: getting-started/project_structure.md
-    - Configuration: getting-started/configuration.md
-    - Local development: getting-started/local_development.md
-    - Plugin integration: getting-started/existing_reflex_project_plugin.md
-    - Existing Django project: getting-started/existing_django_project.md
-  - Guides:
-    - guides/index.md
-    - App entry and pages: guides/app_entry_and_pages.md
-    - Pages: guides/pages.md
-    - State: guides/state.md
-    - Database: guides/database.md
-    - Authentication: guides/authentication.md
-    - Middleware: guides/middleware.md
-    - Forms: guides/forms.md
-    - CRUD: guides/crud.md
-    - Mixins: guides/mixins.md
-    - Serializers: guides/serializers.md
-    - File uploads: guides/uploads.md
-    - Media files: guides/media.md
-    - HTTP APIs: guides/api.md
-    - i18n: guides/i18n.md
-    - Cookbook: guides/cookbook.md
-  - Operations:
-    - operations/index.md
-    - CLI: operations/cli.md
-    - Testing: operations/testing.md
-    - Deployment: operations/deployment.md
-    - Scaling: operations/scaling.md
-    - Troubleshooting: operations/troubleshooting.md
-    - Best practices: operations/best_practices.md
-  - Reference:
-    - reference/index.md
-    - Settings: reference/settings.md
-    - "Migration: v4 plugin-only": reference/migration/v4_plugin_only.md
-    - Public API: reference/api.md
-    - FAQ: reference/faq.md
-    - Glossary: reference/glossary.md
-  - Internals:
-    - internals/index.md
-    - Architecture: internals/architecture.md
-    - Routing: internals/routing.md
-    - Event pipeline: internals/event_pipeline.md
-    - Streaming middleware: internals/streaming_middleware.md
+
+  - Learn:
+
+    - learn/index.md
+
+    - "1. Integration": learn/integration.md
+
+    - "2. Embed": learn/embed.md
+
+    - "3. Mount": learn/mount.md
+
+    - "4. Proxy": learn/proxy.md
+
+    - "5. Bridge": learn/bridge.md
+
+  - Tutorial: learn/quickstart.md
+
+  - Advanced:
+
+    - advanced/index.md
+
+    - Pages and state: advanced/pages-and-state.md
+
+    - Serializers: advanced/serializers.md
+
+    - Model state: advanced/model-state.md
+
+    - Database: advanced/database.md
+
+    - Auth: advanced/auth.md
+
+    - Bridge utilities: advanced/bridge-utilities.md
+
+    - i18n: advanced/i18n.md
+
+    - Uploads and media: advanced/uploads.md
+
+    - CLI: advanced/cli.md
+
+    - Deploy: advanced/deployment.md
+
+    - Troubleshooting: advanced/troubleshooting.md
+
+    - Scaling: advanced/scaling.md
+
+    - Config reference: advanced/config.md
+
+

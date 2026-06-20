@@ -8,78 +8,50 @@
   </p>
 </div>
 
-You already run Django. reflex-django lets you build the UI in [Reflex](https://reflex.dev) without a separate frontend repo. One process in production, shared session cookies, and `request.user` inside button handlers.
+## What is reflex-django?
 
-- **Same origin** - admin, API, and SPA on one host in production
-- **Plugin-only integration** - `ReflexDjangoPlugin` in `rxconfig.py` (v4)
-- **One dev command** - `reflex run` (optional split Django via `RX_PROXY_SERVER`)
+**reflex-django** connects Django and [Reflex](https://reflex.dev) so you run one app, not two servers you glue together by hand. Django owns your database, admin, session auth, and REST or API routes. Reflex owns reactive pages you write in Python.
 
-## Dev proxy: `RX_PROXY_SERVER`
+Install the plugin, set `profile: "integrated"` in `rxconfig.py`, and run `reflex run`. Django admin, your API, and Reflex pages share cookies and sessions. Handlers on `AppState` see `self.request.user` on every event, the same way a Django view would.
 
-By default you only need **`reflex run`**. Django admin and API are mounted **inside** the Reflex backend; Vite on `:3000` proxies everything there so the browser stays on one origin.
+## Install
 
-Set **`RX_PROXY_SERVER`** in `settings.py` when Django runs on a **separate** HTTP server (for example `python manage.py runserver`):
-
-```python
-RX_PROXY_SERVER = "http://127.0.0.1:8000"
+```bash
+uv add reflex-django
 ```
 
-| | Default (unset) | `RX_PROXY_SERVER` set |
-|:---|:---|:---|
-| Django | In-process on Reflex backend | Your `runserver` URL |
-| Commands | `reflex run` | `runserver` + `reflex run` |
-| Vite proxies | Admin/API/`/_event` → Reflex backend | Admin/API → Django; `/_event` → Reflex |
+```bash
+pip install reflex-django
+```
 
-Leave it unset for the usual single-command workflow. Use split mode when you want classic Django dev in a second terminal. Production does not use this setting.
+For a new project, also add Django and Reflex (`uv add django reflex reflex-django` or `pip install django reflex reflex-django`). See [Integration](learn/integration.md) for the full layout.
 
-Details: [Local development](getting-started/local_development.md) · [Routing](internals/routing.md) · [Settings](reference/settings.md)
+## Configure and run
 
-## Start here
+```python
+--8<-- "snippets/profile_rxconfig.py"
+```
 
-<div class="rd-card-grid" markdown="0">
-<a href="getting-started/" class="rd-card">
-<p class="rd-card__title">Getting started</p>
-<p class="rd-card__desc">Install, run the quickstart, and learn the project layout.</p>
-</a>
-<a href="guides/" class="rd-card">
-<p class="rd-card__title">Guides</p>
-<p class="rd-card__desc">Pages, state, auth, CRUD, uploads, and more.</p>
-</a>
+1. Add `reflex_django` to `INSTALLED_APPS` and `AsyncStreamingMiddleware` last ([Integration](learn/integration.md))
+2. Create `shop/shop.py` with `app = rx.App()` and `app.add_page(...)` ([Pages and state](advanced/pages-and-state.md))
+3. `reflex django migrate` then `reflex run` → **http://localhost:3000/**
+
+## Learn step by step
+
+<div class="rd-card-grid" markdown="1">
+
+[**1 · Integration**<br><span class="rd-card__desc">Install, wire settings, urls, and run your first app.</span>](learn/integration.md){ .rd-card }
+
+[**2 · Embed**<br><span class="rd-card__desc">Django admin and API inside the Reflex backend.</span>](learn/embed.md){ .rd-card }
+
+[**3 · Mount**<br><span class="rd-card__desc">URL prefixes and the SPA catch-all.</span>](learn/mount.md){ .rd-card }
+
+[**4 · Proxy**<br><span class="rd-card__desc">Port 3000 dev wiring and split dev.</span>](learn/proxy.md){ .rd-card }
+
+[**5 · Bridge**<br><span class="rd-card__desc">Request context and the logged-in user in handlers.</span>](learn/bridge.md){ .rd-card }
+
+[**Tutorial**<br><span class="rd-card__desc">Build a todo app with auth and the async ORM.</span>](learn/quickstart.md){ .rd-card }
+
 </div>
 
-## Already have a project?
-
-| You already have | Guide | Dev command |
-|:---|:---|:---|
-| **Django** project | [Existing Django project](getting-started/existing_django_project.md) | `reflex run` |
-| **Reflex** project | [Plugin path](getting-started/existing_reflex_project_plugin.md) | `reflex run` |
-
-## The files you touch most
-
-```python
---8<-- "snippets/minimal_rxconfig.py"
-```
-
-```python
---8<-- "snippets/minimal_settings.py"
-```
-
-```python
---8<-- "snippets/minimal_urls.py"
-```
-
-Then run:
-
---8<-- "snippets/reflex_run_command.md"
-
-## Quick lookup
-
-| I want to... | Read |
-|:---|:---|
-| See how Django and Reflex fit | [How it fits](overview/concepts.md) |
-| Add Reflex to my Django project | [Existing Django project](getting-started/existing_django_project.md) |
-| Add Django to my Reflex project | [Plugin path](getting-started/existing_reflex_project_plugin.md) |
-| Read `request.user` in a handler | [State](guides/state.md) |
-| Deploy to one container | [Deployment](operations/deployment.md) |
-| Look up a setting | [Settings reference](reference/settings.md) |
-| Run Django on `runserver` while using Reflex HMR | [Local development](getting-started/local_development.md) (`RX_PROXY_SERVER`) |
+Need serializers, auth pages, or deploy help? See [Advanced](advanced/index.md).

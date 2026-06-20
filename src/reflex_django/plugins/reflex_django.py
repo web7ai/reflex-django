@@ -12,9 +12,15 @@ logger = logging.getLogger("reflex_django.plugins")
 
 PLUGIN_MARKER = "reflex_django"
 
-ALLOWED_PLUGIN_CONFIG_KEYS: frozenset[str] = frozenset(
+# Backward-compatible export; see integration_config.ALLOWED_TOP_LEVEL_KEYS.
+ALLOWED_PLUGIN_CONFIG_KEYS = frozenset(
     {
         "settings_module",
+        "profile",
+        "embed",
+        "mount",
+        "proxy",
+        "bridge",
         "django_prefix",
         "mount_prefix",
         "auto_mount",
@@ -23,19 +29,22 @@ ALLOWED_PLUGIN_CONFIG_KEYS: frozenset[str] = frozenset(
 
 
 def _coerce_plugin_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
-    if not raw:
-        return {}
-    if not isinstance(raw, Mapping):
-        msg = "ReflexDjangoPlugin config must be a mapping."
-        raise TypeError(msg)
-    unknown = set(raw) - ALLOWED_PLUGIN_CONFIG_KEYS
-    if unknown:
-        msg = (
-            f"Unsupported ReflexDjangoPlugin config keys: {sorted(unknown)}. "
-            f"Allowed: {sorted(ALLOWED_PLUGIN_CONFIG_KEYS)}"
-        )
-        raise ValueError(msg)
-    return dict(raw)
+    from reflex_django.mount.integration_config import (
+        IntegrationConfig,
+        validate_plugin_config_keys,
+    )
+
+    config = validate_plugin_config_keys(raw)
+    if config:
+        IntegrationConfig.from_plugin(_ConfigHolder(config)).validate()
+    return config
+
+
+class _ConfigHolder:
+    """Minimal stand-in for plugin during early config validation."""
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
 
 
 def is_reflex_django_plugin(plugin: Any) -> bool:
@@ -57,14 +66,36 @@ class ReflexDjangoPlugin(Plugin):
         config: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self.config: dict[str, Any] = _coerce_plugin_config(config)
+        from reflex_django.mount.integration_config import (
+            IntegrationConfig,
+            validate_plugin_config_keys,
+        )
+
+        merged = validate_plugin_config_keys(config)
         if kwargs:
-            extra = _coerce_plugin_config(kwargs)
-            self.config.update(extra)
+            merged = {**merged, **validate_plugin_config_keys(kwargs)}
+        if merged:
+            IntegrationConfig.from_plugin(_ConfigHolder(merged)).validate()
+        self.config = merged
 
     def pre_compile(self, **context: Any) -> None:
         """Bootstrap Django integration and patch Vite for two-port dev."""
         self._ensure_bootstrap()
+        from reflex_django.mount.integration_config import get_integration_config
+
+        if not get_integration_config().proxy.enabled:
+            logger.info(
+                "reflex-django: proxy.enabled=False — skipping Vite proxy patch."
+            )
+            try:
+                from reflex_django.dev.vite_proxy import finalize_web_dev_layout
+
+                finalize_web_dev_layout(force=True)
+            except Exception as exc:
+                logger.warning(
+                    "reflex-django: could not strip Vite proxy rules: %r", exc
+                )
+            return
         try:
             from reflex_django.dev.vite_proxy import (
                 ensure_vite_django_dev_proxy_from_config,

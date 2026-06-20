@@ -1,3 +1,8 @@
-# settings.py - optional: proxy Django admin/API to a separate server during dev
-# Leave unset when using reflex run (Django is mounted in the Reflex backend).
-# RX_PROXY_SERVER = "http://127.0.0.1:8000"
+# Split dev: point Reflex at a separate Django server (prefer plugin config over settings).
+#
+# rxconfig.py:
+# ReflexDjangoPlugin(config={
+#     "settings_module": "config.settings",
+#     "profile": "split_dev",
+#     "proxy": {"server": "http://127.0.0.1:8000"},
+# })
