@@ -44,13 +44,22 @@ def resolve_from_build(options: dict[str, Any]) -> bool:
         return False
     if explicit_from_build:
         return True
-    return setting_or_env_bool(ENV_SERVE_FROM_BUILD, "RX_SERVE_FROM_BUILD", default=False)
+    return setting_or_env_bool(
+        ENV_SERVE_FROM_BUILD, "RX_SERVE_FROM_BUILD", default=False
+    )
 
 
 def build_run_plan(options: dict[str, Any]) -> RunPlan:
     """Build a RunPlan from manage.py command options."""
     env_name = options.get("env") or "dev"
     is_prod = env_name == "prod"
+    if is_prod:
+        try:
+            from reflex_django.setup.security_check import warn_insecure_defaults
+
+            warn_insecure_defaults(env_name=env_name)
+        except Exception:
+            pass
     with_vite = bool(options.get("with_vite"))
     is_env_dev = options.get("env") == "dev"
     from_build = resolve_from_build(options)

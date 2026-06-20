@@ -69,22 +69,24 @@ def patch_root_app_wrap(content: str) -> str:
 
 
 _REACT_INDEX_ALIAS = (
-    '      {\n'
+    "      {\n"
     '        find: "react",\n'
     '        replacement: fileURLToPath(new URL("./node_modules/react/index.js", import.meta.url)),\n'
-    '      },\n'
+    "      },\n"
 )
 _REACT_DOM_INDEX_ALIAS = (
-    '      {\n'
+    "      {\n"
     '        find: "react-dom",\n'
     '        replacement: fileURLToPath(new URL("./node_modules/react-dom/index.js", import.meta.url)),\n'
-    '      },\n'
+    "      },\n"
 )
 
 
 def strip_vite_react_file_aliases(content: str) -> str:
     """Remove react/index.js aliases that break ``react/jsx-runtime`` subpath imports."""
-    updated = content.replace(_REACT_INDEX_ALIAS, "").replace(_REACT_DOM_INDEX_ALIAS, "")
+    updated = content.replace(_REACT_INDEX_ALIAS, "").replace(
+        _REACT_DOM_INDEX_ALIAS, ""
+    )
     return updated
 
 
@@ -119,7 +121,9 @@ def patch_vite_rollup_output(content: str) -> str:
     """Replace Bun-only ``advancedChunks`` so Vite/Rollup SSR production builds succeed."""
     if "advancedChunks" not in content:
         return content
-    updated, count = _ADVANCED_CHUNKS_BLOCK.subn(_MANUAL_CHUNKS_OUTPUT, content, count=1)
+    updated, count = _ADVANCED_CHUNKS_BLOCK.subn(
+        _MANUAL_CHUNKS_OUTPUT, content, count=1
+    )
     return updated if count else content
 
 
@@ -132,11 +136,7 @@ def patch_vite_ssr_external(content: str) -> str:
     marker = re.search(r"\n\s*experimental\s*:\s*\{", content)
     if not marker:
         return content
-    insert = (
-        "\n  ssr: {\n"
-        '    external: ["pdfjs-dist"],\n'
-        "  },"
-    )
+    insert = "\n  ssr: {\n" '    external: ["pdfjs-dist"],\n' "  },"
     pos = marker.start()
     return content[:pos] + insert + content[pos:]
 
@@ -151,11 +151,7 @@ def patch_vite_strict_port(content: str) -> str:
     brace_pos = match.end() - 1
     newline = content.find("\n", brace_pos)
     insert_at = newline + 1 if newline != -1 else match.end()
-    return (
-        content[:insert_at]
-        + "\n    strictPort: true,\n"
-        + content[insert_at:]
-    )
+    return content[:insert_at] + "\n    strictPort: true,\n" + content[insert_at:]
 
 
 def patch_vite_react_dedupe(content: str) -> str:

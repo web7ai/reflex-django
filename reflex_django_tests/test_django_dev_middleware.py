@@ -18,7 +18,10 @@ def _middleware_response(request: HttpRequest) -> HttpResponse:
 
 def test_default_dev_middleware_paths() -> None:
     assert len(DEFAULT_DEV_MIDDLEWARE) == 2
-    assert all(p.startswith("reflex_django.dev.django_middleware.") for p in DEFAULT_DEV_MIDDLEWARE)
+    assert all(
+        p.startswith("reflex_django.dev.django_middleware.")
+        for p in DEFAULT_DEV_MIDDLEWARE
+    )
 
 
 def test_ensure_request_body_attrs_stubs_empty_body() -> None:
@@ -35,7 +38,11 @@ def test_ensure_request_body_attrs_stubs_empty_body() -> None:
 
 def test_ensure_request_body_attrs_does_not_clear_post_body() -> None:
     factory = RequestFactory()
-    request = factory.post("/", data={"csrfmiddlewaretoken": "x"}, content_type="application/x-www-form-urlencoded")
+    request = factory.post(
+        "/",
+        data={"csrfmiddlewaretoken": "x"},
+        content_type="application/x-www-form-urlencoded",
+    )
 
     mw = EnsureRequestBodyAttrsMiddleware(_middleware_response)
     mw(request)

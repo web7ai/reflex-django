@@ -9,8 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auth guard expansion** — `group_required`, `staff_required`, and `superuser_required` decorators plus server-side page guard checks for permissions/groups/staff/superuser.
+- **Async-safe serializers** — `ReflexDjangoModelSerializer.adata()` batches synchronous ORM serialization off the event loop.
+- **ModelState scaffolding** — `reflex django scaffold <app.Model>` generates typed `ModelState`, optional serializer, and starter CRUD page components.
+- **Unified FieldSpec schema** — shared field metadata for Django models, DRF-style serializers, ModelForms, scaffolding, and Reflex state field generation.
+- **Incremental ModelState updates** — opt-in row patching after save/delete via `incremental_updates=True`, with safe fallback for paginated creates.
+- **Devtools** — opt-in `RX_DEVTOOLS` event query/timing capture, state snapshots, and bridge-tier overlay.
+- **Reflex compatibility guardrails** — supported Reflex range (`>=0.9.4,<1.0`) and smoke checks for monkeypatched private symbols.
+- **Live updates** — `LiveListMixin`, model-signal registration, and process-local broadcaster for reactive list patching across connections.
 - **Four-pillar integration config** — `ReflexDjangoPlugin` accepts nested `embed`, `mount`, `proxy`, and `bridge` blocks (plus `profile` presets: `integrated`, `split_dev`, `reflex_only`). Unified resolver in `reflex_django.mount.integration_config`.
 - Legacy flat keys (`auto_mount`, `mount_prefix`, `django_prefix`) remain supported.
+
+### Changed
+
+- Bridge smart mode now threads the resolved bridge tier through event preprocessing so `none`/smart paths skip full middleware as intended.
+- Request/response binding is scoped to the handler state branch instead of the whole state tree.
+- `RX_EVENT_CACHE_FAST_AUTH` can reuse cached auth snapshots for `auth_only` bridge events within TTL.
+- Production startup warns loudly when bundled insecure defaults are used.
+
+### Documentation
+
+- Added advanced guides for [Forms and FieldSpec](docs/advanced/forms.md), [Live updates](docs/advanced/live-updates.md), [Devtools](docs/advanced/devtools.md), [Security](docs/advanced/security.md), and [v4 migration](docs/reference/migration/v4_plugin_only.md).
+- Updated README, LLM guide, config, scaling, CLI, auth, serializers, model-state, and bridge docs for the new APIs/settings.
 
 ### Removed (breaking — v4.0.0)
 
@@ -21,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Plugin config keys** `urlconf` and `rx_config` — use `ROOT_URLCONF` and top-level `rx.Config(...)`.
 - **`reflex_mount(..., rx_config=, plugins=)`** — URL overrides only.
 - Re-export shim modules (`runtime/integration.py`, `bridge/django_event.py`, `state/assembly.py`, `state/generic.py`, etc.).
-- Archived dual-mode docs under `docs/_archive/` and `existing_django_project.md`.
+- Archived dual-mode and existing-project docs were removed from the published documentation set.
 
 ### Added
 
@@ -58,14 +78,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `docs/reference/migration/v3_cleanup.md` — v3 breaking-change guide.
+- Historical v3 breaking-change guide added in that release series.
 - `[tool.ruff]` minimal lint config in `pyproject.toml`.
 - `.github/workflows/test.yml` — pytest CI workflow.
 - Docs style check expanded `DEPRECATED_TERMS` for v3 terminology.
 
 ### Changed
 
-- All `REFLEX_DJANGO_*` Django settings and environment variables removed in favor of `RX_*` (see `docs/reference/migration/rx_settings_rename.md`).
+- All `REFLEX_DJANGO_*` Django settings and environment variables removed in favor of `RX_*`.
 - State bridge override `_reflex_django_bridge` → `_rx_bridge`.
 - `manage.py run_reflex` runs Reflex with Vite and the native Reflex backend; Django is mounted in the Reflex backend by default.
 - Production Django ASGI uses plain `get_asgi_application()`; reverse-proxy `/_event` to Reflex.
@@ -81,7 +101,7 @@ Patch release (documentation and tooling fixes).
 
 ### Removed (breaking)
 
-- All v1 root-level module paths (no compatibility shims). See `docs/migration/v2_module_paths.md`.
+- All v1 root-level module paths (no compatibility shims).
 - `reflex_django.django_led_app` — use `reflex_django.runtime.reflex_app` or `from reflex_django import app`.
 
 ### Changed (breaking)
@@ -94,7 +114,7 @@ Patch release (documentation and tooling fixes).
 
 ### Added
 
-- `docs/migration/v2_module_paths.md` — full old-to-new import map.
+- Historical full old-to-new import map added in that release series.
 - `reflex_django.auth_state` kept as the canonical module for `DjangoUserState` so existing compiled frontends keep matching event handler keys (`reflex_django.states.auth` remains a re-export alias).
 
 ## [1.0.0] - 2026-06-07
@@ -102,7 +122,7 @@ Patch release (documentation and tooling fixes).
 ### Removed (breaking)
 
 - Legacy routing modes `reflex_led` and `django_led` — use `django_outer` (default) or `reflex_outer`.
-- `ReflexDjangoPlugin` and rxconfig-first setup — use Django-first configuration (see `docs/migration/v0-to-v1.md`).
+- `ReflexDjangoPlugin` and rxconfig-first setup — use Django-first configuration.
 - `reflex_django.asgi.make_dispatcher` — use `reflex_django.asgi.entry.build_django_outer_application`.
 
 ### Added
@@ -113,7 +133,7 @@ Patch release (documentation and tooling fixes).
 - `reflex_django.bootstrap` — app setup and patch registry.
 - `reflex_django.bridge` — event bridge package layout.
 - `reflex_django.setup.errors` — typed configuration exceptions.
-- `docs/migration/v0-to-v1.md` and pytest CI workflow.
+- Historical v0-to-v1 migration notes and pytest CI workflow.
 
 ### Changed
 
@@ -141,7 +161,7 @@ Patch release (documentation and tooling fixes).
 
 ### Changed
 
-- **Docs** — new [mental_model.md](docs/mental_model.md); entry points updated for auto-mount and settings-driven `app_name`.
+- **Docs** — new mental model documentation; entry points updated for auto-mount and settings-driven `app_name`.
 - **`reflex_mount()`** — returns a URL-only :class:`~reflex_django.mount.auto.ReflexMountHandle` (iterable / `.urlpatterns`); use for URL overrides only, not page registration.
 - **`reflex_django.django.urls.urlpatterns`** — default empty list; catch-all comes from auto-mount when enabled.
 - **`RX_AUTO_DISCOVER_PAGES`** — still default `True` but emits `DeprecationWarning`; explicit `urls.py` imports recommended until next major.
@@ -163,7 +183,7 @@ Patch release (documentation and tooling fixes).
   `run_reflex`.
 - **`RX_FRONTEND_PORT` / `RX_BACKEND_PORT`** — optional Django
   settings (and env vars) for the Vite and ASGI ports; documented in
-  [Settings reference](docs/settings_reference.md).
+  settings reference documentation.
 - **`strip_vite_django_dev_proxy()`** — removes stale Vite→Django `server.proxy` rules from
   `.web/` in DJANGO_OUTER mode (bidirectional proxies caused request loops on `:8000`).
 - **`run_reflex` port checks** — fails fast when the frontend port is already in use;
@@ -174,7 +194,7 @@ Patch release (documentation and tooling fixes).
 - **`reflex_django.dev.django_middleware`** — optional Django HTTP middleware for Vite
   dev (`EnsureRequestBodyAttrsMiddleware`, `DevViteProxyHostMiddleware`, and
   ``DEFAULT_DEV_MIDDLEWARE`` for settings). Documented in
-  [Local development](docs/local_development.md).
+  local development documentation.
 - **`reflex_django.dev.frontend_stability`** — post-compile patches for
   ``EventLoopContext``, generated components, and Vite ``resolve.dedupe`` (fixes
   ``useContext is not a function or its return value is not iterable`` without

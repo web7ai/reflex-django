@@ -9,7 +9,10 @@ from django.conf import settings
 from django.urls import clear_url_caches
 
 from reflex_django.mount.config import clear_mount_registration, register_mount
-from reflex_django.runtime.app_factory import ensure_reflex_app_ready, reset_app_factory_cache
+from reflex_django.runtime.app_factory import (
+    ensure_reflex_app_ready,
+    reset_app_factory_cache,
+)
 from reflex_django.setup.conf import configure_django
 
 

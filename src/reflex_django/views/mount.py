@@ -8,82 +8,37 @@ When ``DEBUG=True``, optionally reverse-proxies to the Vite dev server when
 
 """
 
-
-
 from __future__ import annotations
-
-
-
 import logging
-
 import mimetypes
-
 import os
-
-import time
-
 from pathlib import Path
-
+import time
 from typing import TYPE_CHECKING
-
 from urllib.parse import urlsplit
 
-
-
-from django.http import (
-
-    FileResponse,
-
-    HttpRequest,
-
-    HttpResponse,
-
-    HttpResponseNotFound,
-
-)
-
+from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound
 from django.views import View
-
-
-
 from reflex_django.dev.proxy import (
-
     _dev_vite_target_or_none,
-
     _resolve_backend_port_from_config,
-
     _resolve_frontend_port_from_config,
-
     dev_proxy_explicitly_enabled,
-
     dev_uses_separate_ports,
-
     reverse_proxy_to_vite,
-
 )
-
-from reflex_django.mount.spa_paths import (
-    resolve_spa_index,
-    spa_root_candidates,
-)
-
+from reflex_django.mount.spa_paths import resolve_spa_index, spa_root_candidates
 from reflex_django.mount.spa_template import maybe_render_spa_html
-
-
 
 if TYPE_CHECKING:
 
     from collections.abc import Iterable
 
 
-
 logger = logging.getLogger("reflex_django.views.mount")
 
 
-
-
 def _resolve_spa_asset(request_path: str) -> Path | None:
-
     """Return a real file path for ``request_path`` under one of the SPA roots.
 
 
@@ -128,8 +83,6 @@ def _resolve_spa_asset(request_path: str) -> Path | None:
 
         rel = (rel + "index.html").lstrip("/")
 
-
-
     candidates_rel: list[str] = [rel]
 
     if not rel.endswith(".html") and not rel.endswith("/index.html"):
@@ -137,8 +90,6 @@ def _resolve_spa_asset(request_path: str) -> Path | None:
         candidates_rel.append(f"{rel}.html")
 
         candidates_rel.append(f"{rel}/index.html")
-
-
 
     for root in spa_root_candidates():
 
@@ -171,10 +122,7 @@ def _resolve_spa_asset(request_path: str) -> Path | None:
     return None
 
 
-
-
 def _serve_spa_response(request_path: str) -> HttpResponse:
-
     """Serve an asset from the SPA bundle or fall back to ``index.html``.
 
 
@@ -209,8 +157,6 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
 
                 from django.conf import settings as django_settings
 
-
-
                 debug = getattr(django_settings, "DEBUG", False)
 
             except Exception:
@@ -222,93 +168,62 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
                 if dev_uses_separate_ports():
 
                     msg = (
-
                         "Reflex SPA is served on the Vite frontend port in "
-
                         "two-port dev mode. Open "
-
                         f"http://localhost:{_resolve_frontend_port_from_config() or 3000}/ "
-
                         "for the UI, or use "
-
                         "`reflex run` to browse "
-
                         "the backend port with Vite reverse-proxied through Django."
-
                     )
 
                 elif _compile_dev_mode_enabled():
 
                     backend_port = _resolve_backend_port_from_config() or 8000
 
-                    from reflex_django.mount.spa_template import compile_dev_waiting_html
-
-
+                    from reflex_django.mount.spa_template import (
+                        compile_dev_waiting_html,
+                    )
 
                     return HttpResponse(
-
                         compile_dev_waiting_html(backend_port),
-
                         content_type="text/html; charset=utf-8",
-
                         status=503,
-
                     )
 
                 elif dev_proxy_explicitly_enabled():
 
                     msg = (
-
                         "Reflex SPA frontend bundle not found and the Vite dev "
-
                         "server is not reachable. Run "
-
                         "`reflex run` (not bare "
-
                         "`runserver`/`uvicorn`) and wait for Vite to start, "
-
                         f"then open http://localhost:{_resolve_frontend_port_from_config() or 8000}/."
-
                     )
 
                 else:
 
                     msg = (
-
                         "Reflex SPA frontend bundle not found on disk "
-
                         "(expected `index.html` under `.web/build/client`, "
-
                         "`.web/_static`, or `STATIC_ROOT/_reflex`). Run "
-
                         "`reflex run` and wait for "
-
                         "the export to finish, or build manually with "
-
                         "`reflex export`. For Vite hot reload, "
                         "use `reflex run` and "
-
                         f"open http://localhost:{_resolve_frontend_port_from_config() or 3000}/."
-
                     )
 
             else:
 
                 msg = (
-
                     "Reflex SPA bundle not found. Run `reflex export` and "
-
                     "`manage.py collectstatic` for production, or run "
-
                     "`reflex run` for development."
-
                 )
 
             return HttpResponseNotFound(msg, content_type="text/plain")
 
         asset = index
-
-
 
     mime, _ = mimetypes.guess_type(str(asset))
 
@@ -320,8 +235,6 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
 
         content_type = mime or "application/octet-stream"
 
-
-
     # Materialize HTML responses so :func:`maybe_render_spa_html` can run
 
     # them through Django's template engine. Streaming the file would skip
@@ -331,23 +244,14 @@ def _serve_spa_response(request_path: str) -> HttpResponse:
     if content_type.startswith("text/html"):
 
         return HttpResponse(
-
             asset.read_bytes(),
-
             content_type="text/html; charset=utf-8",
-
         )
-
-
 
     return FileResponse(asset.open("rb"), content_type=content_type)
 
 
-
-
-
 _LOCAL_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "0.0.0.0", "::1"})
-
 
 
 # Latch so the self-loop warning is emitted at most once per process instead
@@ -357,11 +261,7 @@ _LOCAL_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "0.0.0.0", "::1"})
 _dev_proxy_self_loop_handled = False
 
 
-
-
-
 def _disable_dev_proxy_after_self_loop(target: str) -> None:
-
     """Turn the dev proxy off process-wide after detecting a self-loop.
 
 
@@ -391,23 +291,13 @@ def _disable_dev_proxy_after_self_loop(target: str) -> None:
     _dev_proxy_self_loop_handled = True
 
     logger.warning(
-
         "Vite dev-proxy target %s points back at this server (no separate "
-
         "Vite running). Disabling the dev proxy and serving the compiled SPA "
-
         "from disk for the rest of this process. To avoid this entirely, run "
-
         "with DEBUG=False or set RX_DEV_PROXY=0 for standalone/prod "
-
         "serving, or use `reflex run` for the dev loop.",
-
         target,
-
     )
-
-
-
 
 
 # When Vite is reachable-in-principle (dev proxy on) but not actually running,
@@ -427,21 +317,13 @@ _vite_unreachable_until: float = 0.0
 _vite_unreachable_logged: bool = False
 
 
-
-
-
 def _vite_in_cooldown() -> bool:
-
     """Return True while we're skipping proxy attempts after a failed connect."""
 
     return time.monotonic() < _vite_unreachable_until
 
 
-
-
-
 def _mark_vite_unreachable(target: str) -> None:
-
     """Start/extend the disk-fallback cooldown and log once per outage."""
 
     global _vite_unreachable_until, _vite_unreachable_logged
@@ -455,29 +337,17 @@ def _mark_vite_unreachable(target: str) -> None:
     _vite_unreachable_logged = True
 
     logger.warning(
-
         "Vite unreachable at %s; serving the compiled SPA from disk and "
-
         "pausing proxy attempts for ~%.0fs (will retry automatically). This "
-
         "is expected when the ASGI server runs without a separate Vite dev "
-
         "server — use `reflex run` for HMR, or set "
-
         "DEBUG=False / RX_DEV_PROXY=0 to serve from disk silently.",
-
         target,
-
         _VITE_UNREACHABLE_COOLDOWN_S,
-
     )
 
 
-
-
-
 def _mark_vite_reachable() -> None:
-
     """Clear the cooldown once a proxy attempt succeeds again."""
 
     global _vite_unreachable_until, _vite_unreachable_logged
@@ -491,33 +361,19 @@ def _mark_vite_reachable() -> None:
     _vite_unreachable_logged = False
 
 
-
-
-
 def _vite_starting_response(target: str) -> HttpResponse:
-
     """Return 503 while the Vite dev server is still booting or unreachable."""
 
     return HttpResponse(
-
         "reflex-django: Vite dev server is starting or unreachable at "
-
         f"{target}. Retry in a moment, or run `reflex run` "
-
         "to start the dev loop.",
-
         status=503,
-
         content_type="text/plain",
-
     )
 
 
-
-
-
 def _dev_proxy_target_is_self(request: HttpRequest, target: str) -> bool:
-
     """Return True when the dev-proxy target points back at this same server.
 
 
@@ -559,11 +415,7 @@ def _dev_proxy_target_is_self(request: HttpRequest, target: str) -> bool:
         return False
 
 
-
-
-
 class ReflexMountView(View):
-
     """Catch-all view for Reflex-owned URL space served by Django.
 
 
@@ -574,18 +426,11 @@ class ReflexMountView(View):
 
     """
 
-
-
     http_method_names = ["get", "head", "options"]
 
-
-
     async def _handle(
-
         self,
-
         request: HttpRequest,
-
     ) -> HttpResponse:
 
         target = _dev_vite_target_or_none()
@@ -595,8 +440,6 @@ class ReflexMountView(View):
             _disable_dev_proxy_after_self_loop(target)
 
             target = None
-
-
 
         force_vite_proxy = dev_proxy_explicitly_enabled()
 
@@ -656,36 +499,22 @@ class ReflexMountView(View):
 
         return maybe_render_spa_html(request, response)
 
-
-
     async def get(  # type: ignore[override]
-
         self,
-
         request: HttpRequest,
-
         *args: object,
-
         **kwargs: object,
-
     ) -> HttpResponse:
 
         del args, kwargs
 
         return await self._handle(request)
 
-
-
     async def head(  # type: ignore[override]
-
         self,
-
         request: HttpRequest,
-
         *args: object,
-
         **kwargs: object,
-
     ) -> HttpResponse:
 
         response = await self.get(request, *args, **kwargs)
@@ -695,8 +524,4 @@ class ReflexMountView(View):
         return response
 
 
-
-
-
 __all__ = ["ReflexMountView"]
-

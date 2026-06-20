@@ -22,7 +22,9 @@ class HomeState(AppState):
 def language_switcher() -> rx.Component:
     """POST to Django set_language with CSRF from AppState."""
     return rx.form(
-        rx.input(type_="hidden", name="csrfmiddlewaretoken", value=HomeState.csrf_token),
+        rx.input(
+            type_="hidden", name="csrfmiddlewaretoken", value=HomeState.csrf_token
+        ),
         rx.input(type_="hidden", name="next", value="/"),
         rx.hstack(
             rx.button("English", type="submit", name="language", value="en"),

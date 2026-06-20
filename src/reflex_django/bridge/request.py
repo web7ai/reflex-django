@@ -37,7 +37,9 @@ class RequestHeaders(Mapping[str, str]):
 
     def __init__(self, http_request: Any | None) -> None:
         self._http = http_request
-        raw = getattr(http_request, _REFLEX_HEADERS_ATTR, None) if http_request else None
+        raw = (
+            getattr(http_request, _REFLEX_HEADERS_ATTR, None) if http_request else None
+        )
         self._direct: dict[str, str] = dict(raw) if raw else {}
 
     def _meta_headers(self) -> dict[str, str]:

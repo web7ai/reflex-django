@@ -21,9 +21,7 @@ def test_configure_django_respects_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When DJANGO_SETTINGS_MODULE is set, the env wins over the arg."""
-    monkeypatch.setenv(
-        "DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings"
-    )
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings")
 
     result = configure_django(settings_module="some.other.module")
 
@@ -70,9 +68,7 @@ def test_configure_django_reentrant_during_setup(
             fake_apps.ready = True
 
     monkeypatch.setattr("django.setup", fake_setup)
-    monkeypatch.setenv(
-        "DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings"
-    )
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings")
 
     outer = configure_django()
 

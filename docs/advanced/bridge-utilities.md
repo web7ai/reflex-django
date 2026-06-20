@@ -32,6 +32,41 @@ from reflex_django import (
 
 Module-level `request` is a lazy proxy to `current_request()`.
 
+## Request lifecycle helpers
+
+These helpers are used by the bridge and are available for custom integrations/tests:
+
+```python
+from reflex_django import (
+    begin_event_request,
+    begin_event_response,
+    end_event_request,
+    end_event_response,
+)
+```
+
+They bind/unbind the current synthetic `HttpRequest` and response with `contextvars`. Prefer `current_request()` and `current_response()` in application code.
+
+## Bridge module exports
+
+```python
+from reflex_django.bridge import (
+    DjangoEventBridge,
+    bind_django_request_for_handler_state,
+    bridge_request_for_state,
+    invalidate_event_cache,
+    resolve_bridge_tier,
+)
+```
+
+| API | Purpose |
+|:---|:---|
+| `resolve_bridge_tier(state_cls, event)` | Return `full`, `auth_only`, or `none` |
+| `invalidate_event_cache(request_or_session)` | Drop cached auth/session event context |
+| `bridge_request_for_state(state)` | Read the bound bridge request for a state |
+| `bind_django_request_for_handler_state(...)` | Bind request/response to the handler state branch |
+| `DjangoEventBridge` | Event preprocess/postprocess bridge class |
+
 ## Run middleware manually
 
 ```python
@@ -41,6 +76,8 @@ response = await run_middleware_chain(request)
 ```
 
 Rare outside the bridge. Useful in tests or custom ASGI wiring.
+
+When `RX_AUTO_REDIRECT_FROM_MIDDLEWARE=True`, middleware 3xx responses are converted into Reflex redirects during normal event processing.
 
 ## Mirror settings
 
@@ -79,5 +116,7 @@ In `ReflexDjangoPlugin`:
 | `bridge.resolver` | Callable to pick tier per event |
 
 Per-state override: `_rx_bridge = "none"` on the class body.
+
+See [Bridge](../learn/bridge.md) for resolver precedence, the `auth_only` tier, and upload tier floors.
 
 **Next:** [i18n](i18n.md) for locale snapshots.

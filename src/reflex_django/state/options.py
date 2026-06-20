@@ -85,6 +85,7 @@ class ModelStateOptions:
     queryset_select_related: tuple[str, ...]
     queryset_prefetch: tuple[str, ...]
     use_canonical_api: bool
+    incremental_updates: bool
 
 
 def _default_list_var(model_name: str, *, use_generic_var_names: bool) -> str:
@@ -163,7 +164,9 @@ def resolve_options(
         else None
     )
     editing_var = _get_attr(meta, state_cls, "editing_var", "editing_id")
-    state_read_only = frozenset(_get_attr(meta, state_cls, "read_only_fields", ()) or ())
+    state_read_only = frozenset(
+        _get_attr(meta, state_cls, "read_only_fields", ()) or ()
+    )
     read_only = serializer_cls.get_read_only_field_names(
         extra_read_only=state_read_only,
     )
@@ -183,12 +186,18 @@ def resolve_options(
         required_fields = frozenset()
     ordering = _resolve_ordering(meta, state_cls, model)
     model_lower = model._meta.model_name
-    on_load_event = _get_attr(meta, state_cls, "on_load_event", None) or f"on_load_{list_var}"
+    on_load_event = (
+        _get_attr(meta, state_cls, "on_load_event", None) or f"on_load_{list_var}"
+    )
     save_event = _get_attr(meta, state_cls, "save_event", None) or f"save_{model_lower}"
-    delete_event = _get_attr(meta, state_cls, "delete_event", None) or f"delete_{model_lower}"
+    delete_event = (
+        _get_attr(meta, state_cls, "delete_event", None) or f"delete_{model_lower}"
+    )
     cancel_event = _get_attr(meta, state_cls, "cancel_event", "cancel_edit")
     load_method = f"_load_{list_var}"
-    exclude_from_row = frozenset(_get_attr(meta, state_cls, "exclude_from_row", ()) or ())
+    exclude_from_row = frozenset(
+        _get_attr(meta, state_cls, "exclude_from_row", ()) or ()
+    )
     from reflex_django.state.constants import DEFAULT_LOGIN_REQUIRED_ACTIONS
 
     login_required_actions = frozenset(
@@ -199,7 +208,9 @@ def resolve_options(
         _get_attr(meta, state_cls, "permission_classes", ()) or ()
     )
     backend_class = _get_attr(meta, state_cls, "backend_class", DjangoORMBackend)
-    run_model_validation = bool(_get_attr(meta, state_cls, "run_model_validation", False))
+    run_model_validation = bool(
+        _get_attr(meta, state_cls, "run_model_validation", False)
+    )
     reset_after_save = bool(_get_attr(meta, state_cls, "reset_after_save", True))
     form_reset_var = _get_attr(meta, state_cls, "form_reset_var", "form_reset_key")
     use_form_submit = bool(_get_attr(meta, state_cls, "use_form_submit", False))
@@ -241,6 +252,7 @@ def resolve_options(
         or (DEFAULT_ORDERING_VAR if use_generic_var_names else f"{list_var}_ordering")
     )
     use_canonical_api = bool(_get_attr(meta, state_cls, "use_canonical_api", True))
+    incremental_updates = bool(_get_attr(meta, state_cls, "incremental_updates", False))
 
     state_fields = build_state_fields(
         field_names,
@@ -286,6 +298,7 @@ def resolve_options(
         queryset_select_related=queryset_select_related,
         queryset_prefetch=queryset_prefetch,
         use_canonical_api=use_canonical_api,
+        incremental_updates=incremental_updates,
     )
 
 

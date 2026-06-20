@@ -11,10 +11,12 @@ from reflex_django.dev.vite_proxy import patch_env_json_for_frontend_proxy
 def test_patch_env_json_for_frontend_proxy(tmp_path: Path) -> None:
     env = tmp_path / "env.json"
     env.write_text(
-        json.dumps({
-            "EVENT": "ws://localhost:8000/_event",
-            "PING": "http://localhost:8000/ping",
-        }),
+        json.dumps(
+            {
+                "EVENT": "ws://localhost:8000/_event",
+                "PING": "http://localhost:8000/ping",
+            }
+        ),
         encoding="utf-8",
     )
     assert patch_env_json_for_frontend_proxy(

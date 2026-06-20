@@ -28,8 +28,12 @@ def _assemble_list_features(
         if options.page_size_var not in namespace:
             annotations[options.page_size_var] = int
         namespace[options.page_size_var] = options.paginate_by
-        inject_var_default(namespace, annotations, bases, options.total_count_var, int, 0)
-        inject_var_default(namespace, annotations, bases, options.page_count_var, int, 0)
+        inject_var_default(
+            namespace, annotations, bases, options.total_count_var, int, 0
+        )
+        inject_var_default(
+            namespace, annotations, bases, options.page_count_var, int, 0
+        )
 
     if options.search_fields:
         inject_var_default(namespace, annotations, bases, options.search_var, str, "")
@@ -88,7 +92,9 @@ def _assemble_list_features(
 
             go_to_page_impl.__name__ = "go_to_page"
             go_to_page_impl.__qualname__ = f"{qualname}.go_to_page"
-            namespace["go_to_page"] = bind_event(go_to_page_impl, login_required=lr_load)
+            namespace["go_to_page"] = bind_event(
+                go_to_page_impl, login_required=lr_load
+            )
 
         if "set_page_size" not in namespace:
 
@@ -102,7 +108,9 @@ def _assemble_list_features(
 
             set_page_size_impl.__name__ = "set_page_size"
             set_page_size_impl.__qualname__ = f"{qualname}.set_page_size"
-            namespace["set_page_size"] = bind_event(set_page_size_impl, login_required=lr_load)
+            namespace["set_page_size"] = bind_event(
+                set_page_size_impl, login_required=lr_load
+            )
 
     if options.search_fields:
         set_search_name = f"set_{options.search_var}"
@@ -116,7 +124,9 @@ def _assemble_list_features(
 
             set_search_impl.__name__ = set_search_name
             set_search_impl.__qualname__ = f"{qualname}.{set_search_name}"
-            namespace[set_search_name] = bind_event(set_search_impl, login_required=lr_load)
+            namespace[set_search_name] = bind_event(
+                set_search_impl, login_required=lr_load
+            )
 
         clear_search_name = f"clear_{options.search_var}"
 
@@ -129,7 +139,9 @@ def _assemble_list_features(
 
             clear_search_impl.__name__ = clear_search_name
             clear_search_impl.__qualname__ = f"{qualname}.{clear_search_name}"
-            namespace[clear_search_name] = bind_event(clear_search_impl, login_required=lr_load)
+            namespace[clear_search_name] = bind_event(
+                clear_search_impl, login_required=lr_load
+            )
 
     if options.allow_dynamic_ordering:
         set_ordering_name = f"set_{options.ordering_var}"
@@ -143,4 +155,6 @@ def _assemble_list_features(
 
             set_ordering_impl.__name__ = set_ordering_name
             set_ordering_impl.__qualname__ = f"{qualname}.{set_ordering_name}"
-            namespace[set_ordering_name] = bind_event(set_ordering_impl, login_required=lr_load)
+            namespace[set_ordering_name] = bind_event(
+                set_ordering_impl, login_required=lr_load
+            )

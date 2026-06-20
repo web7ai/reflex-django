@@ -30,11 +30,16 @@ def test_patched_page_buckets_under_mount_app_name(
 
     register_mount(app_name="shop")
     plugin = ReflexDjangoPlugin(
-        config={"settings_module": "reflex_django_tests.django_settings", "auto_mount": False}
+        config={
+            "settings_module": "reflex_django_tests.django_settings",
+            "auto_mount": False,
+        }
     )
     monkeypatch.setattr(
         "reflex_base.config.get_config",
-        lambda reload=False: Config(app_name="shop", plugins=[plugin], _skip_plugins_checks=True),
+        lambda reload=False: Config(
+            app_name="shop", plugins=[plugin], _skip_plugins_checks=True
+        ),
     )
     install_plugin_integration(plugin)
 

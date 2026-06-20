@@ -16,21 +16,21 @@ from reflex_django.state.views.meta import ModelCRUDMeta
 class ModelCRUDView(ModelORMMixin, DispatchMixin, LoginRequiredMixin, ABC):
     """Declarative CRUD mixin stack (combine with :class:`~reflex_django.states.AppState`).
 
-  Configuration (IDE-friendly — set on the subclass body, not only in ``Meta``)::
+    Configuration (IDE-friendly — set on the subclass body, not only in ``Meta``)::
 
-        class NotesState(AppState, ModelCRUDView):
-            serializer_class = NoteSerializer
-            paginate_by = 20
-            search_fields = ("title", "content")
+          class NotesState(AppState, ModelCRUDView):
+              serializer_class = NoteSerializer
+              paginate_by = 20
+              search_fields = ("title", "content")
 
-  Legacy inner ``Meta`` still works; inherit :class:`ModelCRUDMeta` for autocomplete::
+    Legacy inner ``Meta`` still works; inherit :class:`ModelCRUDMeta` for autocomplete::
 
-        class NotesState(AppState, ModelCRUDView):
-            class Meta(ModelCRUDMeta):
-                paginate_by = 20
+          class NotesState(AppState, ModelCRUDView):
+              class Meta(ModelCRUDMeta):
+                  paginate_by = 20
 
-  After the class is created, read resolved names via :meth:`get_options` or the
-  ``options`` alias (e.g. ``NotesState.options.list_var``).
+    After the class is created, read resolved names via :meth:`get_options` or the
+    ``options`` alias (e.g. ``NotesState.options.list_var``).
     """
 
     # --- Declarative config (ClassVar = not Reflex vars; used only at assembly) ---
@@ -70,6 +70,11 @@ class ModelCRUDView(ModelORMMixin, DispatchMixin, LoginRequiredMixin, ABC):
     queryset_select_related: ClassVar[tuple[str, ...] | list[str]] = ()
     queryset_prefetch: ClassVar[tuple[str, ...] | list[str]] = ()
     use_canonical_api: ClassVar[bool] = True
+    # When True, mutations patch the affected row in the list var instead of
+    # reloading the whole page. Falls back to a full refresh when a correct
+    # incremental update is not possible (e.g. inserting/removing under
+    # pagination). See :class:`~reflex_django.state.mixins.list.ListMixin`.
+    incremental_updates: ClassVar[bool] = False
 
     class Meta(ModelCRUDMeta):
         """Optional overrides (prefer class attributes above for IDE autocomplete)."""

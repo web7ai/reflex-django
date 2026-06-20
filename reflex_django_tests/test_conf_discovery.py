@@ -19,12 +19,10 @@ def test_configure_django_discovers_manage_py(
     monkeypatch.delenv("DJANGO_SETTINGS_MODULE", raising=False)
 
     (tmp_path / "manage.py").write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             import os
             os.environ.setdefault("DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings")
-            """
-        ),
+            """),
         encoding="utf-8",
     )
 

@@ -17,7 +17,9 @@ def test_resolve_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     from django.conf import settings
 
     monkeypatch.delenv("RX_PROXY_SERVER", raising=False)
-    monkeypatch.setattr(settings, "RX_PROXY_SERVER", "http://127.0.0.1:8001", raising=False)
+    monkeypatch.setattr(
+        settings, "RX_PROXY_SERVER", "http://127.0.0.1:8001", raising=False
+    )
     assert resolve_rxdjango_proxy_server() == "http://127.0.0.1:8001"
 
 

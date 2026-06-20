@@ -33,7 +33,10 @@ def main() -> int:
         print("Docs link check failed:", file=sys.stderr)
         for line in problems:
             print(f"  - {line}", file=sys.stderr)
-        print("Use .md paths for internal links (e.g. learn/integration.md).", file=sys.stderr)
+        print(
+            "Use .md paths for internal links (e.g. learn/integration.md).",
+            file=sys.stderr,
+        )
         return 1
 
     print("Docs links OK")

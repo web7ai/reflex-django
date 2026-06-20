@@ -70,7 +70,11 @@ def ensure_reflex_mount(
 
     from reflex_django.mount.config import register_mount
     from reflex_django.mount.discovery import resolve_django_prefix
-    from reflex_django.mount.prefixes import export_prefix_env, export_rx_port_env, resolve_prefixes
+    from reflex_django.mount.prefixes import (
+        export_prefix_env,
+        export_rx_port_env,
+        resolve_prefixes,
+    )
     from reflex_django.django.urls import _reflex_catchall_pattern
 
     if mount_prefix is None:
@@ -127,7 +131,11 @@ def _append_mount_to_root_urlconf(
     from importlib import import_module
 
     mod = import_module(urlconf_name)
-    patterns = list(urlpatterns) if urlpatterns is not None else list(getattr(mod, "urlpatterns", []) or [])
+    patterns = (
+        list(urlpatterns)
+        if urlpatterns is not None
+        else list(getattr(mod, "urlpatterns", []) or [])
+    )
     if has_reflex_mount(patterns):
         return
     mod_urlpatterns = getattr(mod, "urlpatterns", None)
@@ -188,7 +196,9 @@ def _reflex_before_admin_in_installed_apps() -> bool:
         from django.conf import settings
 
         installed = list(getattr(settings, "INSTALLED_APPS", ()))
-        return installed.index("reflex_django") < installed.index("django.contrib.admin")
+        return installed.index("reflex_django") < installed.index(
+            "django.contrib.admin"
+        )
     except ValueError:
         return False
 
@@ -292,7 +302,9 @@ def maybe_auto_mount() -> ReflexMountHandle | None:
         return _MOUNT_HANDLE
 
     if not _auto_mount_enabled():
-        logger.debug("reflex-django: auto_mount disabled — skipping reflex_mount catch-all.")
+        logger.debug(
+            "reflex-django: auto_mount disabled — skipping reflex_mount catch-all."
+        )
         _MOUNT_BOOT_COMPLETED = True
         return _MOUNT_HANDLE
 

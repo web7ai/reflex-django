@@ -20,12 +20,14 @@ def _global_bridge_mode() -> str:
         from django.conf import settings
 
         settings_key = str(getattr(settings, "SETTINGS_MODULE", "") or "")
-        if settings_key != _BRIDGE_MODE_SETTINGS_KEY:
+        # ``SETTINGS_MODULE`` is empty under ``override_settings`` (Django wraps
+        # settings in a ``UserSettingsHolder`` whose ``SETTINGS_MODULE`` is
+        # ``None``). Always re-read in that case so tests and runtime overrides
+        # see the current ``RX_EVENT_BRIDGE_MODE`` instead of a stale cache.
+        if not settings_key or settings_key != _BRIDGE_MODE_SETTINGS_KEY:
             mode_raw = getattr(settings, "RX_EVENT_BRIDGE_MODE", "full")
             _BRIDGE_MODE = (
-                str(mode_raw).strip().lower()
-                if isinstance(mode_raw, str)
-                else "full"
+                str(mode_raw).strip().lower() if isinstance(mode_raw, str) else "full"
             )
             _BRIDGE_MODE_SETTINGS_KEY = settings_key
     except Exception:

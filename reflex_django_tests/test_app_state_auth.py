@@ -58,12 +58,15 @@ def test_app_state_request_user_matches_user_property() -> None:
     http_request = mock.Mock()
     http_request.user = user
 
-    with mock.patch(
-        "reflex_django.state.auth_bridge.current_request",
-        return_value=http_request,
-    ), mock.patch(
-        "reflex_django.bridge.context.current_request",
-        return_value=http_request,
+    with (
+        mock.patch(
+            "reflex_django.state.auth_bridge.current_request",
+            return_value=http_request,
+        ),
+        mock.patch(
+            "reflex_django.bridge.context.current_request",
+            return_value=http_request,
+        ),
     ):
         assert state.request.user.username == "bob"
         assert state.request.user is state.user
@@ -238,7 +241,9 @@ def test_login_returns_false_when_no_request() -> None:
     state = _DashboardState()
 
     async def _go() -> None:
-        with mock.patch("reflex_django.state.auth_bridge.current_request", return_value=None):
+        with mock.patch(
+            "reflex_django.state.auth_bridge.current_request", return_value=None
+        ):
             ok = await state.login("u", "p")
         assert ok is False
 
@@ -251,7 +256,9 @@ def test_has_perm_delegates_to_shortcut() -> None:
     user.is_authenticated = True
 
     async def _go() -> None:
-        with mock.patch("reflex_django.state.auth_bridge.current_user", return_value=user):
+        with mock.patch(
+            "reflex_django.state.auth_bridge.current_user", return_value=user
+        ):
             with mock.patch(
                 "reflex_django.state.auth_bridge.auser_has_perm",
                 new=mock.AsyncMock(return_value=True),
@@ -269,7 +276,9 @@ def test_has_group_uses_snapshot_when_loaded() -> None:
     user.is_authenticated = True
 
     async def _go() -> None:
-        with mock.patch("reflex_django.state.auth_bridge.current_user", return_value=user):
+        with mock.patch(
+            "reflex_django.state.auth_bridge.current_user", return_value=user
+        ):
             assert await state.has_group("admins") is True
             assert await state.has_group("other") is False
 

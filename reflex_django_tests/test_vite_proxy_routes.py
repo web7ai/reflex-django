@@ -130,7 +130,9 @@ def test_resolve_routes_skips_plugin_django_prefix_when_mount_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from reflex_django.mount.config import register_mount_from_plugin
-    from reflex_django.mount.integration_config import resolve_and_cache_integration_config
+    from reflex_django.mount.integration_config import (
+        resolve_and_cache_integration_config,
+    )
     from reflex_django.plugins import ReflexDjangoPlugin
 
     plugin = ReflexDjangoPlugin(
@@ -155,5 +157,7 @@ def test_resolve_routes_skips_plugin_django_prefix_when_mount_disabled(
     )
 
     routes = resolve_vite_dev_proxy_routes()
-    django_routes = [r for r in routes if "/admin" in r.prefixes or "/api" in r.prefixes]
+    django_routes = [
+        r for r in routes if "/admin" in r.prefixes or "/api" in r.prefixes
+    ]
     assert django_routes == []

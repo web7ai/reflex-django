@@ -38,5 +38,14 @@ class SerializeMixin(PaginationMixin, QuerySetMixin):
         serializer = self.get_serializer(page_qs, many=True)
         return await serializer.adata()  # type: ignore[return-value]
 
+    async def serialize_instance(
+        self,
+        ctx: ActionContext,
+        instance: Any,
+    ) -> dict[str, Any]:
+        """Serialize a single instance to a row dict matching the list shape."""
+        serializer = self.get_serializer(instance, many=False)
+        return await serializer.adata()  # type: ignore[return-value]
+
 
 __all__ = ["SerializeMixin"]

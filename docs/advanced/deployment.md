@@ -43,6 +43,8 @@ reflex run --env prod --backend-only --backend-port 8000
 
 Set `redis_url` in `rx.Config` when you run multiple Reflex workers. Set `RX_AUTO_EXPORT_ON_START=0` in Django settings so the app does not rebuild on every boot.
 
+Before using the bundled fallback settings in production, read [Security](security.md). Production runs warn when `DEBUG`, `ALLOWED_HOSTS`, `SECRET_KEY`, or cookie settings are unsafe.
+
 ### When to pick Option 1
 
 - Simplest path: one deploy command or one `reflex run`
@@ -90,6 +92,8 @@ export REDIS_URL=redis://redis:6379/0
 reflex run --env prod --backend-only --backend-port 8001
 ```
 
+Keep `mount.enabled: true` on the Reflex service because the Reflex worker still needs the app's route/deep-link metadata and SPA/event wiring even though Django serves the public HTML shell in this layout. The edge proxy decides which service receives each request.
+
 ### Reverse proxy
 
 Route `/_event` (long WebSocket timeout) and `/_upload` to the Reflex upstream. Send everything else to Django.
@@ -105,6 +109,7 @@ Full layout: [`docs/examples/docker-compose.scaling.yml`](../examples/docker-com
 3. `bridge.enabled: true` so handlers keep `self.request.user`
 4. Same `DJANGO_SETTINGS_MODULE` on both services
 5. Shared `REDIS_URL` and cache-backed sessions ([Scaling](scaling.md))
+6. HTTPS cookie settings and stable `SECRET_KEY` ([Security](security.md))
 
 ### When to pick Option 2
 
@@ -137,4 +142,4 @@ CMD ["reflex", "run", "--env", "prod", "--backend-only", "--backend-port", "8000
 
 See [Scaling](scaling.md) for Redis and multi-worker tuning.
 
-**Next:** [Troubleshooting](troubleshooting.md)
+**Next:** [Security](security.md) and [Troubleshooting](troubleshooting.md)

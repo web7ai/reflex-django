@@ -30,10 +30,14 @@ def _refresh_cache_config() -> None:
         if settings_key == _CACHE_SETTINGS_KEY:
             return
         alias = getattr(settings, "RX_EVENT_CACHE", "default")
-        _CACHE_ALIAS = alias.strip() if isinstance(alias, str) and alias.strip() else "default"
+        _CACHE_ALIAS = (
+            alias.strip() if isinstance(alias, str) and alias.strip() else "default"
+        )
         _CACHE_TTL = int(getattr(settings, "RX_EVENT_CACHE_TTL", 60))
         prefix = getattr(settings, "RX_EVENT_CACHE_KEY_PREFIX", "rx:event:")
-        _CACHE_KEY_PREFIX = prefix if isinstance(prefix, str) and prefix else "rx:event:"
+        _CACHE_KEY_PREFIX = (
+            prefix if isinstance(prefix, str) and prefix else "rx:event:"
+        )
         _CACHE_SETTINGS_KEY = settings_key
     except Exception:
         _CACHE_ALIAS = "default"

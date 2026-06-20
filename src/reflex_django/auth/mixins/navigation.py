@@ -58,6 +58,99 @@ def populate_navigation_state(
 
     ns["redirect_to_login"] = redirect_to_login
 
+    async def _enforce_access(
+        self: Any,
+        *,
+        check_name: str,
+        value: str,
+        redirect_to: str,
+    ) -> Any:
+        """Authoritative server-side page guard.
+
+        Runs on mount for every protected page so an authenticated user who
+        lacks the required permission/role is redirected instead of seeing the
+        page shell (the UI ``rx.cond`` alone is not a security boundary).
+        """
+        import reflex_django.auth.routes as auth_routes
+        from reflex_django.bridge.context import current_user
+        from reflex_django.state.auth_bridge import _sync_auth_snapshots_in_tree
+
+        await _sync_auth_snapshots_in_tree(self)
+        user = current_user()
+        login_route = auth_routes.LOGIN_ROUTE
+        if not getattr(user, "is_authenticated", False):
+            return rx.redirect(login_route)
+
+        allowed = True
+        if check_name == "perm":
+            from reflex_django.auth.shortcuts import auser_has_perm
+
+            allowed = await auser_has_perm(user, value)
+        elif check_name == "group":
+            from reflex_django.auth.shortcuts import auser_in_group
+
+            allowed = await auser_in_group(user, value)
+        elif check_name == "staff":
+            allowed = bool(getattr(user, "is_staff", False))
+        elif check_name == "superuser":
+            allowed = bool(getattr(user, "is_superuser", False))
+
+        if allowed:
+            return None
+        return rx.redirect(redirect_to or login_route)
+
+    @rx.event
+    async def require_permission(
+        self: Any,
+        perm: str,
+        redirect_to: str = "",
+    ) -> Any:
+        """Redirect on mount unless the Django user holds ``perm``."""
+        if not self.is_hydrated:
+            return type(self).require_permission(perm, redirect_to)
+        return await _enforce_access(
+            self, check_name="perm", value=perm, redirect_to=redirect_to
+        )
+
+    ns["require_permission"] = require_permission
+
+    @rx.event
+    async def require_group(
+        self: Any,
+        group: str,
+        redirect_to: str = "",
+    ) -> Any:
+        """Redirect on mount unless the Django user is in ``group``."""
+        if not self.is_hydrated:
+            return type(self).require_group(group, redirect_to)
+        return await _enforce_access(
+            self, check_name="group", value=group, redirect_to=redirect_to
+        )
+
+    ns["require_group"] = require_group
+
+    @rx.event
+    async def require_staff(self: Any, redirect_to: str = "") -> Any:
+        """Redirect on mount unless the Django user is staff."""
+        if not self.is_hydrated:
+            return type(self).require_staff(redirect_to)
+        return await _enforce_access(
+            self, check_name="staff", value="", redirect_to=redirect_to
+        )
+
+    ns["require_staff"] = require_staff
+
+    @rx.event
+    async def require_superuser(self: Any, redirect_to: str = "") -> Any:
+        """Redirect on mount unless the Django user is a superuser."""
+        if not self.is_hydrated:
+            return type(self).require_superuser(redirect_to)
+        return await _enforce_access(
+            self, check_name="superuser", value="", redirect_to=redirect_to
+        )
+
+    ns["require_superuser"] = require_superuser
+
 
 def navigation_mixin(
     *,

@@ -77,3 +77,8 @@ Integration config lives in `ReflexDjangoPlugin` inside `rxconfig.py`. Django `s
 - Each integration piece is explained once on its Learn page.
 - Config key tables live only on [advanced/config.md](advanced/config.md).
 - Split dev details live on [learn/proxy.md](learn/proxy.md).
+
+## LLM guide sync
+
+- Update `llm.txt` whenever public imports, commands, `RX_*` settings, profiles, or removed-pattern guidance changes.
+- Keep `llm.txt` aligned with `mkdocs.yml`, `docs/advanced/config.md`, and package-level `__all__` exports.

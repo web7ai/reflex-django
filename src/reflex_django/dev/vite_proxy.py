@@ -18,6 +18,7 @@ class ViteProxyRoute:
     target: str
     prefixes: tuple[str, ...]
 
+
 _PROXY_MARKER = "reflex-django-proxy"
 _PROXY_PLUGIN_MARKER = "reflex-django-proxy-plugin"
 _PROXY_PLUGIN_FILENAME = "vite-plugin-reflex-django-proxy.js"
@@ -392,7 +393,9 @@ def _vite_proxy_is_complete(
                 return False
         if route.target not in content:
             return False
-    if any(prefix in _WS_PROXY_PREFIXES for route in routes for prefix in route.prefixes):
+    if any(
+        prefix in _WS_PROXY_PREFIXES for route in routes for prefix in route.prefixes
+    ):
         return "ws: true" in content
     return True
 

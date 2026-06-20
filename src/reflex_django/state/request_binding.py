@@ -112,11 +112,46 @@ def bind_response_on_state_tree(
     visit(root_state)
 
 
+def bind_request_on_state_branch(
+    node: Any,
+    http_request: Any | None = None,
+) -> None:
+    """Bind the active request on *node* and its ancestors only.
+
+    Unlike :func:`bind_request_on_state_tree`, this walks *up* the parent chain
+    (the handler substate branch) instead of every descendant. It avoids the
+    per-event cost of touching unrelated substates while still making
+    ``self.request`` available on the handler and any parent whose computed
+    vars read the request.
+    """
+    http = http_request if http_request is not None else current_request()
+    response = current_response()
+    cur = node
+    while cur is not None:
+        bind_request_on_state(cur, http, response)
+        cur = getattr(cur, "parent_state", None)
+
+
+def bind_response_on_state_branch(
+    node: Any,
+    http_response: Any | None = None,
+) -> None:
+    """Refresh the bound response on *node* and its ancestors only."""
+    http = current_request()
+    response = http_response if http_response is not None else current_response()
+    cur = node
+    while cur is not None:
+        bind_request_on_state(cur, http, response)
+        cur = getattr(cur, "parent_state", None)
+
+
 __all__ = [
     "REQUEST_WRAPPER_ATTR",
     "RESPONSE_ATTR",
     "bind_request_on_state",
+    "bind_request_on_state_branch",
     "bind_request_on_state_tree",
+    "bind_response_on_state_branch",
     "bind_response_on_state_tree",
     "clear_request_on_state",
 ]

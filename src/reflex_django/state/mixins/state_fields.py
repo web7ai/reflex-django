@@ -48,7 +48,9 @@ class StateFieldsMixin(BaseModelState):
                     errors[name] = err
         return errors
 
-    def validate_state(self, ctx: ActionContext, data: dict[str, Any]) -> dict[str, str]:
+    def validate_state(
+        self, ctx: ActionContext, data: dict[str, Any]
+    ) -> dict[str, str]:
         errors: dict[str, str] = {}
         errors.update(self.validate_required(data))
         for name, value in data.items():
@@ -86,7 +88,9 @@ class StateFieldsMixin(BaseModelState):
 
         return await sync_to_async(_validate)()
 
-    async def validate_and_clean(self, ctx: ActionContext) -> tuple[dict[str, Any] | None, dict[str, str]]:
+    async def validate_and_clean(
+        self, ctx: ActionContext
+    ) -> tuple[dict[str, Any] | None, dict[str, str]]:
         data = self.get_state_data()
         errors = self.validate_state(ctx, data)
         if errors:
@@ -101,10 +105,14 @@ class StateFieldsMixin(BaseModelState):
         opts = ctx.options
         if opts.structured_errors and opts.field_errors_var:
             setattr(self, opts.field_errors_var, errors)
-        summary = "; ".join(f"{k}: {v}" for k, v in errors.items()) or "Validation failed."
+        summary = (
+            "; ".join(f"{k}: {v}" for k, v in errors.items()) or "Validation failed."
+        )
         setattr(self, opts.error_var, summary)
 
-    async def on_state_valid(self, ctx: ActionContext, state_data: dict[str, Any]) -> dict[str, Any]:
+    async def on_state_valid(
+        self, ctx: ActionContext, state_data: dict[str, Any]
+    ) -> dict[str, Any]:
         return state_data
 
     def apply_form_data(self, form_data: dict[str, Any]) -> None:

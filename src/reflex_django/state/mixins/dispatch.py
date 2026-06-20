@@ -64,7 +64,8 @@ class DispatchMixin(DeleteMixin, CreateMixin, PermissionMixin):
         state_data = await self.on_state_valid(ctx, state_data)
         editing_var = opts.editing_var
         editing_id = getattr(self, editing_var, -1)
-        if editing_id is not None and int(editing_id) >= 0:
+        is_update = editing_id is not None and int(editing_id) >= 0
+        if is_update:
             instance = await ctx.backend.retrieve(ctx, int(editing_id))
             if not self.has_object_permission(ctx, instance):
                 self.on_state_invalid(ctx, {"__all__": "Permission denied."})
@@ -75,6 +76,12 @@ class DispatchMixin(DeleteMixin, CreateMixin, PermissionMixin):
         await self.on_save_success(ctx, instance)
         if opts.reset_after_save:
             self.reset_state_fields()
+        if opts.incremental_updates and await self.apply_saved_row(
+            ctx,
+            instance,
+            was_create=not is_update,
+        ):
+            return
         await self.refresh_list(ctx)
 
     async def _handle_delete(self, ctx: ActionContext) -> None:

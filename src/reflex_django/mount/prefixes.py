@@ -119,7 +119,10 @@ def _resolve_django_prefix(
 
 
 def _mount_registry() -> Any:
-    from reflex_django.mount.config import ensure_mount_config_loaded, get_merged_mount_registration
+    from reflex_django.mount.config import (
+        ensure_mount_config_loaded,
+        get_merged_mount_registration,
+    )
 
     ensure_mount_config_loaded()
     return get_merged_mount_registration()

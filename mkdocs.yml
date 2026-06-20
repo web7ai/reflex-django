@@ -254,9 +254,17 @@ nav:
 
     - Model state: advanced/model-state.md
 
+    - Forms and FieldSpec: advanced/forms.md
+
+    - Live updates: advanced/live-updates.md
+
+    - Devtools: advanced/devtools.md
+
     - Database: advanced/database.md
 
     - Auth: advanced/auth.md
+
+    - Security: advanced/security.md
 
     - Bridge utilities: advanced/bridge-utilities.md
 
@@ -273,5 +281,7 @@ nav:
     - Scaling: advanced/scaling.md
 
     - Config reference: advanced/config.md
+
+    - v4 migration: reference/migration/v4_plugin_only.md
 
 

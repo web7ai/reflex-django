@@ -53,6 +53,7 @@ class CategoryState(ModelState):
 
 class _ProductStateFromGeneric(ModelState[RmProduct]):
     """Optional: model inferred from ``ModelState[RmProduct]`` without class-body ``model``."""
+
     fields = ["name", "price"]
 
 
@@ -181,7 +182,9 @@ def test_canonical_handlers_generated() -> None:
         "paginate",
     ):
         assert hasattr(ProductState, name), name
-    assert hasattr(ProductState, f"save_{ProductState.get_options().model._meta.model_name}")
+    assert hasattr(
+        ProductState, f"save_{ProductState.get_options().model._meta.model_name}"
+    )
     assert hasattr(ProductState, "start_edit")
 
 

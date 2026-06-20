@@ -53,9 +53,7 @@ class _FakeResponse:
         ("http://127.0.0.1", "3000", False),
     ],
 )
-def test_dev_proxy_target_is_self(
-    target: str, req_port: str, expected: bool
-) -> None:
+def test_dev_proxy_target_is_self(target: str, req_port: str, expected: bool) -> None:
     """Same host:port as the inbound request is treated as a self-proxy."""
     request = _FakeRequest(port=req_port)
     assert mount._dev_proxy_target_is_self(request, target) is expected
@@ -65,9 +63,7 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch) -> dict[str, mock.MagicMock]:
     """Patch the collaborators of ``_handle`` and return them."""
     serve = mock.MagicMock(return_value=_FakeResponse(200))
     monkeypatch.setattr(mount, "_serve_spa_response", serve)
-    monkeypatch.setattr(
-        mount, "maybe_render_spa_html", lambda _req, resp: resp
-    )
+    monkeypatch.setattr(mount, "maybe_render_spa_html", lambda _req, resp: resp)
     return {"serve": serve}
 
 
@@ -226,7 +222,9 @@ def test_separate_ports_returns_plain_not_found(
 ) -> None:
     """Two-port dev: stray SPA paths on the backend port get a plain 404."""
     patched = _patch_common(monkeypatch)
-    monkeypatch.setattr("reflex_django.views.mount.dev_uses_separate_ports", lambda: True)
+    monkeypatch.setattr(
+        "reflex_django.views.mount.dev_uses_separate_ports", lambda: True
+    )
     monkeypatch.setattr(mount, "_dev_vite_target_or_none", lambda: None)
 
     view = mount.ReflexMountView()

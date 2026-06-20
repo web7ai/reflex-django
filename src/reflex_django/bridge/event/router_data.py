@@ -48,9 +48,7 @@ def _router_data_is_usable(router_data: dict[str, Any]) -> bool:
     if isinstance(headers, dict) and headers:
         return True
     return bool(
-        router_data.get("pathname")
-        or router_data.get("ip")
-        or router_data.get("query")
+        router_data.get("pathname") or router_data.get("ip") or router_data.get("query")
     )
 
 
@@ -85,7 +83,9 @@ def _resolve_router_data(event: Event, state: BaseState | None) -> dict[str, Any
     """Merge event and state ``router_data``, preferring event cookies when set."""
     raw_event_rd = getattr(event, "router_data", None)
     event_rd: dict[str, Any] = raw_event_rd if isinstance(raw_event_rd, dict) else {}
-    if _router_data_is_usable(event_rd) and (event_rd.get("headers") or {}).get("cookie"):
+    if _router_data_is_usable(event_rd) and (event_rd.get("headers") or {}).get(
+        "cookie"
+    ):
         return event_rd
 
     state_rd = _router_data_from_state_chain(state)

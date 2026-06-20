@@ -96,7 +96,9 @@ def _assemble_orm_api_handlers(
 
         clear_filter_impl.__name__ = "clear_filter"
         clear_filter_impl.__qualname__ = f"{qualname}.clear_filter"
-        namespace["clear_filter"] = bind_event(clear_filter_impl, login_required=lr_load)
+        namespace["clear_filter"] = bind_event(
+            clear_filter_impl, login_required=lr_load
+        )
 
     if "paginate" not in namespace:
 

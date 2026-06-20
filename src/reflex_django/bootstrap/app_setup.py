@@ -20,8 +20,19 @@ def _as_api_transformer_sequence(value: Any) -> tuple[Any, ...]:
 def apply_django_integration(app: App) -> None:
     """Mount Django ASGI dispatch and the event bridge on *app*."""
     _apply_bridge_settings_from_config()
+    _warn_insecure_defaults_for_prod()
     _ensure_django_api_transformer(app)
     _ensure_event_bridge(app)
+
+
+def _warn_insecure_defaults_for_prod() -> None:
+    """Emit a one-time security audit when compiling in a production posture."""
+    try:
+        from reflex_django.setup.security_check import warn_insecure_defaults
+
+        warn_insecure_defaults()
+    except Exception:
+        pass
 
 
 def _apply_bridge_settings_from_config() -> None:

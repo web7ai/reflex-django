@@ -121,7 +121,7 @@ def compile_dev_reload_script(*, wait_for_ready: bool = False) -> str:
         "else{if(id!=='missing'){if(last!==null&&id!==last)location.reload();last=id;}}"
     )
     return (
-        "<script id=\"reflex-django-compile-dev-reload\">"
+        '<script id="reflex-django-compile-dev-reload">'
         "(function(){"
         f"{wait_init}const wait={str(wait_for_ready).lower()};const path={BUILD_ID_PATH!r};"
         "setInterval(async()=>{try{const r=await fetch(path,{cache:'no-store'});"
@@ -141,7 +141,7 @@ def compile_dev_waiting_html(backend_port: int) -> str:
         "<code>reflex run</code> compiles to "
         "<code>.web/</code> and runs Reflex's frontend build.</p>"
         f"<p>Waiting for the build to finish on "
-        f"<a href=\"http://localhost:{backend_port}/\">"
+        f'<a href="http://localhost:{backend_port}/">'
         f"http://localhost:{backend_port}/</a>…</p>"
         f"{script}"
         "</body></html>"

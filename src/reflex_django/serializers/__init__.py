@@ -106,13 +106,18 @@ class ReflexDjangoModelSerializer:
             return [self._serialize_one(obj) for obj in self._iter_sync()]
         return self._serialize_one(self.instance)  # type: ignore[arg-type]
 
+    def _serialize_rows(self, objs: list[models.Model]) -> list[dict[str, Any]]:
+        return [self._serialize_one(obj) for obj in objs]
+
     async def adata(self) -> dict[str, Any] | list[dict[str, Any]]:
         if not self.many:
             return await sync_to_async(self._serialize_one)(self.instance)
-        rows: list[dict[str, Any]] = []
-        async for obj in self._iter_async():
-            rows.append(self._serialize_one(obj))
-        return rows
+        # Materialize rows off the event loop, then serialize them in a single
+        # thread hop. ``_serialize_one`` -> ``model_to_dict`` can touch the ORM
+        # (e.g. M2M fields, deferred columns), which raises
+        # ``SynchronousOnlyOperation`` if run directly on the async loop.
+        objs = [obj async for obj in self._iter_async()]
+        return await sync_to_async(self._serialize_rows)(objs)
 
     @classmethod
     def get_model(cls) -> type[models.Model]:
@@ -145,7 +150,9 @@ class ReflexDjangoModelSerializer:
         model = cls.get_model()
         names: set[str] = {"id"}
         for field in model._meta.concrete_fields:
-            if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
+            if getattr(field, "auto_now", False) or getattr(
+                field, "auto_now_add", False
+            ):
                 names.add(field.name)
         return frozenset(names)
 
@@ -178,9 +185,7 @@ class ReflexDjangoModelSerializer:
             else cls.get_read_only_field_names()
         )
         candidates = cls._candidate_field_names()
-        writable = tuple(
-            sorted(name for name in candidates if name not in readonly)
-        )
+        writable = tuple(sorted(name for name in candidates if name not in readonly))
         return writable
 
     @classmethod

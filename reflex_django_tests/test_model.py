@@ -14,7 +14,9 @@ class _Post(Model):
     """Throwaway Django model used only for serializer round-trip tests."""
 
     title = models.CharField(max_length=200)
-    published = models.BooleanField(default=False)  # pyright: ignore[reportArgumentType]
+    published = models.BooleanField(
+        default=False
+    )  # pyright: ignore[reportArgumentType]
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Django model metadata for the test model."""

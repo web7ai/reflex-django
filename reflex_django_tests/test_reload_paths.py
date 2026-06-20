@@ -48,9 +48,7 @@ def test_plugin_reload_paths_watch_django_project(
     reload_paths = [p.resolve() for p in plugin_reload_paths()]
     assert shop.resolve() in reload_paths
 
-    reflex_pkg_root = (
-        Path(__import__("reflex_django").__file__).resolve().parent
-    )
+    reflex_pkg_root = Path(__import__("reflex_django").__file__).resolve().parent
     assert reflex_pkg_root not in reload_paths
 
 

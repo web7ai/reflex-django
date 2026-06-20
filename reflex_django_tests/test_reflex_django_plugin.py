@@ -112,12 +112,12 @@ def test_plugin_get_config_bootstrap_from_rxconfig(
 ) -> None:
     rxconfig = tmp_path / "rxconfig.py"
     rxconfig.write_text(
-        'import reflex as rx\n'
-        'from reflex_django.plugins import ReflexDjangoPlugin\n'
-        'config = rx.Config(\n'
+        "import reflex as rx\n"
+        "from reflex_django.plugins import ReflexDjangoPlugin\n"
+        "config = rx.Config(\n"
         '    app_name="plugintest",\n'
         '    plugins=[ReflexDjangoPlugin(config={"settings_module": "reflex_django_tests.django_settings", "auto_mount": False})],\n'
-        ')\n',
+        ")\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -146,7 +146,10 @@ def test_plugin_pre_compile_triggers_bootstrap(
 ) -> None:
     monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings")
     plugin = ReflexDjangoPlugin(
-        config={"settings_module": "reflex_django_tests.django_settings", "auto_mount": False}
+        config={
+            "settings_module": "reflex_django_tests.django_settings",
+            "auto_mount": False,
+        }
     )
     assert not is_installed()
     plugin.pre_compile()
@@ -252,7 +255,9 @@ def test_integration_split_dev_with_server() -> None:
 
 
 def test_integration_reflex_only_profile() -> None:
-    config = IntegrationConfig.from_plugin(_IntegrationHolder({"profile": "reflex_only"}))
+    config = IntegrationConfig.from_plugin(
+        _IntegrationHolder({"profile": "reflex_only"})
+    )
     assert config.embed.enabled is False
     assert config.mount.enabled is False
     assert config.bridge.enabled is False

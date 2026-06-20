@@ -47,7 +47,9 @@ def _cookie_clear_variants_js(
     attempts: list[str] = []
     seen: set[str] = set()
 
-    def add(*, cookie_path: str, cookie_domain: str | None, cookie_secure: bool) -> None:
+    def add(
+        *, cookie_path: str, cookie_domain: str | None, cookie_secure: bool
+    ) -> None:
         js = _cookie_clear_js(
             name,
             path=cookie_path,
@@ -107,17 +109,13 @@ def _cookie_attrs_from_settings(prefix: str) -> tuple[str, str]:
         "sessionid" if prefix == "SESSION" else "csrftoken",
     )
     path = getattr(django_settings, f"{prefix}_COOKIE_PATH", "/") or "/"
-    samesite = (
-        getattr(django_settings, f"{prefix}_COOKIE_SAMESITE", "Lax") or "Lax"
-    )
+    samesite = getattr(django_settings, f"{prefix}_COOKIE_SAMESITE", "Lax") or "Lax"
     secure = bool(getattr(django_settings, f"{prefix}_COOKIE_SECURE", False))
     domain = getattr(django_settings, f"{prefix}_COOKIE_DOMAIN", None)
     domain_part = f"; domain={domain}" if domain else ""
     secure_part = "; secure" if secure else ""
     if prefix == "SESSION":
-        max_age = int(
-            getattr(django_settings, "SESSION_COOKIE_AGE", 60 * 60 * 24 * 14)
-        )
+        max_age = int(getattr(django_settings, "SESSION_COOKIE_AGE", 60 * 60 * 24 * 14))
         return name, (
             f"path={path}; max-age={max_age}; samesite={samesite}"
             f"{secure_part}{domain_part}"

@@ -88,12 +88,15 @@ def plugin_reload_paths() -> Sequence[Path]:
             constants.Bun.ROOT_LOCKFILE_DIR,
         )
 
-    reload_paths: tuple[Path, ...] = tuple(
-        path.absolute()
-        for root in resolve_dev_watch_roots()
-        for path in root.iterdir()
-        if not is_excluded_by_default(path)
-    ) + include_dirs
+    reload_paths: tuple[Path, ...] = (
+        tuple(
+            path.absolute()
+            for root in resolve_dev_watch_roots()
+            for path in root.iterdir()
+            if not is_excluded_by_default(path)
+        )
+        + include_dirs
+    )
 
     if exclude_dirs:
         reload_paths = tuple(
@@ -117,9 +120,7 @@ def is_frontend_recompile_path(path: str) -> bool:
     if any(marker in norm for marker in _UI_DIR_MARKERS):
         return True
     assets_marker = f"{os.sep}assets{os.sep}"
-    if assets_marker in norm and norm.endswith(
-        (".css", ".js", ".jsx", ".tsx", ".mjs")
-    ):
+    if assets_marker in norm and norm.endswith((".css", ".js", ".jsx", ".tsx", ".mjs")):
         return True
     return False
 

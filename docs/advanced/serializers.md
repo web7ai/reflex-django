@@ -43,6 +43,20 @@ Auto read-only: `id`, `auto_now`, and `auto_now_add` fields. Add more in `Meta.r
 
 `writable_field_names()` returns editable names. Model state uses this for form fields.
 
+## Shared schema
+
+The unified `FieldSpec` layer can derive field metadata from Django models, ModelForms, and DRF-style serializers:
+
+```python
+from reflex_django.schema import (
+    fieldspecs_from_drf_serializer,
+    fieldspecs_from_model_form,
+    model_field_specs,
+)
+```
+
+Use it when generating forms, scaffolds, or custom state fields. See [Forms and FieldSpec](forms.md).
+
 ## When to use what
 
 | Approach | Good for |

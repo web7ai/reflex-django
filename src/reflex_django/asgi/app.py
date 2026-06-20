@@ -143,7 +143,9 @@ def _is_reserved_reflex_path(path: str) -> bool:
     return False
 
 
-def _should_route_to_django(scope: ASGIScope, path: str, prefixes: tuple[str, ...]) -> bool:
+def _should_route_to_django(
+    scope: ASGIScope, path: str, prefixes: tuple[str, ...]
+) -> bool:
     """Decide whether an ASGI scope should be forwarded to Django."""
     scope_type = scope.get("type")
     if scope_type not in ("http", "websocket"):
@@ -231,8 +233,12 @@ def make_dispatcher(
 
             await reflex_asgi(scope, receive, send)
 
-        dispatch.backend_prefixes = normalized  # pyright: ignore[reportFunctionMemberAccess]
+        dispatch.backend_prefixes = (
+            normalized  # pyright: ignore[reportFunctionMemberAccess]
+        )
         return dispatch
 
-    transformer.backend_prefixes = normalized  # pyright: ignore[reportFunctionMemberAccess]
+    transformer.backend_prefixes = (
+        normalized  # pyright: ignore[reportFunctionMemberAccess]
+    )
     return transformer

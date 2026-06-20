@@ -34,7 +34,19 @@ myshop/
 --8<-- "snippets/profile_rxconfig.py"
 ```
 
-The `integrated` profile turns on embed, mount, proxy, and bridge. You will learn each piece in the next pages.
+The `integrated` profile turns on embed, mount, proxy, and bridge. You will learn each piece in the next pages. If you later disable bridge or resolve an event to tier `none`, Django request context is not bound for that event.
+
+## Public imports
+
+The package root lazily resolves Django-heavy imports so `import reflex_django` is safe during Django app loading. Common public imports:
+
+```python
+from reflex_django import configure_django, create_app, register_admin
+from reflex_django.plugins import ReflexDjangoPlugin
+from reflex_django.states import AppState, ModelState
+```
+
+Most apps only need `ReflexDjangoPlugin` in `rxconfig.py` and `AppState`/`ModelState` in page modules. `configure_django()`, `create_app()`, and `build_django_asgi()` are advanced helpers for scripts, tests, app factories, and split ASGI deployment.
 
 ## settings.py
 

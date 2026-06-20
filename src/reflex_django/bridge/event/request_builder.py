@@ -31,11 +31,7 @@ def _split_host_port(host_header: str) -> tuple[str, str]:
 
 
 def _scheme_from_headers(headers: dict[str, str]) -> str:
-    proto = (
-        headers.get("x-forwarded-proto")
-        or headers.get("X-Forwarded-Proto")
-        or ""
-    )
+    proto = headers.get("x-forwarded-proto") or headers.get("X-Forwarded-Proto") or ""
     if proto:
         return str(proto).strip().lower().split(",")[0]
     return "http"

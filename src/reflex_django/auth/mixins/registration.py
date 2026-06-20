@@ -177,7 +177,9 @@ def populate_registration_state(
         await session_async_save(request)
         sk = getattr(request.session, "session_key", None) or ""
         if sk:
-            from reflex_django.bridge.session_js import mirror_auth_cookies_to_state_tree
+            from reflex_django.bridge.session_js import (
+                mirror_auth_cookies_to_state_tree,
+            )
 
             mirror_auth_cookies_to_state_tree(self, sk)
         await self.refresh_django_user_fields()

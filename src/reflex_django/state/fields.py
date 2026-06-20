@@ -65,6 +65,17 @@ class IntStateField(StateField[int, int]):
 
 
 @dataclass(frozen=True)
+class FloatStateField(StateField[float, float]):
+    var_type: type = float
+
+    def to_python(self, raw: float) -> float:
+        return float(raw)
+
+    def to_var(self, value: float | None) -> float:
+        return 0.0 if value is None else float(value)
+
+
+@dataclass(frozen=True)
 class BoolStateField(StateField[bool, bool]):
     var_type: type = bool
 
@@ -96,6 +107,8 @@ def state_field_for_model_field(
 
     if isinstance(field, models.BooleanField):
         return BoolStateField(name=name, required=required)
+    if isinstance(field, models.FloatField):
+        return FloatStateField(name=name, required=required)
     if isinstance(
         field,
         (
@@ -127,13 +140,12 @@ def build_state_fields(
             )
             for n in names
         )
-    return tuple(
-        state_field_for_name(n, required=n in required_fields) for n in names
-    )
+    return tuple(state_field_for_name(n, required=n in required_fields) for n in names)
 
 
 __all__ = [
     "BoolStateField",
+    "FloatStateField",
     "IntStateField",
     "StateField",
     "StrStateField",

@@ -11,7 +11,6 @@ from reflex_django.auth.login_fields import (
     normalize_login_fields,
 )
 
-
 _DEFAULT_MESSAGES: dict[str, str] = {
     "invalid_credentials": "Invalid username or password.",
     "username_taken": "That username is already taken.",
@@ -119,8 +118,13 @@ def get_auth_settings() -> AuthSettings:
     login_fields = normalize_login_fields(raw.get("LOGIN_FIELDS", DEFAULT_LOGIN_FIELDS))
     messages = _merge_messages(raw.get("MESSAGES"))
     user_messages = raw.get("MESSAGES")
-    if not isinstance(user_messages, Mapping) or "invalid_credentials" not in user_messages:
-        messages["invalid_credentials"] = default_invalid_credentials_message(login_fields)
+    if (
+        not isinstance(user_messages, Mapping)
+        or "invalid_credentials" not in user_messages
+    ):
+        messages["invalid_credentials"] = default_invalid_credentials_message(
+            login_fields
+        )
 
     return AuthSettings(
         enabled=bool(raw.get("ENABLED", True)),

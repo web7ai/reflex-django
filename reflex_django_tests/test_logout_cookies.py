@@ -149,18 +149,23 @@ def test_logout_strips_request_cookies_after_alogout() -> None:
     )
 
     async def _go() -> None:
-        with mock.patch(
-            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "reflex_django.state.auth_bridge.alogout",
-            new=mock.AsyncMock(),
-        ) as alogout_mock, mock.patch(
-            "reflex_django.state.auth_bridge.session_async_save",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "reflex_django.states.auth.apply_auth_snapshot_to_state",
-            new=mock.AsyncMock(),
+        with (
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "reflex_django.state.auth_bridge.alogout",
+                new=mock.AsyncMock(),
+            ) as alogout_mock,
+            mock.patch(
+                "reflex_django.state.auth_bridge.session_async_save",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "reflex_django.states.auth.apply_auth_snapshot_to_state",
+                new=mock.AsyncMock(),
+            ),
         ):
             await bridge.preprocess(
                 app=mock.Mock(), state=state, event=cast(Any, event)
@@ -197,18 +202,23 @@ def test_logout_preserves_configured_session_keys() -> None:
             for key in list(request.session.keys()):
                 del request.session[key]
 
-        with mock.patch(
-            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "reflex_django.state.auth_bridge.alogout",
-            new=mock.AsyncMock(side_effect=_alogout_side_effect),
-        ) as alogout_mock, mock.patch(
-            "reflex_django.state.auth_bridge.session_async_save",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "reflex_django.states.auth.apply_auth_snapshot_to_state",
-            new=mock.AsyncMock(),
+        with (
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "reflex_django.state.auth_bridge.alogout",
+                new=mock.AsyncMock(side_effect=_alogout_side_effect),
+            ) as alogout_mock,
+            mock.patch(
+                "reflex_django.state.auth_bridge.session_async_save",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "reflex_django.states.auth.apply_auth_snapshot_to_state",
+                new=mock.AsyncMock(),
+            ),
         ):
             await bridge.preprocess(
                 app=mock.Mock(), state=state, event=cast(Any, event)
@@ -291,21 +301,27 @@ def test_login_strips_stale_auth_cookies_before_alogin() -> None:
     )
 
     async def _go() -> None:
-        with mock.patch(
-            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "reflex_django.state.auth_bridge.aauthenticate_login_fields",
-            new=mock.AsyncMock(return_value=mock.Mock(is_authenticated=True)),
-        ), mock.patch(
-            "reflex_django.state.auth_bridge.alogin",
-            new=mock.AsyncMock(),
-        ) as alogin_mock, mock.patch(
-            "reflex_django.state.auth_bridge.session_async_save",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "reflex_django.states.auth.apply_auth_snapshot_to_state",
-            new=mock.AsyncMock(),
+        with (
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "reflex_django.state.auth_bridge.aauthenticate_login_fields",
+                new=mock.AsyncMock(return_value=mock.Mock(is_authenticated=True)),
+            ),
+            mock.patch(
+                "reflex_django.state.auth_bridge.alogin",
+                new=mock.AsyncMock(),
+            ) as alogin_mock,
+            mock.patch(
+                "reflex_django.state.auth_bridge.session_async_save",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "reflex_django.states.auth.apply_auth_snapshot_to_state",
+                new=mock.AsyncMock(),
+            ),
         ):
             await bridge.preprocess(
                 app=mock.Mock(), state=state, event=cast(Any, event)

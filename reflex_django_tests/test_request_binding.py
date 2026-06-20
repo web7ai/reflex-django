@@ -13,7 +13,10 @@ configure_django()
 from django.contrib.auth.models import AnonymousUser  # noqa: E402
 from django.http import HttpRequest  # noqa: E402
 
-from reflex_django.bridge.context import begin_event_request, end_event_request  # noqa: E402
+from reflex_django.bridge.context import (
+    begin_event_request,
+    end_event_request,
+)  # noqa: E402
 from reflex_django.state.request_binding import (  # noqa: E402
     REQUEST_WRAPPER_ATTR,
     bind_request_on_state,
@@ -37,7 +40,10 @@ def test_bind_request_on_state_attaches_wrapper() -> None:
         end_event_request()
         begin_event_request(http)
         bind_request_on_state(state, http)
-        assert object.__getattribute__(state, REQUEST_WRAPPER_ATTR).user.is_authenticated is False
+        assert (
+            object.__getattribute__(state, REQUEST_WRAPPER_ATTR).user.is_authenticated
+            is False
+        )
         end_event_request()
 
     ctx = contextvars.copy_context()
@@ -59,18 +65,24 @@ def test_preprocess_binds_handler_substate() -> None:
         }
         state_cls = HomeState
 
-    with mock.patch(
-        "reflex_django.state.request_binding.bind_request_on_state_tree",
-    ), mock.patch(
-        "reflex_django.state.request_binding.bind_request_on_state",
-    ) as bind_mock, mock.patch(
-        "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-        new=mock.AsyncMock(),
-    ), mock.patch.object(
-        HomeState,
-        "get_state",
-        new=mock.AsyncMock(return_value=child),
-    ) as get_state_mock:
+    with (
+        mock.patch(
+            "reflex_django.state.request_binding.bind_request_on_state_tree",
+        ),
+        mock.patch(
+            "reflex_django.state.request_binding.bind_request_on_state",
+        ) as bind_mock,
+        mock.patch(
+            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+            new=mock.AsyncMock(),
+        ),
+        mock.patch.object(
+            HomeState,
+            "get_state",
+            new=mock.AsyncMock(return_value=child),
+        ) as get_state_mock,
+    ):
+
         async def _go() -> None:
             end_event_request()
             await bridge.preprocess(app=mock.Mock(), state=root, event=_StubEvent())

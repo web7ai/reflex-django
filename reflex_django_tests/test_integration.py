@@ -51,13 +51,13 @@ def test_configure_django_bootstraps_plugin_integration(
     """Worker processes bootstrap via configure_django when rxconfig has a plugin."""
     rxconfig = tmp_path / "rxconfig.py"
     rxconfig.write_text(
-        'import reflex as rx\n'
-        'from reflex_django.plugins import ReflexDjangoPlugin\n'
-        'config = rx.Config(\n'
+        "import reflex as rx\n"
+        "from reflex_django.plugins import ReflexDjangoPlugin\n"
+        "config = rx.Config(\n"
         '    app_name="frontend",\n'
-        '    frontend_port=4000,\n'
+        "    frontend_port=4000,\n"
         '    plugins=[ReflexDjangoPlugin(config={"settings_module": "reflex_django_tests.django_settings", "auto_mount": False})],\n'
-        ')\n',
+        ")\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -94,7 +94,10 @@ def test_install_reflex_django_integration_detects_plugin(
 ) -> None:
     monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "reflex_django_tests.django_settings")
     plugin = ReflexDjangoPlugin(
-        config={"settings_module": "reflex_django_tests.django_settings", "auto_mount": False}
+        config={
+            "settings_module": "reflex_django_tests.django_settings",
+            "auto_mount": False,
+        }
     )
     config = Config(app_name="frontend", plugins=[plugin], _skip_plugins_checks=True)
     monkeypatch.setattr(
@@ -144,46 +147,6 @@ def test_compile_wrapper_calls_original_compile(
     reflex_module._compile_app(avoid_dirty_check=False)
 
     original_compile.assert_called_once()
-
-
-def test_compile_or_validate_wrapper_forwards_trigger(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Wrapped ``compile_or_validate_app`` forwards Reflex kwargs unchanged."""
-    import reflex.utils.prerequisites as prerequisites
-
-    original = mock.MagicMock(return_value=True)
-    finalize = mock.MagicMock(return_value=True)
-
-    monkeypatch.setattr(
-        prerequisites,
-        "_reflex_django_compile_or_validate_patched",
-        False,
-        raising=False,
-    )
-    monkeypatch.setattr(prerequisites, "compile_or_validate_app", original)
-    monkeypatch.setattr(
-        "reflex_django.dev.vite_proxy.finalize_web_dev_layout",
-        finalize,
-    )
-
-    from reflex_django.runtime.integration import _patch_compile_or_validate_app
-
-    _patch_compile_or_validate_app()
-    result = prerequisites.compile_or_validate_app(
-        compile=True,
-        check_if_schema_up_to_date=True,
-        trigger="initial",
-    )
-
-    assert result is True
-    original.assert_called_once_with(
-        compile=True,
-        check_if_schema_up_to_date=True,
-        prerender_routes=False,
-        trigger="initial",
-    )
-    finalize.assert_not_called()
 
 
 def test_app_compile_wrapper_finalizes_web_layout(

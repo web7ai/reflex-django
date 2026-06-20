@@ -7,12 +7,14 @@ config = rx.Config(
     app_name="shop",
     redis_url=os.environ["REDIS_URL"],
     plugins=[
-        ReflexDjangoPlugin(config={
-            "settings_module": "config.production",
-            "embed": {"enabled": False},
-            "mount": {"enabled": True},
-            "proxy": {"enabled": False},
-            "bridge": {"enabled": True, "mode": "full"},
-        }),
+        ReflexDjangoPlugin(
+            config={
+                "settings_module": "config.production",
+                "embed": {"enabled": False},
+                "mount": {"enabled": True},
+                "proxy": {"enabled": False},
+                "bridge": {"enabled": True, "mode": "full"},
+            }
+        ),
     ],
 )

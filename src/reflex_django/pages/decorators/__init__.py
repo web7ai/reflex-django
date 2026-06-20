@@ -57,7 +57,10 @@ def page(
 
     def decorator(render_fn: Callable[..., Any]) -> Callable[..., Any]:
         from reflex_django.runtime.app_factory import migrate_decorated_pages_app_name
-        from reflex_django.mount.config import ensure_mount_config_loaded, resolve_app_name
+        from reflex_django.mount.config import (
+            ensure_mount_config_loaded,
+            resolve_app_name,
+        )
 
         page_kwargs = dict(kwargs)
         if route is not None:
@@ -69,9 +72,7 @@ def page(
 
             protected_fn = require_login(login_url=login_url)(render_fn)
 
-        if route is None or not any(
-            reg.route == route for reg in PAGE_REGISTRY
-        ):
+        if route is None or not any(reg.route == route for reg in PAGE_REGISTRY):
             PAGE_REGISTRY.append(
                 PageRegistration(
                     render_fn=protected_fn,

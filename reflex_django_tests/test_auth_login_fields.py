@@ -152,5 +152,7 @@ async def test_aauthenticate_login_fields_username_or_email() -> None:
         await aauthenticate_login_fields(_Req(), "bothuser", "secret123", fields)
     ) is not None
     assert (
-        await aauthenticate_login_fields(_Req(), "both@example.com", "secret123", fields)
+        await aauthenticate_login_fields(
+            _Req(), "both@example.com", "secret123", fields
+        )
     ) is not None

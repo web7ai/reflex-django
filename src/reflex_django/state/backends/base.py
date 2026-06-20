@@ -18,7 +18,9 @@ class StateBackend(Protocol):
 
     async def retrieve(self, ctx: ActionContext, pk: int) -> models.Model: ...
 
-    async def create(self, ctx: ActionContext, data: dict[str, Any]) -> models.Model: ...
+    async def create(
+        self, ctx: ActionContext, data: dict[str, Any]
+    ) -> models.Model: ...
 
     async def update(
         self,

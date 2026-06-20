@@ -22,12 +22,10 @@ from reflex_django.setup.project import (
 def test_parse_settings_module_setdefault(tmp_path: Path) -> None:
     manage = tmp_path / "manage.py"
     manage.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             import os
             os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myproject.settings")
-            """
-        ),
+            """),
         encoding="utf-8",
     )
     assert parse_settings_module(manage) == "myproject.settings"
@@ -42,7 +40,9 @@ def test_parse_settings_module_assign(tmp_path: Path) -> None:
     assert parse_settings_module(manage) == "shop.settings"
 
 
-def test_discover_settings_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_discover_settings_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sub = tmp_path / "app"
     sub.mkdir()
     manage = tmp_path / "manage.py"
@@ -54,7 +54,9 @@ def test_discover_settings_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert discover_settings_module() == "app.settings"
 
 
-def test_find_manage_py_walks_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_find_manage_py_walks_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = tmp_path / "proj"
     nested = root / "pkg" / "inner"
     nested.mkdir(parents=True)
@@ -74,8 +76,7 @@ def test_configure_django_adds_startproject_root_to_sys_path(
     (tmp_path / "demo").mkdir()
     (tmp_path / "demo" / "__init__.py").write_text("", encoding="utf-8")
     (tmp_path / "demo" / "settings.py").write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             SECRET_KEY = "test"
             DEBUG = True
             ALLOWED_HOSTS = ["*"]
@@ -90,17 +91,14 @@ def test_configure_django_adds_startproject_root_to_sys_path(
                 }
             }
             USE_TZ = True
-            """
-        ),
+            """),
         encoding="utf-8",
     )
     (tmp_path / "manage.py").write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             import os
             os.environ.setdefault("DJANGO_SETTINGS_MODULE", "demo.settings")
-            """
-        ),
+            """),
         encoding="utf-8",
     )
 

@@ -18,17 +18,13 @@ def test_settings_triggers_backend_not_frontend() -> None:
 
 
 def test_state_triggers_backend_not_frontend() -> None:
-    path = os.path.join(
-        "modules", "ai", "studio", "pages", "retrieval", "state.py"
-    )
+    path = os.path.join("modules", "ai", "studio", "pages", "retrieval", "state.py")
     assert is_backend_reload_path(path) is True
     assert is_frontend_recompile_path(path) is False
 
 
 def test_views_triggers_frontend_not_backend() -> None:
-    path = os.path.join(
-        "modules", "ai", "studio", "pages", "retrieval", "views.py"
-    )
+    path = os.path.join("modules", "ai", "studio", "pages", "retrieval", "views.py")
     assert is_frontend_recompile_path(path) is True
     assert is_backend_reload_path(path) is False
 

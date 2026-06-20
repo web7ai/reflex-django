@@ -4,11 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from reflex_django.runtime.integration.registry import (
-    get_original_compile_or_validate,
-    set_original_compile_or_validate,
-)
-
 
 def _finalize_web_dev_layout_safe(*, force: bool = True) -> None:
     """Apply Vite proxy wiring; log failures instead of failing compile."""
@@ -90,37 +85,6 @@ def _patch_app_compile() -> None:
     App._reflex_django_app_compile_patched = True
 
 
-def _patch_compile_or_validate_app() -> None:
-    """Restore Vite proxy wiring after every successful Reflex compile."""
-    try:
-        import reflex.utils.prerequisites as prerequisites
-    except ImportError:
-        return
-
-    if getattr(prerequisites, "_reflex_django_compile_or_validate_patched", False):
-        return
-
-    set_original_compile_or_validate(prerequisites.compile_or_validate_app)
-    original_compile_or_validate = get_original_compile_or_validate()
-
-    def compile_or_validate_app(
-        compile: bool = False,
-        check_if_schema_up_to_date: bool = False,
-        prerender_routes: bool = False,
-        **kwargs: Any,
-    ) -> bool:
-        result = original_compile_or_validate(
-            compile=compile,
-            check_if_schema_up_to_date=check_if_schema_up_to_date,
-            prerender_routes=prerender_routes,
-            **kwargs,
-        )
-        return result
-
-    prerequisites.compile_or_validate_app = compile_or_validate_app  # type: ignore[assignment]
-    prerequisites._reflex_django_compile_or_validate_patched = True
-
-
 def _patch_reflex_compile() -> None:
     """Compile in-process and restore the Vite Django dev proxy after compile."""
     try:
@@ -134,7 +98,10 @@ def _patch_reflex_compile() -> None:
     original_compile = reflex_module._compile_app
 
     def _compile_app(*, avoid_dirty_check: bool = True) -> None:
-        from reflex_django.runtime.app_factory import load_app_factory, prepare_pages_for_compile
+        from reflex_django.runtime.app_factory import (
+            load_app_factory,
+            prepare_pages_for_compile,
+        )
         from reflex_django.runtime.compile_validate import (
             expected_dispatch_keys_from_app,
             invalidate_stale_context_js,

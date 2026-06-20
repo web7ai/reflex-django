@@ -29,7 +29,9 @@ class UpdateMixin(ObjectMixin, StateFieldsMixin):
         await instance.asave()
         return instance
 
-    async def populate_edit_state(self, ctx: ActionContext, instance: models.Model) -> None:
+    async def populate_edit_state(
+        self, ctx: ActionContext, instance: models.Model
+    ) -> None:
         opts = ctx.options
         setattr(self, opts.editing_var, int(instance.pk))
         for sf in opts.state_fields:

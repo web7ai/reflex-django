@@ -293,9 +293,7 @@ async def proxy_websocket_to_vite(scope: Any, receive: Any, send: Any) -> None:
     # and (b) echo the negotiated subprotocol back to the browser on accept.
     # Without this the proxied socket connects but Vite never treats it as an
     # HMR channel, so edits compile but the browser is never told to reload.
-    requested_subprotocols = [
-        str(p) for p in scope.get("subprotocols", []) if p
-    ]
+    requested_subprotocols = [str(p) for p in scope.get("subprotocols", []) if p]
     connect_kwargs: dict[str, Any] = {}
     if requested_subprotocols:
         connect_kwargs["subprotocols"] = requested_subprotocols

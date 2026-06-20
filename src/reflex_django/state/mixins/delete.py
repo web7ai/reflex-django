@@ -28,6 +28,17 @@ class DeleteMixin(ListMixin, UpdateMixin):
         editing_id = getattr(self, opts.editing_var, -1)
         if editing_id == pk:
             self._reset_state_fields()
+        # Without pagination, dropping the row in place is correct and avoids a
+        # full reload; under pagination a refresh keeps the page window filled.
+        if (
+            opts.incremental_updates
+            and not opts.paginate_by
+            and self.remove_row(
+                ctx,
+                pk,
+            )
+        ):
+            return
         await self.refresh_list(ctx)
 
 

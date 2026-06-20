@@ -18,7 +18,6 @@ from reflex_django.runtime.integration.patches.basestate import (
 from reflex_django.runtime.integration.patches.compile import (
     _finalize_web_dev_layout_safe,
     _patch_app_compile,
-    _patch_compile_or_validate_app,
     _patch_reflex_compile,
     _patch_vite_config_generation,
 )
@@ -63,7 +62,6 @@ __all__ = [
     "_finalize_web_dev_layout_safe",
     "_patch_vite_config_generation",
     "_patch_app_compile",
-    "_patch_compile_or_validate_app",
     "_patch_reflex_compile",
 ]
 

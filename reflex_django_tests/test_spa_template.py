@@ -44,7 +44,9 @@ def test_render_substitutes_user_and_messages(html_request) -> None:
 
 
 def test_render_skips_non_html(html_request) -> None:
-    response = HttpResponse(b"console.log({{ user }});", content_type="application/javascript")
+    response = HttpResponse(
+        b"console.log({{ user }});", content_type="application/javascript"
+    )
     out = maybe_render_spa_html(html_request, response)
     assert out is response
     assert b"{{ user }}" in out.content

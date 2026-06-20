@@ -11,7 +11,11 @@ from reflex_django.setup.conf import configure_django
 configure_django()
 
 from reflex_django.states.auth import DjangoUserState  # noqa: E402
-from reflex_django.mixins.session_auth import SessionAuthConfig, session_auth_mixin  # noqa: E402
+from reflex_django.mixins.session_auth import (
+    SessionAuthConfig,
+    session_auth_mixin,
+)  # noqa: E402
+
 
 class _AppStub(rx.State):
     app_flag: bool = False

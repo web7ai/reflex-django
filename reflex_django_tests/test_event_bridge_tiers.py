@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, cast
 from unittest import mock
 
-import pytest
 from django.test import override_settings
 
 from reflex_django.setup.conf import configure_django
@@ -137,18 +136,92 @@ def test_preprocess_runs_bridge_for_app_state_in_smart_mode() -> None:
     )
 
     async def _go() -> None:
-        with mock.patch(
-            "reflex_django.bridge.event.preprocess.bridge_request_for_state",
-            new=mock.AsyncMock(return_value=(mock.Mock(), None)),
-        ) as bridge_call, mock.patch(
-            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-            new=mock.AsyncMock(),
+        with (
+            mock.patch(
+                "reflex_django.bridge.event.preprocess.bridge_request_for_state",
+                new=mock.AsyncMock(return_value=(mock.Mock(), None)),
+            ) as bridge_call,
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
         ):
             await bridge.preprocess(
                 app=mock.Mock(),
                 state=mock.Mock(spec=["get_state"]),
                 event=cast(Any, event),
             )
+            bridge_call.assert_awaited_once()
+            assert bridge_call.await_args.kwargs["tier"] == "full"
+
+    import asyncio
+
+    asyncio.run(_go())
+
+
+@override_settings(RX_EVENT_BRIDGE_MODE="smart", RX_EVENT_CACHE_TTL=0)
+def test_process_event_honours_none_tier_in_smart_mode() -> None:
+    """Regression for F1: preprocess + patched process_event must not run the
+    full middleware chain for plain ``rx.State`` handlers in smart mode.
+
+    Before the fix, ``bind_django_request_for_handler_state`` defaulted to
+    ``tier="full"`` and rebuilt a full Django request even though preprocess
+    had resolved ``none``.
+    """
+    import reflex as rx
+
+    from reflex_django.bridge.context import current_event_tier
+    from reflex_django.bridge.event.preprocess import (
+        bind_django_request_for_handler_state,
+    )
+
+    class FilterState(rx.State):
+        pass
+
+    bridge = DjangoEventBridge()
+    event = _StubEvent(state_cls=FilterState)
+
+    async def _go() -> None:
+        with mock.patch(
+            "reflex_django.bridge.event.preprocess.bridge_request_for_state",
+            new=mock.AsyncMock(return_value=(mock.Mock(), None)),
+        ) as bridge_call:
+            # 1. Bridge middleware resolves and publishes the "none" tier.
+            await bridge.preprocess(
+                app=mock.Mock(),
+                state=mock.Mock(),
+                event=cast(Any, event),
+            )
+            assert current_event_tier() == "none"
+            # 2. The patched process_event hook runs next in the same context.
+            await bind_django_request_for_handler_state(mock.Mock())
+            bridge_call.assert_not_awaited()
+
+    import asyncio
+
+    asyncio.run(_go())
+
+
+@override_settings(RX_EVENT_BRIDGE_MODE="full", RX_EVENT_CACHE_TTL=0)
+def test_bind_handler_state_uses_resolved_tier_without_preprocess() -> None:
+    """Without preprocess, the binding falls back to the default tier."""
+    import reflex as rx
+
+    from reflex_django.bridge.context import clear_event_tier
+    from reflex_django.bridge.event.preprocess import (
+        bind_django_request_for_handler_state,
+    )
+
+    class FilterState(rx.State):
+        pass
+
+    async def _go() -> None:
+        clear_event_tier()
+        with mock.patch(
+            "reflex_django.bridge.event.preprocess.bridge_request_for_state",
+            new=mock.AsyncMock(return_value=(mock.Mock(), None)),
+        ) as bridge_call:
+            await bind_django_request_for_handler_state(mock.Mock())
             bridge_call.assert_awaited_once()
             assert bridge_call.await_args.kwargs["tier"] == "full"
 

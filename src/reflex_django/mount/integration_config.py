@@ -41,9 +41,7 @@ ALLOWED_TOP_LEVEL_KEYS = frozenset(
 ALLOWED_EMBED_KEYS = frozenset({"enabled"})
 ALLOWED_MOUNT_KEYS = frozenset({"enabled", "mount_prefix", "django_prefix"})
 ALLOWED_PROXY_KEYS = frozenset({"enabled", "server", "separate_dev_ports"})
-ALLOWED_BRIDGE_KEYS = frozenset(
-    {"enabled", "mode", "run_middleware_chain", "resolver"}
-)
+ALLOWED_BRIDGE_KEYS = frozenset({"enabled", "mode", "run_middleware_chain", "resolver"})
 
 _INTEGRATION_CONFIG: IntegrationConfig | None = None
 
@@ -195,7 +193,9 @@ def _pillar_block(raw: Mapping[str, Any], key: str) -> dict[str, Any]:
     return dict(block)
 
 
-def _validate_pillar_keys(block: Mapping[str, Any], *, pillar: str, allowed: frozenset[str]) -> None:
+def _validate_pillar_keys(
+    block: Mapping[str, Any], *, pillar: str, allowed: frozenset[str]
+) -> None:
     unknown = set(block) - allowed
     if unknown:
         msg = (

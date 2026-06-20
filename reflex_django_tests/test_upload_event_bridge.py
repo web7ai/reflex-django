@@ -97,9 +97,7 @@ def test_router_data_from_starlette_request() -> None:
 
 
 def test_resolve_router_data_prefers_event_cookies() -> None:
-    event = _StubEvent(
-        router_data={"headers": {"cookie": "sessionid=event"}}
-    )
+    event = _StubEvent(router_data={"headers": {"cookie": "sessionid=event"}})
     state = _StubState(
         router_data={"headers": {"cookie": "sessionid=state"}, "pathname": "/old"}
     )
@@ -119,7 +117,9 @@ def test_resolve_router_data_falls_back_to_root_state_chain() -> None:
     merged = _resolve_router_data(cast(Any, event), cast(Any, profile))
     assert merged["headers"]["cookie"] == "sessionid=root"
     assert merged["pathname"] == "/upload"
-    assert _router_data_from_state_chain(profile)["headers"]["cookie"] == "sessionid=root"
+    assert (
+        _router_data_from_state_chain(profile)["headers"]["cookie"] == "sessionid=root"
+    )
 
 
 def test_resolve_router_data_falls_back_to_state() -> None:
@@ -264,12 +264,15 @@ def test_login_required_upload_handler_no_redirect_after_bridge() -> None:
         auth_user = mock.Mock()
         auth_user.is_authenticated = True
 
-        with mock.patch(
-            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "django.contrib.auth.aget_user",
-            new=mock.AsyncMock(return_value=auth_user),
+        with (
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "django.contrib.auth.aget_user",
+                new=mock.AsyncMock(return_value=auth_user),
+            ),
         ):
             await bridge.preprocess(
                 app=mock.Mock(),
@@ -281,12 +284,15 @@ def test_login_required_upload_handler_no_redirect_after_bridge() -> None:
             assert out == "saved"
 
         # Without session cookies, same handler redirects.
-        with mock.patch(
-            "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
-            new=mock.AsyncMock(),
-        ), mock.patch(
-            "django.contrib.auth.aget_user",
-            new=mock.AsyncMock(return_value=AnonymousUser()),
+        with (
+            mock.patch(
+                "reflex_django.state.auth_bridge.maybe_sync_app_state_auth",
+                new=mock.AsyncMock(),
+            ),
+            mock.patch(
+                "django.contrib.auth.aget_user",
+                new=mock.AsyncMock(return_value=AnonymousUser()),
+            ),
         ):
             await bridge.preprocess(
                 app=mock.Mock(),

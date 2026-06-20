@@ -99,4 +99,3 @@ def test_register_django_cli_group_if_needed_idempotent() -> None:
 
     register_django_cli_group_if_needed(cli)
     assert len([n for n in cli.commands if n == "django"]) == 1
-

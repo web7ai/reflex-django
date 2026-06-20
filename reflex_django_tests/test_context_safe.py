@@ -16,7 +16,9 @@ from reflex_django.bridge.context import (  # noqa: E402
 
 
 def test_anonymous_user_before_apps_ready() -> None:
-    with mock.patch("reflex_django.bridge.context._django_apps_ready", return_value=False):
+    with mock.patch(
+        "reflex_django.bridge.context._django_apps_ready", return_value=False
+    ):
         user = anonymous_user()
     assert isinstance(user, _StandInAnonymousUser)
     assert user.is_authenticated is False
@@ -24,16 +26,24 @@ def test_anonymous_user_before_apps_ready() -> None:
 
 
 def test_current_user_without_request_before_apps_ready() -> None:
-    with mock.patch("reflex_django.bridge.context._django_apps_ready", return_value=False):
-        with mock.patch("reflex_django.bridge.context.current_request", return_value=None):
+    with mock.patch(
+        "reflex_django.bridge.context._django_apps_ready", return_value=False
+    ):
+        with mock.patch(
+            "reflex_django.bridge.context.current_request", return_value=None
+        ):
             user = current_user()
     assert isinstance(user, _StandInAnonymousUser)
 
 
 def test_request_proxy_user_does_not_import_auth_at_import_time() -> None:
     """Module-level ``request.user`` must not require a ready app registry."""
-    with mock.patch("reflex_django.bridge.context._django_apps_ready", return_value=False):
-        with mock.patch("reflex_django.bridge.context.current_request", return_value=None):
+    with mock.patch(
+        "reflex_django.bridge.context._django_apps_ready", return_value=False
+    ):
+        with mock.patch(
+            "reflex_django.bridge.context.current_request", return_value=None
+        ):
             from reflex_django.bridge.request import request as rd_request
 
             user = rd_request.user

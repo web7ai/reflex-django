@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -14,7 +13,6 @@ from reflex_django.setup.project import discover_settings_module
 
 _INSTALLED = False
 _ORIGINAL_GET_RELOAD_PATHS: Callable[[], Any] | None = None
-_ORIGINAL_COMPILE_OR_VALIDATE: Callable[..., bool] | None = None
 
 
 def is_installed() -> bool:
@@ -30,15 +28,6 @@ def get_original_get_config() -> Callable[..., Config] | None:
     from reflex_django.runtime.get_config_patch import get_original_get_config as _orig
 
     return _orig()
-
-
-def get_original_compile_or_validate() -> Callable[..., bool] | None:
-    return _ORIGINAL_COMPILE_OR_VALIDATE
-
-
-def set_original_compile_or_validate(fn: Callable[..., bool] | None) -> None:
-    global _ORIGINAL_COMPILE_OR_VALIDATE
-    _ORIGINAL_COMPILE_OR_VALIDATE = fn
 
 
 def _ensure_settings_env() -> None:
@@ -58,7 +47,9 @@ def _install_plugin_get_config_patch() -> None:
 
 def _rebind_get_config_imports(patched_get_config: Callable[..., Config]) -> None:
     """Update modules that already imported ``get_config`` before patching."""
-    from reflex_django.runtime.get_config_patch import _rebind_get_config_imports as _rebind
+    from reflex_django.runtime.get_config_patch import (
+        _rebind_get_config_imports as _rebind,
+    )
 
     _rebind(patched_get_config)
 
@@ -129,12 +120,12 @@ _STATE_DISPATCHER_PATCHED = (
     "      for (const substate in update.delta) {\n"
     f"        {_STATE_DISPATCHER_MARKER}\n"
     "        const _rxdj_dispatch = dispatch[substate];\n"
-    "        if (typeof _rxdj_dispatch !== \"function\") {\n"
-    "          if (typeof console !== \"undefined\" && console.warn) {\n"
+    '        if (typeof _rxdj_dispatch !== "function") {\n'
+    '          if (typeof console !== "undefined" && console.warn) {\n'
     "            console.warn(\n"
-    "              \"[reflex-django] No dispatcher for substate '\" + substate + \"' — \"\n"
-    "              + \"skipping delta. Re-run `reflex export` to regenerate. Known dispatchers: \"\n"
-    "              + Object.keys(dispatch).join(\", \"),\n"
+    '              "[reflex-django] No dispatcher for substate \'" + substate + "\' — "\n'
+    '              + "skipping delta. Re-run `reflex export` to regenerate. Known dispatchers: "\n'
+    '              + Object.keys(dispatch).join(", "),\n'
     "            );\n"
     "          }\n"
     "          continue;\n"
@@ -198,7 +189,6 @@ def install_runtime_patches() -> None:
     """Apply compile and page patches after ``rxconfig`` is available."""
     from reflex_django.runtime.integration.patches.compile import (
         _patch_app_compile,
-        _patch_compile_or_validate_app,
         _patch_reflex_compile,
         _patch_vite_config_generation,
     )
@@ -209,10 +199,18 @@ def install_runtime_patches() -> None:
 
     _patch_vite_config_generation()
     _patch_app_compile()
-    _patch_compile_or_validate_app()
     _patch_reflex_compile()
     _patch_reflex_page()
     _patch_apply_decorated_pages()
+
+    # Warn (don't fail) if Reflex is outside the supported range or a patched
+    # internal has moved, so upgrades surface loudly instead of breaking quietly.
+    try:
+        from reflex_django.core.compat import warn_if_unsupported_reflex
+
+        warn_if_unsupported_reflex()
+    except Exception:
+        pass
 
 
 # Alias used by plugin lifecycle hooks
@@ -222,7 +220,6 @@ install_post_rxconfig_patches = install_runtime_patches
 def uninstall_all_patches() -> None:
     """Restore unpatched Reflex hooks."""
     global _ORIGINAL_GET_RELOAD_PATHS
-    global _ORIGINAL_COMPILE_OR_VALIDATE
     from reflex_django.runtime.get_config_patch import (
         get_original_get_config,
         reset_get_config_patch_state,
@@ -241,14 +238,6 @@ def uninstall_all_patches() -> None:
             exec_module.get_reload_paths = _ORIGINAL_GET_RELOAD_PATHS
         except ImportError:
             pass
-    try:
-        import reflex.utils.prerequisites as prerequisites
-
-        if _ORIGINAL_COMPILE_OR_VALIDATE is not None:
-            prerequisites.compile_or_validate_app = _ORIGINAL_COMPILE_OR_VALIDATE
-            prerequisites._reflex_django_compile_or_validate_patched = False
-    except ImportError:
-        pass
     try:
         import reflex_base.event.processor.base_state_processor as bsp
 
@@ -286,4 +275,3 @@ def uninstall_all_patches() -> None:
         pass
     set_installed(False)
     _ORIGINAL_GET_RELOAD_PATHS = None
-    _ORIGINAL_COMPILE_OR_VALIDATE = None

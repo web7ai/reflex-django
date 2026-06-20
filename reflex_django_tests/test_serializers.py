@@ -112,6 +112,31 @@ def test_class_alist_shortcut() -> None:
     assert len(data) == 1
 
 
+def test_adata_serializes_off_event_loop() -> None:
+    """Row serialization must run in a worker thread, not the async loop.
+
+    ``model_to_dict`` can perform synchronous ORM access (M2M, deferred
+    fields); doing that on the event loop raises ``SynchronousOnlyOperation``.
+    """
+    observed: dict[str, bool] = {}
+
+    class _Probe(_NoteFieldsSerializer):
+        def _serialize_one(self, obj: Any) -> dict[str, Any]:
+            try:
+                asyncio.get_running_loop()
+                observed["on_loop"] = True
+            except RuntimeError:
+                observed["on_loop"] = False
+            return super()._serialize_one(obj)
+
+    async def run() -> list[dict[str, Any]]:
+        return await _Probe([_note(1), _note(2)], many=True).adata()
+
+    data = asyncio.run(run())
+    assert len(data) == 2
+    assert observed["on_loop"] is False
+
+
 def test_class_list_shortcut() -> None:
     data = _NoteFieldsSerializer.list([_note(1), _note(2)])
     assert len(data) == 2

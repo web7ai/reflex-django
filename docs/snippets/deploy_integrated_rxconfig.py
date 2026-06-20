@@ -6,9 +6,11 @@ config = rx.Config(
     app_name="shop",
     redis_url="redis://localhost:6379/0",
     plugins=[
-        ReflexDjangoPlugin(config={
-            "settings_module": "config.production",
-            "profile": "integrated",
-        }),
+        ReflexDjangoPlugin(
+            config={
+                "settings_module": "config.production",
+                "profile": "integrated",
+            }
+        ),
     ],
 )

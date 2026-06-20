@@ -205,9 +205,23 @@ RX_EVENT_CACHE = "default"
 RX_EVENT_CACHE_TTL = 60
 RX_EVENT_CACHE_KEY_PREFIX = "rx:event:"
 
+# Opt-in: on the "auth_only" tier, reuse the cached auth snapshot to skip the
+# Session/Auth middleware chain within RX_EVENT_CACHE_TTL. Trades a small
+# staleness window (until logout invalidates the cache) for fewer queries.
+RX_EVENT_CACHE_FAST_AUTH = False
+
 # Opt-in bridge timing logs at DEBUG.
 RX_EVENT_METRICS = False
 # RX_EVENT_METRICS_LOGGER = "myapp.performance"
+
+# Opt-in dev inspectors (bridge-tier overlay, per-event query/timing capture,
+# state-tree snapshot). Also enabled via the ``RX_DEVTOOLS`` env var. Dev only.
+RX_DEVTOOLS = False
+
+# When True, the event bridge logs full tracebacks (via the ``reflex_django``
+# logger) for exceptions it would otherwise swallow on the hot path. Can also be
+# enabled with the ``RX_BRIDGE_DEBUG`` environment variable. Keep off in prod.
+RX_BRIDGE_DEBUG = False
 
 # "lean" applies smaller WebSocket deltas when mirror settings still match defaults.
 RX_PERFORMANCE_PRESET = "default"  # "default" | "lean"

@@ -18,7 +18,9 @@ def _noop_view(request):  # noqa: ANN001
 
 
 urlpatterns = [
-    path("", RedirectView.as_view(url="/api/docs", permanent=False), name="backend_root"),
+    path(
+        "", RedirectView.as_view(url="/api/docs", permanent=False), name="backend_root"
+    ),
     path("admin/rosetta/", admin.site.urls),
     path("admin/", admin.site.urls),
     path(

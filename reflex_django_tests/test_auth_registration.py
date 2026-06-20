@@ -44,7 +44,10 @@ async def test_registration_rejects_duplicate_username() -> None:
     state = Cls()
     mock_request = MagicMock()
 
-    with patch("reflex_django.auth.mixins.registration.current_request", return_value=mock_request):
+    with patch(
+        "reflex_django.auth.mixins.registration.current_request",
+        return_value=mock_request,
+    ):
         with patch(
             "reflex_django.auth.mixins.registration.sync_to_async",
             side_effect=_fake_sync_to_async,
@@ -76,7 +79,10 @@ async def test_registration_success_navigates() -> None:
     mock_request.session.asave = AsyncMock()
     created_user = MagicMock()
 
-    with patch("reflex_django.auth.mixins.registration.current_request", return_value=mock_request):
+    with patch(
+        "reflex_django.auth.mixins.registration.current_request",
+        return_value=mock_request,
+    ):
         with patch(
             "reflex_django.auth.mixins.registration._sync_session_cookie_then_nav",
             return_value="nav",

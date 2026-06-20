@@ -31,6 +31,29 @@ _response_var: contextvars.ContextVar[HttpResponse | None] = contextvars.Context
     "reflex_django.current_response", default=None
 )
 
+# Bridge tier resolved by :class:`~reflex_django.bridge.event.DjangoEventBridge`
+# for the active event. Set in ``preprocess`` (even for ``"none"``) so the
+# patched ``process_event`` hook honours ``smart``/``none`` modes instead of
+# rebuilding a full Django request. ``None`` means "not resolved this event".
+_event_tier_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "reflex_django.current_event_tier", default=None
+)
+
+
+def set_event_tier(tier: str | None) -> None:
+    """Record the bridge tier resolved for the active event."""
+    _event_tier_var.set(tier)
+
+
+def current_event_tier() -> str | None:
+    """Return the bridge tier resolved for the active event, if any."""
+    return _event_tier_var.get()
+
+
+def clear_event_tier() -> None:
+    """Forget the resolved bridge tier for the active event."""
+    _event_tier_var.set(None)
+
 
 class _StandInAnonymousUser:
     """Lightweight anonymous user before Django apps are ready or outside events."""
@@ -314,7 +337,9 @@ __all__ = [
     "anonymous_user",
     "begin_event_request",
     "begin_event_response",
+    "clear_event_tier",
     "current_csrf_token",
+    "current_event_tier",
     "current_language",
     "current_messages",
     "current_request",
@@ -327,4 +352,5 @@ __all__ = [
     "reset_current_response",
     "set_current_request",
     "set_current_response",
+    "set_event_tier",
 ]

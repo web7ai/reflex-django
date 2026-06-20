@@ -26,13 +26,13 @@ def test_plugin_rxconfig_loads_from_project_root(
 ) -> None:
     rxconfig = tmp_path / "rxconfig.py"
     rxconfig.write_text(
-        'import reflex as rx\n'
-        'from reflex_django.plugins import ReflexDjangoPlugin\n'
-        'config = rx.Config(\n'
+        "import reflex as rx\n"
+        "from reflex_django.plugins import ReflexDjangoPlugin\n"
+        "config = rx.Config(\n"
         '    app_name="demo",\n'
-        '    frontend_port=3000,\n'
+        "    frontend_port=3000,\n"
         '    plugins=[ReflexDjangoPlugin(config={"settings_module": "reflex_django_tests.django_settings", "auto_mount": False})],\n'
-        ')\n',
+        ")\n",
         encoding="utf-8",
     )
     (tmp_path / "manage.py").write_text(

@@ -17,7 +17,9 @@ class ReflexDjangoConfig(AppConfig):
     name = "reflex_django"
     label = "reflex_django"
     verbose_name = "Reflex Django"
-    default_auto_field = "django.db.models.BigAutoField"  # pyright: ignore[reportAssignmentType]
+    default_auto_field = (
+        "django.db.models.BigAutoField"  # pyright: ignore[reportAssignmentType]
+    )
 
     def ready(self) -> None:
         from reflex_django.mount.auto import schedule_auto_mount_after_admin

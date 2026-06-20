@@ -10,7 +10,10 @@ from django.urls import path
 from reflex_django.setup.conf import configure_django
 from reflex_django.mount.config import clear_mount_registration
 from reflex_django.mount.registry import clear_mount_registry
-from reflex_django.mount.discovery import discover_django_prefixes, resolve_django_prefix
+from reflex_django.mount.discovery import (
+    discover_django_prefixes,
+    resolve_django_prefix,
+)
 from reflex_django.django.urls import reflex_mount
 
 

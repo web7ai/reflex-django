@@ -21,9 +21,7 @@ _NAV_DELAY_MS = 200
 
 def _defer_nav_js(path: str) -> str:
     href = json.dumps(path)
-    return (
-        f"setTimeout(function(){{ window.location.replace({href}); }}, {_NAV_DELAY_MS});"
-    )
+    return f"setTimeout(function(){{ window.location.replace({href}); }}, {_NAV_DELAY_MS});"
 
 
 def _sync_session_cookie_then_nav(
@@ -160,7 +158,9 @@ def populate_session_auth_state(
         await session_async_save(request)
         sk = getattr(request.session, "session_key", None) or ""
         if sk:
-            from reflex_django.bridge.session_js import mirror_auth_cookies_to_state_tree
+            from reflex_django.bridge.session_js import (
+                mirror_auth_cookies_to_state_tree,
+            )
 
             mirror_auth_cookies_to_state_tree(self, sk)
         await apply_auth_snapshot_to_state(self)

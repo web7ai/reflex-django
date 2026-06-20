@@ -55,7 +55,9 @@ async def test_password_reset_request_sets_sent_flag() -> None:
             "reflex_django.auth.mixins.password_reset.sync_to_async",
             side_effect=_fake_sync_to_async,
         ):
-            with patch("reflex_django.auth.mixins.password_reset.send_mail") as send_mail:
+            with patch(
+                "reflex_django.auth.mixins.password_reset.send_mail"
+            ) as send_mail:
                 with patch(
                     "reflex_django.auth.mixins.password_reset.default_token_generator.make_token",
                     return_value="tok",
@@ -75,6 +77,7 @@ async def test_password_reset_request_sets_sent_flag() -> None:
 
 def test_page_params_prefers_key_over_session_token() -> None:
     """Route param must not be confused with Reflex's websocket ``token`` field."""
+
     class _RouterPage:
         params: dict[str, str] = {}
 

@@ -12,7 +12,7 @@
 
 **reflex-django** connects Django and [Reflex](https://reflex.dev) so you run one app, not two servers you glue together by hand. Django owns your database, admin, session auth, and REST or API routes. Reflex owns reactive pages you write in Python.
 
-Install the plugin, set `profile: "integrated"` in `rxconfig.py`, and run `reflex run`. Django admin, your API, and Reflex pages share cookies and sessions. Handlers on `AppState` see `self.request.user` on every event, the same way a Django view would.
+Install the plugin, set `profile: "integrated"` in `rxconfig.py`, and run `reflex run`. Django admin, your API, and Reflex pages share cookies and sessions. Handlers on Django-aware state (`AppState`, `ModelState`, or `DjangoUserState`) see `self.request.user` when bridge is enabled and the resolved event tier binds Django context.
 
 ## Install
 
@@ -54,4 +54,6 @@ For a new project, also add Django and Reflex (`uv add django reflex reflex-djan
 
 </div>
 
-Need serializers, auth pages, or deploy help? See [Advanced](advanced/index.md).
+Need serializers, auth pages, deploy help, security guidance, or migration notes? See [Advanced](advanced/index.md).
+
+For AI-assisted work, use the repository [`llm.txt`](https://github.com/web7ai/reflex-django/blob/main/llm.txt) guide as the compact source map.

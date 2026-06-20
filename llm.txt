@@ -6,18 +6,20 @@ Reflex plugin that runs Django and Reflex together via `ReflexDjangoPlugin` in `
 
 | Item | Value |
 |:---|:---|
-| Package | reflex-django (import: reflex_django) |
+| Package | reflex-django (import: `reflex_django`) |
 | Version | 4.0+ |
 | Python | 3.12+ |
 | Django | 6.0+ |
-| Reflex | 0.9.4+ |
+| Reflex | >=0.9.4,<1.0 |
 | Dev URL | http://localhost:3000/ |
 | Dev ports | Vite 3000, backend 8000 |
 | Docs | https://web7ai.github.io/reflex-django/ |
 
 ## What it is
 
-reflex-django connects Django and Reflex so you run one app, not two servers glued by hand. Django keeps models, admin, session auth, and API routes. Reflex owns reactive pages written in Python. With `profile: "integrated"`, one `reflex run` starts both sides. Sessions and cookies are shared. Handlers on `AppState` see `self.request.user` on every event, like a Django view.
+reflex-django connects Django and Reflex so you run one app, not two servers glued by hand. Django keeps models, admin, session auth, and API routes. Reflex owns reactive pages written in Python. With `profile: "integrated"`, one `reflex run` starts both sides.
+
+Handlers on Django-aware state (`AppState`, `DjangoUserState`, `ModelState`) receive Django request context when bridge is enabled and the resolved tier is `full` or `auth_only`. Plain `rx.State`, `_rx_bridge = "none"`, `bridge.enabled = false`, or tier `none` means no Django request/user is bound for that event.
 
 ## Install
 
@@ -39,11 +41,11 @@ myshop/
 │   └── asgi.py
 └── shop/
     ├── shop.py          # app = rx.App() + app.add_page(...)
-    ├── views.py         # components and state (optional)
+    ├── views.py         # optional @page module, default suffix from RX_PAGE_MODULE
     └── models.py
 ```
 
-`app_name` in `rx.Config` must match `{app}/{app}.py` (e.g. `app_name="shop"` → `shop/shop.py`).
+`app_name` in `rx.Config` must match `{app}/{app}.py` (e.g. `app_name="shop"` -> `shop/shop.py`).
 
 ## Minimal setup
 
@@ -66,76 +68,78 @@ Checklist:
 
 1. Add `reflex_django` to `INSTALLED_APPS`; put `AsyncStreamingMiddleware` last in `MIDDLEWARE`
 2. Create `{app}/{app}.py` with `app = rx.App()` and `app.add_page(...)`
-3. `urls.py`: Django routes only (admin, API). No SPA routes in `urlpatterns`
-4. `reflex django migrate` then `reflex run` → open http://localhost:3000/
-
-Optional: `{app}/views.py` with `@page` — auto-imported at compile when the file exists.
+3. Keep Django routes only in `urls.py` (admin/API); no Reflex SPA pages in `urlpatterns`
+4. `reflex django migrate` then `reflex run` -> open http://localhost:3000/
 
 ## Profiles
-
-Pick a preset in `rxconfig.py`. Explicit pillar blocks override profile defaults.
 
 | Profile | embed | mount | proxy | bridge | Use when |
 |:---|:---|:---|:---|:---|:---|
 | `integrated` | on | on | on | on | Most projects. One `reflex run`. |
 | `split_dev` | off | on | on | on | Django on `runserver`, Reflex separate |
-| `reflex_only` | off | off | on | off | Reflex UI only, no Django HTTP |
+| `reflex_only` | off | off | on | off | Reflex UI only, no Django HTTP/request context |
 
 ## Four integration pillars
 
-Learn path: Integration → Embed → Mount → Proxy → Bridge (`docs/learn/`).
+Learn path: Integration -> Embed -> Mount -> Proxy -> Bridge (`docs/learn/`).
 
 ### Embed
 
-- Runs Django HTTP inside the Reflex backend during dev (admin at `/admin/`, API works)
-- Default on with `profile: "integrated"`
-- Turn off: `profile: "split_dev"` or `embed: {"enabled": False}` plus `proxy: {"server": "http://127.0.0.1:8000"}`
-- Then run `python manage.py runserver` and `reflex run` together
-- Dev convenience only; production uses your own reverse proxy
+- Runs Django HTTP inside the Reflex backend during dev/integrated runs.
+- Default on with `profile: "integrated"`.
+- Turn off with `profile: "split_dev"` or `embed: {"enabled": False}` plus `proxy.server`.
+- Setting `RX_PROXY_SERVER` for split dev can imply embed off when no explicit plugin `embed` block is provided.
+- Production uses your own reverse proxy or Reflex production command, not the dev Vite proxy.
 
 ### Mount
 
-- Tells Django which URL paths it owns; adds SPA catch-all for everything else
-- Default on with `integrated`; auto-detects `/admin`, `/api` from `urlpatterns`
-- Override: `mount: {"django_prefix": ("/admin", "/api"), "mount_prefix": "/"}`
-- List Django routes first in `urls.py`; register SPA pages with `app.add_page` in `{app}/{app}.py`
-- Turn off: `mount: {"enabled": False}` — wire URLs yourself (rare)
+- Tells Django which URL paths it owns; adds SPA catch-all for everything else.
+- Default on with `integrated`; auto-detects `/admin`, `/api` from `urlpatterns`.
+- Override: `mount: {"django_prefix": ("/admin", "/api"), "mount_prefix": "/"}`.
+- List Django routes first in `urls.py`; register SPA pages with `app.add_page` in `{app}/{app}.py`.
+- Optional decorated pages live in `{app}/{RX_PAGE_MODULE}.py`; default `RX_PAGE_MODULE = "views"`.
+- `RX_RENDER_SPA_VIA_TEMPLATE_ENGINE=True` post-processes only HTML SPA shell responses with Django `RequestContext`; set it to `False` to serve Reflex `index.html` exactly as exported.
+- Turn off: `mount: {"enabled": False}`. Then wire URLs yourself.
 
 ### Proxy
 
-- Connects Vite on :3000 to backends during local dev
-- Browse http://localhost:3000/; backend on :8000 serves Django paths, `/_event`, `/_upload`
-- Split dev: `profile: "split_dev"` with `proxy: {"server": "http://127.0.0.1:8000"}`
-- Custom ports: `frontend_port` / `backend_port` in `rx.Config`
-- Add both :3000 and :8000 to `CSRF_TRUSTED_ORIGINS` when using admin from Vite
-- Dev only; production uses edge reverse proxy
+- Connects Vite on :3000 to backends during local dev.
+- Browse http://localhost:3000/; backend on :8000 serves Django paths, `/_event`, `/_upload`.
+- Split dev: `profile: "split_dev"` with `proxy: {"server": "http://127.0.0.1:8000"}`.
+- `proxy.separate_dev_ports` / `RX_SEPARATE_DEV_PORTS` keeps native two-port Reflex behavior.
+- `RX_DEV_PROXY`, `RX_COMPILE_DEV`, `RX_SERVE_FROM_BUILD`, and `RX_FRONTEND_PRESENT` affect dev serving/fallback behavior.
+- Add both :3000 and :8000 to `CSRF_TRUSTED_ORIGINS` when using admin from Vite.
 
 ### Bridge
 
-- Runs Django middleware on each Reflex event; attaches request and logged-in user to state
-- Default on with `profile: "integrated"`, `mode: "full"`
-- Subclass `AppState` (not plain `rx.State`) when handlers need Django context
-- Authorize with `self.request.user` in handlers; reactive vars (`self.is_authenticated`, `self.username`) are UI snapshots only
-- Modes: `full` (default, auth/CSRF/middleware), `smart` (lighter), `none` (no Django context)
-- Per-class override: `class FilterState(rx.State): _rx_bridge = "none"`
-- Add `AsyncStreamingMiddleware` last in `MIDDLEWARE` for streaming from Django HTTP views
-- Helpers: `docs/advanced/bridge-utilities.md`
+- Runs Django middleware on Reflex events and binds request/user to the handler state when the resolved tier includes Django context.
+- Default on with `profile: "integrated"`, mode `full`.
+- `bridge.enabled = false` or `profile: "reflex_only"` means no `self.request` / `current_request()` on events.
+- Subclass `AppState`, `DjangoUserState`, or `ModelState` when handlers need Django context.
+- Authorize with `self.request.user` in handlers; reactive vars (`self.is_authenticated`, `self.username`) are UI snapshots only.
+- Modes: `full`, `smart`, `none`.
+- Tiers: `full`, `auth_only`, `none`. Upload events are never below `auth_only`.
+- Per-class override: `_rx_bridge = "none"` or `rx_bridge = "none"`.
+- Custom resolver: plugin `bridge.resolver` or `RX_EVENT_BRIDGE_RESOLVER`.
+- Add `AsyncStreamingMiddleware` last in `MIDDLEWARE` for streaming Django HTTP views.
+- Helpers: `docs/advanced/bridge-utilities.md`.
 
 ## Pages and state
 
-- Primary: `app.add_page(...)` in `{app}/{app}.py` (typical Reflex)
-- Optional: `@page` in `{app}/views.py` if file exists (auto-imported before compile)
-- Do not register SPA routes in Django `urls.py`; no page package setting in `settings.py`
-- Use one registration style per project; both work with `AppState`
+- Primary: `app.add_page(...)` in `{app}/{app}.py`.
+- Optional: `@page` in `{app}/{RX_PAGE_MODULE}.py` (default `{app}/views.py`), auto-imported before compile.
+- Removed v3 setting: `RX_PAGE_PACKAGES`. Current suffix setting: `RX_PAGE_MODULE`.
+- Do not register SPA routes in Django `urls.py`.
+- Use one page registration style per project.
 
 | Need | Use |
 |:---|:---|
-| `self.request.user`, session, CSRF in handlers | `AppState` |
+| `self.request.user`, session, CSRF in handlers | `AppState` with bridge context |
 | Modals, filters, theme (UI only) | `rx.State` |
-| Auth checks in handlers | `self.request.user` |
+| Auth checks in handlers | `self.request.user`, `current_user()`, decorators |
 | Show/hide UI | `self.is_authenticated`, `self.username` |
 
-See `docs/advanced/pages-and-state.md`.
+AppState handler API includes `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token`, `self.response`, `has_perm()`, `has_group()`, `refresh_django_user_fields()`, `on_auth_failed()`, and `on_permission_denied()`.
 
 ## Common usage patterns
 
@@ -143,11 +147,16 @@ See `docs/advanced/pages-and-state.md`.
 |:---|:---|:---|
 | Manual async ORM | `aget`, `acreate`, `asave`, async iteration | docs/advanced/database.md |
 | Serializers | `ReflexDjangoModelSerializer`, `.adata()`, `.alist()`, `Meta.fields` | docs/advanced/serializers.md |
-| ModelState | `model`, `fields`, `load`/`save`/`create`/`delete` | docs/advanced/model-state.md |
-| Auth | `add_auth_pages(app)`, `RX_AUTH`, `@login_required`, `@page(login_required=True)` | docs/advanced/auth.md |
-| Bridge helpers | `current_user`, `current_request`, `current_session`, etc. | docs/advanced/bridge-utilities.md |
+| ModelState | `model`, `fields`, `load`/`save`/`create`/`delete`, pagination/search handlers | docs/advanced/model-state.md |
+| ModelCRUDView | `serializer_class`, `list_var`, `permission_classes`, `backend_class` | docs/advanced/model-state.md |
+| FieldSpec/forms | `model_field_specs`, `fieldspecs_from_model_form`, `fieldspecs_from_drf_serializer` | docs/advanced/forms.md |
+| Live updates | `LiveListMixin`, `live_subscribe`, `register_live_model`, `ModelChange` | docs/advanced/live-updates.md |
+| Devtools | `RX_DEVTOOLS`, `dev_inspector_overlay`, `collect_inspection_summary` | docs/advanced/devtools.md |
+| Auth | `add_auth_pages(app)`, `RX_AUTH`, auth decorators, page guards | docs/advanced/auth.md |
+| Security | `RX_AUTO_SETTINGS`, `RX_SECRET_KEY`, HTTPS cookies, session cookie sync | docs/advanced/security.md |
+| Bridge helpers | `current_user`, `current_request`, `current_session`, `resolve_bridge_tier` | docs/advanced/bridge-utilities.md |
 | i18n | Django `LocaleMiddleware` + `gettext` in handlers; `AppState.language` mirror | docs/advanced/i18n.md |
-| Uploads | Reflex `rx.upload`; bridge patches `/_upload` with session cookies | docs/advanced/uploads.md |
+| Uploads | Reflex `rx.upload`; bridge keeps uploads at least `auth_only` | docs/advanced/uploads.md |
 
 Data layer pick:
 
@@ -156,8 +165,7 @@ Data layer pick:
 | Manual async ORM | Full control, learning, one-off logic |
 | ReflexDjangoModelSerializer | Custom handlers, partial fields |
 | ModelState | Standard CRUD lists and forms |
-
-Auth: prefer explicit `add_auth_pages(app)` in `{app}/{app}.py`. Configure routes in `RX_AUTH` in `settings.py`.
+| LiveListMixin | Cross-tab/cross-request list patching |
 
 ## Commands
 
@@ -165,62 +173,94 @@ Auth: prefer explicit `add_auth_pages(app)` in `{app}/{app}.py`. Configure route
 |:---|:---|
 | `reflex run` | Dev (integrated profile) |
 | `reflex django migrate` | Database migrations |
+| `reflex django makemigrations` | Create migrations |
 | `reflex django createsuperuser` | Create admin user |
 | `reflex django collectstatic --noinput` | Static files |
 | `reflex django shell` | Django shell |
-| `reflex-django migrate` | Same as above (standalone script) |
-| `reflex export` | Build SPA static files (split deploy) |
+| `reflex django scaffold app.Model` | Generate ModelState + CRUD page source |
+| `reflex-django migrate` | Same forwarding via standalone script |
+| `reflex export` | Build SPA static files |
 | `reflex run --env prod` | Self-hosted production |
 | `reflex deploy` | Reflex Cloud hosting |
 
-Split dev: `runserver` + `reflex run` with `profile: "split_dev"`.
+Scaffold flags: `--fields`, `--serializer`, `--paginate-by` (`0` disables), `--search`, `--route`, `--output`/`-o`, `--force`.
+
+Split dev: `runserver` + `reflex run` with `profile: "split_dev"` or `proxy.server`.
 
 ## Deploy
 
-**Option 1 — integrated:** `profile: "integrated"` in production `rxconfig.py`. Migrate, then `reflex deploy` or `reflex run --env prod`. Set `redis_url` in `rx.Config` for multi-worker Reflex. Set `RX_AUTO_EXPORT_ON_START=0` in Django settings. Backend-only behind proxy: `reflex run --env prod --backend-only --backend-port 8000`.
+**Option 1, integrated:** `profile: "integrated"` in production `rxconfig.py`. Migrate, then `reflex deploy` or `reflex run --env prod`. Set `redis_url` in `rx.Config` for multi-worker Reflex. Set `RX_AUTO_EXPORT_ON_START=0` in Django settings. Backend-only behind proxy: `reflex run --env prod --backend-only --backend-port 8000`.
 
-**Option 2 — split services:** Django serves admin, API, SPA shell (`reflex export`, uvicorn). Reflex service: `embed.enabled: false`, `proxy.enabled: false`, `bridge.enabled: true`. Same `DJANGO_SETTINGS_MODULE` and shared `REDIS_URL` on both. Edge proxy routes `/_event` and `/_upload` to Reflex; everything else to Django.
+**Option 2, split services:** Django serves admin, API, SPA shell (`reflex export`, uvicorn). Reflex service: `embed.enabled: false`, `proxy.enabled: false`, `mount.enabled: true`, `bridge.enabled: true`. Same `DJANGO_SETTINGS_MODULE` and shared `REDIS_URL` on both. Edge proxy routes `/_event` and `/_upload` to Reflex; everything else to Django.
 
-Details: `docs/advanced/deployment.md`, `docs/examples/deploy/`.
+Security: production warns on bundled fallback settings, random `SECRET_KEY`, `DEBUG=True`, wildcard `ALLOWED_HOSTS`, and insecure cookie settings. See `docs/advanced/security.md`.
+
+Details: `docs/advanced/deployment.md`, `docs/examples/deploy/nginx.conf`, `docs/examples/docker-compose.scaling.yml`.
 
 ## Config reference
 
-Integration config lives in `ReflexDjangoPlugin` inside `rxconfig.py`. Django `settings.py` holds app setup, auth branding, cache, sessions.
+Integration config lives in `ReflexDjangoPlugin` inside `rxconfig.py`. Django `settings.py` holds app setup, auth branding, cache, sessions, event bridge tuning, security, and deployment toggles.
 
-**ReflexDjangoPlugin keys:** `settings_module`, `profile`, `embed`, `mount`, `proxy`, `bridge`
+**ReflexDjangoPlugin keys:** `settings_module`, `profile`, `embed`, `mount`, `proxy`, `bridge`.
 
-**Pillar sub-keys:** `embed.enabled`, `mount.enabled`/`mount_prefix`/`django_prefix`, `proxy.enabled`/`server`/`separate_dev_ports`, `bridge.enabled`/`mode`/`run_middleware_chain`/`resolver`
+**Pillar sub-keys:** `embed.enabled`, `mount.enabled`/`mount_prefix`/`django_prefix`, `proxy.enabled`/`server`/`separate_dev_ports`, `bridge.enabled`/`mode`/`run_middleware_chain`/`resolver`.
 
-**Required Django:** `reflex_django` in `INSTALLED_APPS`; `AsyncStreamingMiddleware` last in `MIDDLEWARE`
+**Legacy flat plugin keys:** `auto_mount`, `mount_prefix`, `django_prefix` are still accepted for upgrades; prefer nested `mount`.
 
-**Notable optional Django:** `RX_AUTH`, `RX_AUTH_AUTO_SYNC`, `RX_MIRROR_MESSAGES`, `RX_MIRROR_CSRF`, `RX_MIRROR_LANGUAGE`, `RX_EVENT_BRIDGE_MODE`, `RX_EVENT_CACHE`, `RX_EVENT_CACHE_TTL`, `RX_PERFORMANCE_PRESET`, `RX_AUTO_EXPORT_ON_START`
+**Required Django:** `reflex_django` or `reflex_django.django.apps.ReflexDjangoConfig` in `INSTALLED_APPS`; `AsyncStreamingMiddleware` last in `MIDDLEWARE`.
 
-Policy: use plugin pillar blocks for embed/mount/proxy/bridge; use Django settings for auth, cache, sessions, mirror toggles.
+**Auth/session:** `RX_AUTH`, `RX_AUTH_AUTO_SYNC`, `RX_USER_SNAPSHOT_INCLUDE_GROUPS`, `RX_LOGOUT_PRESERVE_SESSION_KEYS`, `RX_SITE_ORIGIN`.
+
+**Bridge/perf:** `RX_EVENT_BRIDGE_MODE`, `RX_RUN_MIDDLEWARE_CHAIN`, `RX_AUTH_ONLY_MIDDLEWARE`, `RX_EVENT_MIDDLEWARE_SKIP`, `RX_EVENT_BRIDGE_RESOLVER`, `RX_EVENT_RESOLVE_URL`, `RX_EVENT_POST_FROM_PAYLOAD`, `RX_AUTO_REDIRECT_FROM_MIDDLEWARE`, `RX_EVENT_CACHE`, `RX_EVENT_CACHE_TTL`, `RX_EVENT_CACHE_KEY_PREFIX`, `RX_EVENT_CACHE_FAST_AUTH`, `RX_EVENT_METRICS`, `RX_EVENT_METRICS_LOGGER`, `RX_DEVTOOLS`, `RX_BRIDGE_DEBUG`, `RX_PERFORMANCE_PRESET`.
+
+**Mirrors:** `RX_MIRROR_MESSAGES`, `RX_MIRROR_CSRF`, `RX_MIRROR_LANGUAGE`.
+
+**Mount/dev:** `RX_PAGE_MODULE`, `RX_CREATE_APP`, `RX_AUTO_MOUNT`, `RX_MOUNT_PREFIX`, `RX_DJANGO_PREFIX`, `RX_RESERVED_REFLEX_PREFIXES`, `RX_PROXY_SERVER`, `RX_DEV_PROXY`, `RX_SEPARATE_DEV_PORTS`, `RX_SERVE_FROM_BUILD`, `RX_AUTO_EXPORT_ON_START`, `RX_RENDER_SPA_VIA_TEMPLATE_ENGINE`, `RX_SHOW_BUILT_WITH_REFLEX`, `RX_VITE_VERSION`.
+
+**Fallback/security/static:** `RX_AUTO_SETTINGS`, `RX_SECRET_KEY`, `RX_DEBUG`, `RX_ALLOWED_HOSTS`, `RX_DATABASE_URL`, `RX_STATIC_URL`, `RX_STATIC_ROOT`, `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`.
+
+**Common env:** `RX_FRONTEND_PORT`, `RX_BACKEND_PORT`, `RX_BACKEND_HOST`, `RX_BACKEND_RELOAD`, `RX_COMPILE_DEV`, `RX_FRONTEND_PRESENT`, `RX_DEV_PROXY`, `RX_SERVE_FROM_BUILD`, `RX_AUTO_EXPORT_ON_START`, `RX_DEVTOOLS`.
+
+Policy: use plugin pillar blocks for embed/mount/proxy/bridge; use Django settings for auth, cache, sessions, event bridge tuning, security, and deployment toggles.
 
 ## Public imports
 
 ```python
 from reflex_django.plugins import ReflexDjangoPlugin
-from reflex_django.states import AppState, ModelState
+from reflex_django.states import AppState, ModelState, DjangoUserState, DjangoAuthState, DjangoI18nState
+from reflex_django.state import ModelCRUDView
 from reflex_django.serializers import ReflexDjangoModelSerializer
-from reflex_django.pages.decorators import page
+from reflex_django.schema import FieldSpec, model_field_specs, build_state_fields_from_specs
+from reflex_django.live import LiveListMixin, ModelChange, live_broadcaster
+from reflex_django.devtools import dev_inspector_overlay, collect_inspection_summary
+from reflex_django.pages.decorators import page, reflex_template, get_breadcrumbs_for_route
 from reflex_django import (
-    add_auth_pages, login_required, permission_required,
-    current_request, current_user, current_session,
+    configure_django, create_app, build_django_asgi, register_admin,
+    add_auth_pages, register_login_page, get_auth_settings,
+    login_required, permission_required, group_required, staff_required, superuser_required,
+    auser_has_perm, auser_in_group, require_login_user, user_snapshot,
+    current_request, current_response, current_user, current_session,
     current_messages, current_language, current_csrf_token,
+    begin_event_request, end_event_request, begin_event_response, end_event_response,
+    run_middleware_chain, request, RequestProxy,
 )
+from reflex_django.bridge import resolve_bridge_tier, invalidate_event_cache
+from reflex_django.mixins import SessionAuthConfig, session_auth_mixin
 ```
 
-Import models inside handlers, not at module top (avoids `AppRegistryNotReady`).
+Import models inside handlers when early imports would cause `AppRegistryNotReady`.
 
 ## Do not use
 
-These are removed v3 patterns — do not generate them:
+These are removed v3/v4 patterns. Do not generate them:
 
 - `manage.py run_reflex`, `manage.py export_reflex`
 - `from reflex_django import app`
-- `RX_PAGE_PACKAGES`, SPA routes in `urls.py`
-- `IntegrationMode`, `RX_PLUGINS`, v3 integration installers
+- `RX_CONFIG`, settings-driven `RX_PLUGINS`, plugin keys `urlconf` / `rx_config`
+- `RX_PAGE_PACKAGES`, SPA routes in Django `urls.py`
+- `IntegrationMode`, `install_django_first_integration()`, v3 integration installers
+- `get_or_create_app()`
+- `reflex_mount(..., rx_config=, plugins=)`
 - Authorizing from `self.is_authenticated` alone in handlers (use `self.request.user`)
 
 ## Documentation index
@@ -231,14 +271,18 @@ These are removed v3 patterns — do not generate them:
 - docs/learn/embed.md — Django HTTP in Reflex backend
 - docs/learn/mount.md — URL prefixes and SPA catch-all
 - docs/learn/proxy.md — port 3000 dev wiring
-- docs/learn/bridge.md — request context in handlers
+- docs/learn/bridge.md — request context and bridge tiers
 - docs/learn/quickstart.md — todo app tutorial
 - docs/advanced/index.md — advanced overview
 - docs/advanced/pages-and-state.md — page registration and AppState
 - docs/advanced/serializers.md — ReflexDjangoModelSerializer
 - docs/advanced/model-state.md — declarative CRUD
+- docs/advanced/forms.md — FieldSpec, ModelForm and DRF adapters
+- docs/advanced/live-updates.md — model-signal live list patching
+- docs/advanced/devtools.md — bridge/query/state inspectors
 - docs/advanced/database.md — ORM, serializers, ModelState hub
 - docs/advanced/auth.md — session auth and auth pages
+- docs/advanced/security.md — production hardening and cookie trade-offs
 - docs/advanced/bridge-utilities.md — context accessors
 - docs/advanced/i18n.md — translations
 - docs/advanced/uploads.md — file uploads and media
@@ -247,3 +291,6 @@ These are removed v3 patterns — do not generate them:
 - docs/advanced/troubleshooting.md — symptom-first fixes
 - docs/advanced/scaling.md — Redis, cache, multi-worker
 - docs/advanced/config.md — full config reference
+- docs/reference/migration/v4_plugin_only.md — v4 plugin-only migration
+- docs/examples/deploy/nginx.conf — split deployment nginx example
+- docs/examples/docker-compose.scaling.yml — split deployment compose sketch

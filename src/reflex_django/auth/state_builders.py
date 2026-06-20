@@ -12,7 +12,10 @@ import reflex as rx
 from reflex_django.auth.mixins.navigation import populate_navigation_state
 from reflex_django.auth.settings import AuthSettings, get_auth_settings
 from reflex_django.setup.conf import configure_django
-from reflex_django.mixins.session_auth import SessionAuthConfig, populate_session_auth_state
+from reflex_django.mixins.session_auth import (
+    SessionAuthConfig,
+    populate_session_auth_state,
+)
 from reflex_django.state.auth_bridge import AuthBridgeMixin
 
 # Snapshot fields owned on ``DjangoAuthState`` (``is_authenticated`` is a ``@rx.var``).
@@ -52,6 +55,7 @@ def _django_user_snapshot_annotations() -> dict[str, Any]:
         "language": str,
         "language_bidi": bool,
     }
+
 
 _STATE_MODULE = "reflex_django.auth.state"
 

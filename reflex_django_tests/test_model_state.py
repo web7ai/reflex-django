@@ -171,7 +171,9 @@ def test_resolve_options_boolean_field_uses_bool_state_field() -> None:
 
 
 def test_explicit_state_fields_override_read_only() -> None:
-    cfg = resolve_options(MsNoteSerializer, _ExplicitStateFieldsState.Meta, _ExplicitStateFieldsState)
+    cfg = resolve_options(
+        MsNoteSerializer, _ExplicitStateFieldsState.Meta, _ExplicitStateFieldsState
+    )
     names = tuple(sf.name for sf in cfg.state_fields)
     assert names == ("title", "created_at")
     assert "created_at" in _ExplicitStateFieldsState.__annotations__
@@ -441,7 +443,9 @@ def _mock_note_qs(*, total: int = 1) -> mock.MagicMock:
 
 
 def test_paginated_state_generates_page_vars_and_events() -> None:
-    cfg = resolve_options(MsNoteSerializer, _PaginatedNotesState.Meta, _PaginatedNotesState)
+    cfg = resolve_options(
+        MsNoteSerializer, _PaginatedNotesState.Meta, _PaginatedNotesState
+    )
     assert cfg.paginate_by == 20
     assert cfg.total_count_var == "notes_total_count"
     assert hasattr(_PaginatedNotesState, "next_page")
@@ -452,13 +456,17 @@ def test_paginated_state_generates_page_vars_and_events() -> None:
 
 
 def test_paginated_load_sets_metadata_and_slice() -> None:
-    rows = [{"id": i, "title": f"t{i}", "content": "", "description": ""} for i in range(3)]
+    rows = [
+        {"id": i, "title": f"t{i}", "content": "", "description": ""} for i in range(3)
+    ]
     user = mock.Mock(pk=1)
     qs = _mock_note_qs(total=45)
 
     async def run() -> None:
         with (
-            mock.patch("reflex_django.auth.shortcuts.require_login_user", return_value=user),
+            mock.patch(
+                "reflex_django.auth.shortcuts.require_login_user", return_value=user
+            ),
             mock.patch.object(MsNote, "objects") as mgr,
             mock.patch.object(
                 MsNoteSerializer,
@@ -488,10 +496,16 @@ def test_next_page_increments_and_reloads() -> None:
 
     async def run() -> None:
         with (
-            mock.patch("reflex_django.auth.shortcuts.require_login_user", return_value=user),
+            mock.patch(
+                "reflex_django.auth.shortcuts.require_login_user", return_value=user
+            ),
             mock.patch.object(MsNote, "objects") as mgr,
-            mock.patch.object(MsNoteSerializer, "adata", new=mock.AsyncMock(return_value=[])),
-            mock.patch.object(_PaginatedNotesState, "_load_notes", new=mock.AsyncMock()) as load,
+            mock.patch.object(
+                MsNoteSerializer, "adata", new=mock.AsyncMock(return_value=[])
+            ),
+            mock.patch.object(
+                _PaginatedNotesState, "_load_notes", new=mock.AsyncMock()
+            ) as load,
         ):
             mgr.all.return_value = qs
             state = _PaginatedNotesState()

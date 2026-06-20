@@ -66,7 +66,9 @@ def centered_template(
         else (on_load if isinstance(on_load, list) else [on_load])
     )
 
-    def decorator(page_content: Callable[[], rx.Component]) -> Callable[[], rx.Component]:
+    def decorator(
+        page_content: Callable[[], rx.Component],
+    ) -> Callable[[], rx.Component]:
         @page(
             route=route,
             title=title,
@@ -171,7 +173,9 @@ def layout_template(
         else (on_load if isinstance(on_load, list) else [on_load])
     )
 
-    def decorator(page_content: Callable[[], rx.Component]) -> Callable[[], rx.Component]:
+    def decorator(
+        page_content: Callable[[], rx.Component],
+    ) -> Callable[[], rx.Component]:
         @page(
             route=route,
             title=title,

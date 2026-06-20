@@ -15,7 +15,9 @@ class CreateMixin(BaseModelState):
     def get_create_kwargs(self, state_data: dict[str, Any]) -> dict[str, Any]:
         return dict(state_data)
 
-    async def perform_create(self, ctx: ActionContext, state_data: dict[str, Any]) -> models.Model:
+    async def perform_create(
+        self, ctx: ActionContext, state_data: dict[str, Any]
+    ) -> models.Model:
         kwargs = self.get_create_kwargs(state_data)
         return await ctx.options.model.objects.acreate(**kwargs)
 

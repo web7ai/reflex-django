@@ -1,6 +1,6 @@
 # Database
 
-Three ways to load and save Django data in Reflex handlers. Pick by how much boilerplate you want.
+Four ways to load and save Django data in Reflex handlers. Pick by how much boilerplate you want.
 
 ## 1. Manual async ORM
 
@@ -40,6 +40,12 @@ Declarative CRUD: declare `model` and `fields`, get list/search/pagination/save/
 
 → [Model state](model-state.md)
 
+## 4. Live lists
+
+For lists that should react to model changes from other tabs or requests, add `LiveListMixin` to a `ModelState` and start `live_subscribe` from page load.
+
+→ [Live updates](live-updates.md)
+
 ## Rules for all approaches
 
 - Store **dicts** in state, not model instances.
@@ -48,8 +54,8 @@ Declarative CRUD: declare `model` and `fields`, get list/search/pagination/save/
 
 ## Comparison
 
-| | Manual ORM | Serializers | ModelState |
-|:---|:---|:---|:---|
-| Boilerplate | Most | Medium | Least |
-| Custom logic | Easiest | Easy | Override handlers |
-| List + forms | You build it | You build UI | Built-in vars |
+| | Manual ORM | Serializers | ModelState | LiveListMixin |
+|:---|:---|:---|:---|:---|
+| Boilerplate | Most | Medium | Least | Low |
+| Custom logic | Easiest | Easy | Override handlers | Override queryset/serializer |
+| List + forms | You build it | You build UI | Built-in vars | Patches current list |

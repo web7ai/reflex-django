@@ -42,8 +42,33 @@ async def auser_has_perm(user: Any, perm: str) -> bool:
     return await sync_to_async(user.has_perm)(perm)
 
 
+async def auser_in_group(user: Any, group: str) -> bool:
+    """Return whether *user* belongs to the Django group named *group*.
+
+    Args:
+        user: Django user instance.
+        group: Group name.
+
+    Returns:
+        Whether the user is a member of the group (superusers always pass).
+    """
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    groups = getattr(user, "groups", None)
+    if groups is None:
+        return False
+
+    def _check() -> bool:
+        return groups.filter(name=group).exists()
+
+    return await sync_to_async(_check)()
+
+
 __all__ = [
     "ReflexDjangoAuthError",
     "auser_has_perm",
+    "auser_in_group",
     "require_login_user",
 ]
