@@ -158,6 +158,8 @@ AppState handler API includes `self.request`, `self.user`, `self.session`, `self
 | i18n | Django `LocaleMiddleware` + `gettext` in handlers; `AppState.language` mirror | docs/advanced/i18n.md |
 | Uploads | Reflex `rx.upload`; bridge keeps uploads at least `auth_only` | docs/advanced/uploads.md |
 
+Auth pages are explicit opt-in. Do not assume `/login`, `/register`, or password-reset routes exist unless the app calls `add_auth_pages(app)` or a per-page helper such as `register_login_page(app)`.
+
 Data layer pick:
 
 | Approach | Good for |

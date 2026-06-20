@@ -288,9 +288,6 @@ def prepare_pages_for_compile() -> None:
 
     migrate_decorated_pages_app_name(resolve_app_name())
     _ensure_runtime_state_classes_registered()
-    from reflex_django.auth.registry import ensure_auth_pages_registered
-
-    ensure_auth_pages_registered()
     import_page_packages()
     app = load_app_factory()
     app_name = migrate_decorated_pages_app_name(resolve_app_name())

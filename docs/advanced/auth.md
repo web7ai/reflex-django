@@ -14,7 +14,9 @@ Never authorize from the reactive snapshot alone. It is client-visible and can l
 
 ## Built-in auth pages
 
-Register login, signup, and password-reset pages from `{app}/{app}.py`:
+Built-in login, signup, and password-reset pages are explicit opt-in. They are not mounted just because `reflex_django` is installed or `RX_AUTH["ENABLED"]` is true.
+
+Register them from `{app}/{app}.py`:
 
 ```python
 --8<-- "snippets/auth_app_entry.py"
@@ -32,7 +34,7 @@ Branding and custom classes:
 --8<-- "snippets/auth_branding_settings.py"
 ```
 
-Prefer explicit `add_auth_pages(app)` over `autoload()`. Individual registration helpers include `register_login_page(app)`, `register_register_page(app)`, and password-reset page registration functions.
+Prefer explicit `add_auth_pages(app)` over `autoload()`. Individual registration helpers include `register_login_page(app)`, `register_register_page(app)`, and password-reset page registration functions. If you do not call one of these helpers, routes such as `/login`, `/register`, and `/password-reset` are not created.
 
 ### Custom page classes
 
@@ -55,7 +57,7 @@ Common keys:
 
 | Key | Purpose |
 |:---|:---|
-| `ENABLED` | Enable built-in auth page registration |
+| `ENABLED` | Allow explicit built-in auth page registration |
 | `SIGNUP_ENABLED` | Enable registration page |
 | `PASSWORD_RESET_ENABLED` | Enable password-reset pages |
 | `LOGIN_URL`, `SIGNUP_URL`, `PASSWORD_RESET_URL` | Route paths |

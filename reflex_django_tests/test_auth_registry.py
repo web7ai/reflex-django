@@ -162,6 +162,42 @@ def test_ensure_auth_pages_registered_via_page_decorator() -> None:
     assert "/register" in routes
 
 
+def test_prepare_pages_for_compile_does_not_auto_register_auth_pages(monkeypatch) -> None:
+    from reflex_django.auth.registry import clear_auth_registry_routes
+    from reflex_django.pages.decorators import clear_page_registry
+    from reflex_django.runtime import app_factory
+
+    app = rx.App()
+    clear_page_registry()
+    clear_auth_registry_routes()
+
+    monkeypatch.setattr(
+        app_factory,
+        "migrate_decorated_pages_app_name",
+        lambda app_name: app_name,
+    )
+    monkeypatch.setattr(
+        app_factory,
+        "_ensure_runtime_state_classes_registered",
+        lambda: None,
+    )
+    monkeypatch.setattr(app_factory, "import_page_packages", lambda: [])
+    monkeypatch.setattr(app_factory, "load_app_factory", lambda: app)
+    monkeypatch.setattr(
+        app_factory,
+        "_apply_decorated_pages_to_app",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(app_factory, "sync_page_load_events", lambda app: None)
+
+    app_factory.prepare_pages_for_compile()
+
+    routes = _routes(app)
+    assert "login" not in routes
+    assert "register" not in routes
+    assert "password-reset" not in routes
+
+
 def test_routes_lazy_from_settings(monkeypatch) -> None:
     import reflex_django.auth.routes as auth_routes
 
