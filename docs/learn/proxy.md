@@ -4,6 +4,8 @@ Proxy connects Vite on port 3000 to your backends during local dev. You browse o
 
 Think of proxy as the development traffic router. It is not the production reverse proxy. It exists so local Vite/HMR, Django admin/API, Reflex events, and uploads work from the browser without hand-written proxy rules.
 
+See [Profiles](profiles.md) for preset defaults. Proxy is on in all built-in profiles.
+
 ## Default ports
 
 | Server | Port | Role |
@@ -19,54 +21,85 @@ Browse **http://localhost:3000/**.
 
 In the integrated profile, the Reflex backend on port 8000 also has embedded Django HTTP available. Vite forwards Django-owned paths, events, and uploads to that backend while keeping hot reload for the frontend.
 
-## Options
+## Options reference
 
-| Option | Default from profile | Purpose |
-|:---|:---|:---|
-| `proxy.enabled` | `True` in all built-in profiles | Install reflex-django's local Vite/Django proxy wiring |
-| `proxy.server` | unset | External Django server to send Django-owned paths to |
-| `proxy.separate_dev_ports` | `False` | Keep Reflex's native separate frontend/backend dev layout |
+Allowed keys in the `proxy` block:
 
-Disable `proxy.enabled` only when you provide your own dev routing or run a production-style local stack.
+| Option | Type | Default by profile | Purpose |
+|:---|:---|:---|:---|
+| `proxy.enabled` | `bool` | `True` in all profiles | Install reflex-django Vite/Django dev proxy wiring |
+| `proxy.server` | `str` | unset | External Django server URL for Django-owned paths (required when embed is off) |
+| `proxy.separate_dev_ports` | `bool` | unset (falls back to `RX_SEPARATE_DEV_PORTS`) | Use native Reflex two-port dev layout |
 
-## Split dev
+Settings fallbacks: `RX_PROXY_SERVER`, `RX_SEPARATE_DEV_PORTS`. Dev serving matrix: [Config reference](../advanced/config.md).
 
-Run Django on `runserver` in another terminal:
+When `proxy.enabled=False`, reflex-django skips Vite proxy patching at compile time. Use this only when you provide your own dev routing.
+
+## Examples
+
+**Integrated (no external server):**
 
 ```python
 ReflexDjangoPlugin(config={
     "settings_module": "config.settings",
-    "profile": "split_dev",
-    "proxy": {"server": "http://127.0.0.1:8000"},
+    "profile": "integrated",
 })
 ```
+
+**Split dev with external Django:**
+
+```python
+--8<-- "snippets/profile_split_dev_rxconfig.py"
+```
+
+```bash
+python manage.py runserver
+reflex run
+```
+
+**Native Reflex two-port layout:**
+
+```python
+ReflexDjangoPlugin(config={
+    "settings_module": "config.settings",
+    "profile": "integrated",
+    "proxy": {"separate_dev_ports": True},
+})
+```
+
+Browse Vite on the frontend port; the backend port serves Django-owned paths plus `/_event` and `/_upload`.
+
+**Custom ports:**
+
+```python
+config = rx.Config(
+    app_name="shop",
+    frontend_port=3000,
+    backend_port=8000,
+    plugins=[ReflexDjangoPlugin(config={"settings_module": "config.settings"})],
+)
+```
+
+**Disable reflex-django proxy wiring:**
+
+```python
+ReflexDjangoPlugin(config={
+    "settings_module": "config.settings",
+    "proxy": {"enabled": False},
+})
+```
+
+## Integrated vs split dev
 
 | | Integrated | Split dev |
 |:---|:---|:---|
 | embed | on | off |
+| `proxy.server` | not required | required (or `RX_PROXY_SERVER`) |
 | Commands | `reflex run` | `runserver` + `reflex run` |
 
-Vite still serves the SPA on port 3000. Admin and API go to your Django server.
+Prefer explicit `profile: "split_dev"` over setting `RX_PROXY_SERVER` alone so embed/proxy intent is visible in `rxconfig.py`.
 
-Setting `RX_PROXY_SERVER` can also point Vite/Django proxying at an external Django server. Prefer the explicit `split_dev` profile in new projects so embed/proxy intent is visible in `rxconfig.py`.
-
-Use split dev when:
-
-- You want to debug Django with the normal `runserver` process.
-- Another service already owns Django HTTP.
-- You want Reflex dev reload and Django dev reload to run independently.
-
-Use integrated dev when:
-
-- You want one command.
-- Django admin/API are fine inside the Reflex backend process.
-- You do not need a separate Django HTTP process.
-
-## Separate dev ports
-
-`proxy.separate_dev_ports` or `RX_SEPARATE_DEV_PORTS=True` keeps the native Reflex layout: browse Vite on the frontend port, while the backend port serves Django-owned paths plus `/_event` and `/_upload`.
-
-Use `RX_DEV_PROXY=0` when you want Django to serve the compiled SPA instead of proxying to Vite. Use `RX_SERVE_FROM_BUILD=True` for a pre-built bundle and `RX_COMPILE_DEV=1` for compile-only dev workflows.
+Use split dev when you want independent Django and Reflex reload cycles. Use integrated when one command is enough.
 
 ## Development serving modes
 
@@ -83,21 +116,10 @@ Use `RX_DEV_PROXY=0` when you want Django to serve the compiled SPA instead of p
 
 When you use admin from `:3000`, add both ports to `CSRF_TRUSTED_ORIGINS`. See [Troubleshooting](../advanced/troubleshooting.md).
 
-## Custom ports
-
-```python
-config = rx.Config(
-    app_name="shop",
-    frontend_port=3000,
-    backend_port=8000,
-    plugins=[ReflexDjangoPlugin(config={...})],
-)
-```
-
 ## What proxy does not do
 
 Proxy does not add Django request context to Reflex event handlers. That is [Bridge](bridge.md). Proxy also does not decide route ownership. That is [Mount](mount.md).
 
-Proxy is dev only. Production uses your edge reverse proxy, such as Nginx, Caddy, a cloud load balancer, or platform routing. In split production, route `/_event` and `/_upload` to Reflex and send Django/admin/API/SPA shell traffic to Django.
+Proxy is dev only. Production uses your edge reverse proxy. In split production, route `/_event` and `/_upload` to Reflex and send Django/admin/API/SPA shell traffic to Django.
 
 **Next:** [Bridge](bridge.md)

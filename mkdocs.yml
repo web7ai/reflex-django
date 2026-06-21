@@ -234,6 +234,8 @@ nav:
 
     - "1. Integration": learn/integration.md
 
+    - "1b. Profiles": learn/profiles.md
+
     - "2. Embed": learn/embed.md
 
     - "3. Mount": learn/mount.md

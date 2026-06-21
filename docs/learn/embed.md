@@ -4,9 +4,23 @@ Embed runs Django HTTP inside the Reflex backend process. In local development, 
 
 Think of embed as the process-level integration piece. It decides whether Django is inside the Reflex backend process or running somewhere else.
 
-## Default
+See [Profiles](profiles.md) for preset defaults. Profile `integrated` turns embed on; `split_dev` and `reflex_only` turn it off.
 
-With `profile: "integrated"`, embed is on:
+## Options reference
+
+Allowed keys in the `embed` block:
+
+| Option | Type | Default by profile | Purpose |
+|:---|:---|:---|:---|
+| `embed.enabled` | `bool` | `True` in `integrated`; `False` in `split_dev` and `reflex_only` | Run Django HTTP inside the Reflex backend process |
+
+Embed has no Django `RX_*` setting. It is configured only through the plugin.
+
+When no explicit `embed` block is supplied and `RX_PROXY_SERVER` (or the `RX_PROXY_SERVER` env var) is set, reflex-django treats Django as external and sets embed off. Prefer explicit `profile: "split_dev"` for clarity.
+
+## Examples
+
+**Default integrated (embed on):**
 
 ```python
 ReflexDjangoPlugin(config={
@@ -15,27 +29,24 @@ ReflexDjangoPlugin(config={
 })
 ```
 
-Run:
-
 ```bash
 reflex run
 ```
 
-In this mode, the Reflex backend process can dispatch normal Django HTTP requests. You do not need a separate `python manage.py runserver` for local admin/API access.
+**Split dev (embed off, external Django):**
 
-## Options
+```python
+--8<-- "snippets/profile_split_dev_rxconfig.py"
+```
 
-| Option | Default from profile | Purpose |
-|:---|:---|:---|
-| `embed.enabled` | `True` in `integrated`, `False` in `split_dev` and `reflex_only` | Run Django HTTP inside the Reflex backend process |
-
-The profile sets the default. An explicit `embed` block overrides the profile:
+**Override integrated profile to disable embed:**
 
 ```python
 ReflexDjangoPlugin(config={
     "settings_module": "config.settings",
     "profile": "integrated",
     "embed": {"enabled": False},
+    "proxy": {"server": "http://127.0.0.1:8000"},
 })
 ```
 
@@ -58,27 +69,7 @@ Embed does not decide which paths are Django paths. That is [Mount](mount.md). E
 
 Turn embed off when Django runs separately, for example through `runserver`, uvicorn, Docker, or another development service.
 
-Use `profile: "split_dev"`:
-
-```python
-ReflexDjangoPlugin(config={
-    "settings_module": "config.settings",
-    "profile": "split_dev",
-    "proxy": {"server": "http://127.0.0.1:8000"},
-})
-```
-
-Or configure the pillar directly:
-
-```python
-ReflexDjangoPlugin(config={
-    "settings_module": "config.settings",
-    "embed": {"enabled": False},
-    "proxy": {"server": "http://127.0.0.1:8000"},
-})
-```
-
-Then run both processes:
+Use `profile: "split_dev"` or set `"embed": {"enabled": False}` with `proxy.server`. Then run both processes:
 
 ```bash
 python manage.py runserver

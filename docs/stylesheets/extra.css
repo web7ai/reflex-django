@@ -1333,3 +1333,101 @@ body, .md-typeset {
     width: 100%;
   }
 }
+
+/* ---------- Profiles page -------------------------------------------------- */
+
+.rd-profile-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.rd-profile-card {
+  padding: 1.35rem 1.45rem 1.5rem;
+  border-radius: var(--rd-radius-md);
+  border: 1px solid var(--rd-border-soft);
+  background: var(--rd-surface);
+  box-shadow: var(--rd-shadow-sm);
+}
+
+.rd-profile-card--integrated { border-top: 4px solid var(--rd-django-500); }
+.rd-profile-card--split-dev { border-top: 4px solid var(--rd-reflex-500); }
+.rd-profile-card--reflex-only { border-top: 4px solid var(--rd-reflex-300); }
+
+.md-typeset .rd-profile-card > h3 {
+  margin: 0.65rem 0 0.5rem !important;
+  padding: 0;
+  border: none;
+  font-size: 1.15rem !important;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--md-primary-fg-color--dark);
+}
+
+.md-typeset .rd-profile-card > p:first-of-type {
+  margin-top: 0;
+}
+
+.rd-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.85rem 0 1rem;
+}
+
+.rd-profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--rd-surface-soft);
+  border: 1px solid var(--rd-border-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.rd-profile-chip__key {
+  color: var(--rd-text-soft);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rd-profile-chip--on {
+  background: rgba(68, 183, 139, 0.12);
+  border-color: rgba(68, 183, 139, 0.28);
+  color: var(--rd-django-800);
+}
+
+.rd-profile-chip--off {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: var(--rd-border-soft);
+  color: var(--rd-text-soft);
+}
+
+[data-md-color-scheme="slate"] .rd-profile-chip--on {
+  background: rgba(68, 183, 139, 0.14);
+  border-color: rgba(68, 183, 139, 0.35);
+  color: var(--rd-django-300);
+}
+
+[data-md-color-scheme="slate"] .rd-profile-chip--off {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.rd-table-wrap {
+  margin: 1.25rem 0 1.75rem;
+  overflow-x: auto;
+  border-radius: var(--rd-radius-md);
+  box-shadow: var(--rd-shadow-sm);
+}
+
+.rd-table-wrap .rd-pillar-table {
+  margin: 0 !important;
+  min-width: 640px;
+}
+

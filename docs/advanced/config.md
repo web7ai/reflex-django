@@ -42,7 +42,7 @@ ReflexDjangoPlugin(config={
 | `proxy` | `{enabled, server, separate_dev_ports}` |
 | `bridge` | `{enabled, mode, run_middleware_chain, resolver}` |
 
-Explicit pillar blocks override profile defaults.
+Explicit pillar blocks override profile defaults. Full profile guide with examples and validation: [Profiles](../learn/profiles.md).
 
 | Profile | embed | mount | proxy | bridge |
 |:---|:---|:---|:---|:---|

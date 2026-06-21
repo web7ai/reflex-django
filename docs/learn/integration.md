@@ -34,7 +34,7 @@ myshop/
 --8<-- "snippets/profile_rxconfig.py"
 ```
 
-The `integrated` profile turns on embed, mount, proxy, and bridge. You will learn each piece in the next pages. If you later disable bridge or resolve an event to tier `none`, Django request context is not bound for that event.
+The default `integrated` profile turns on embed, mount, proxy, and bridge. See [Profiles](profiles.md) for all presets and override patterns. You will learn each pillar in the next pages. If you later disable bridge or resolve an event to tier `none`, Django request context is not bound for that event.
 
 ## Public imports
 
@@ -104,4 +104,4 @@ See the [Tutorial](quickstart.md) for a full app with `AppState` and the ORM. Fo
 
 More fixes: [Troubleshooting](../advanced/troubleshooting.md).
 
-**Next:** [Embed](embed.md)
+**Next:** [Profiles](profiles.md)

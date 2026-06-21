@@ -4,6 +4,8 @@ Bridge runs Django request/session/auth logic around Reflex events and attaches 
 
 Think of bridge as the event-context layer. [Embed](embed.md) handles Django HTTP in the backend process, [Mount](mount.md) handles URL ownership, and [Proxy](proxy.md) handles local dev traffic. Bridge handles what happens after the browser sends a Reflex event.
 
+See [Profiles](profiles.md) for preset defaults. Bridge is on in `integrated` and `split_dev`, off in `reflex_only`.
+
 ## Use `AppState`
 
 Subclass `AppState`, not plain `rx.State`, when handlers need Django context:
@@ -23,30 +25,78 @@ Authorize with `self.request.user`. Reactive vars like `self.is_authenticated` a
 
 Use plain `rx.State` for UI-only state that does not need Django. In `smart` mode, plain `rx.State` can skip Django request binding for faster hot-path events.
 
-## Options
+## Options reference
 
-| Option | Default from profile | Purpose |
-|:---|:---|:---|
-| `bridge.enabled` | `True` in `integrated` and `split_dev`, `False` in `reflex_only` | Enable Django request context for eligible Reflex events |
-| `bridge.mode` | `full` | Global mode: `full`, `smart`, or `none` |
-| `bridge.run_middleware_chain` | `True` | Run Django middleware on synthetic event requests |
-| `bridge.resolver` | unset | Dotted callable or callable that returns the tier for each event |
+Allowed keys in the `bridge` block:
 
-Example:
+| Option | Type | Default by profile | Purpose |
+|:---|:---|:---|:---|
+| `bridge.enabled` | `bool` | `True` in `integrated` and `split_dev`; `False` in `reflex_only` | Enable Django request context for eligible Reflex events |
+| `bridge.mode` | `str` | `full` | Global mode: `full`, `smart`, or `none` |
+| `bridge.run_middleware_chain` | `bool` | `True` | Run Django middleware on synthetic event requests |
+| `bridge.resolver` | `str` | unset | Dotted path to `(handler_state_cls, event) -> tier` callable |
+
+When the `bridge` block is omitted, settings fallbacks apply: `RX_EVENT_BRIDGE_MODE`, `RX_RUN_MIDDLEWARE_CHAIN`, `RX_EVENT_BRIDGE_RESOLVER`. Plugin values are synced onto Django settings at bootstrap.
+
+Invalid `bridge.mode` values raise a configuration error at startup.
+
+## Examples
+
+**Full mode (safest default):**
+
+```python
+ReflexDjangoPlugin(config={
+    "settings_module": "config.settings",
+    "bridge": {"mode": "full"},
+})
+```
+
+**Smart mode for mixed UI-only and Django-aware state:**
+
+```python
+--8<-- "snippets/pillar_bridge_smart.py"
+```
+
+**Custom resolver:**
+
+```python
+ReflexDjangoPlugin(config={
+    "settings_module": "config.settings",
+    "bridge": {
+        "mode": "smart",
+        "resolver": "shop.bridge.resolve_bridge_tier",
+    },
+})
+```
+
+```python
+# shop/bridge.py
+def resolve_bridge_tier(handler_state_cls, event):
+    if handler_state_cls.__name__.endswith("FilterState"):
+        return "none"
+    return "full"
+```
+
+**Disable middleware chain (advanced):**
 
 ```python
 ReflexDjangoPlugin(config={
     "settings_module": "config.settings",
     "bridge": {
         "enabled": True,
-        "mode": "smart",
-        "run_middleware_chain": True,
-        "resolver": "shop.bridge.resolve_bridge_tier",
+        "run_middleware_chain": False,
     },
 })
 ```
 
-Plugin bridge options are applied during bootstrap and update the corresponding Django settings.
+**Per-class override for hot UI-only state:**
+
+```python
+class FilterState(rx.State):
+    _rx_bridge = "none"
+```
+
+`rx_bridge = "none"` is also accepted. Per-class overrides beat global mode; upload events still require at least `auth_only`.
 
 ## Bridge tiers
 
@@ -58,20 +108,9 @@ Every event resolves to one tier:
 | `auth_only` | `RX_AUTH_ONLY_MIDDLEWARE` (session + auth by default) | Uploads or events that only need user/session |
 | `none` | No Django request binding | Hot UI-only state |
 
-`full` preserves Django-like behavior. Middleware can short-circuit with a redirect; by default reflex-django converts 3xx responses into `rx.redirect(...)`.
-
-When bridge is disabled (`bridge.enabled: false`) or an event resolves to `none`, `self.request` and `current_request()` are not available for that event.
+When bridge is disabled or an event resolves to `none`, `self.request` and `current_request()` are not available for that event.
 
 ## Modes
-
-Set a global bridge mode in plugin config:
-
-```python
-ReflexDjangoPlugin(config={
-    "settings_module": "config.settings",
-    "bridge": {"mode": "smart"},
-})
-```
 
 | Mode | Resolution |
 |:---|:---|
@@ -81,92 +120,21 @@ ReflexDjangoPlugin(config={
 
 Django-aware state means `AppState`, `DjangoUserState`, `ModelState`, `DjangoAuthState`, or any state class that mixes in `AuthBridgeMixin` (including built-in auth page handlers such as `submit_login_form`).
 
-Choose `full` first when correctness matters. Choose `smart` when you have UI-only state classes that do not need Django. Choose `none` only when Reflex events should not use Django request context by default.
+Choose `full` first when correctness matters. Choose `smart` when you have UI-only state classes that do not need Django.
 
-## Per-class override
+## Middleware and request binding
 
-For hot UI-only state:
+With `run_middleware_chain=True`, the bridge builds a synthetic Django request and runs Django middleware for bridge-bound events. Middleware can short-circuit with a redirect; reflex-django converts 3xx responses into `rx.redirect(...)` when `RX_AUTO_REDIRECT_FROM_MIDDLEWARE=True`.
 
-```python
-class FilterState(rx.State):
-    _rx_bridge = "none"
-```
-
-`rx_bridge = "none"` is also accepted. Per-class overrides beat the global mode, but upload events are still raised to at least `auth_only`.
-
-Use overrides for state classes that are called frequently and do not need Django, such as local filters, expanded rows, modal state, theme toggles, or client-side UI controls.
-
-## Custom resolver
-
-For advanced routing, set `bridge.resolver` in plugin config or `RX_EVENT_BRIDGE_RESOLVER` in Django settings. The callable receives `(handler_state_cls, event)` and returns `"full"`, `"auth_only"`, or `"none"`.
-
-```python
-def resolve_bridge_tier(handler_state_cls, event):
-    if handler_state_cls.__name__.endswith("FilterState"):
-        return "none"
-    return "full"
-```
-
-Resolver result has highest precedence, followed by class override, then global mode. Upload events keep the same safety floor and cannot go below `auth_only`.
-
-Use a resolver when class-level rules are not enough, for example when one state has both security-sensitive handlers and hot UI-only handlers.
-
-## Middleware behavior
-
-With `run_middleware_chain=True`, the bridge builds a synthetic Django request and runs Django middleware for bridge-bound events. This makes session/auth middleware, locale middleware, message middleware, and custom middleware behave more like they do for Django views.
-
-Configured skips are still respected. CSRF and streaming middleware are skipped for synthetic event requests by default. Middleware can return redirects; reflex-django converts 3xx responses into `rx.redirect(...)` when `RX_AUTO_REDIRECT_FROM_MIDDLEWARE=True`.
-
-## Event cache fast auth
-
-`RX_EVENT_CACHE` stores short-lived event context. With `RX_EVENT_CACHE_FAST_AUTH=True`, `auth_only` events can reuse cached user/session information inside `RX_EVENT_CACHE_TTL` and skip session/auth middleware. This trades lower per-event overhead for a small staleness window; logout invalidates the event cache.
-
-## Request binding
-
-The bridge binds request/response objects to the handler state branch instead of the entire state tree. This keeps unrelated substates lighter while preserving `self.request`, `current_request()`, and `current_user()` for the handler path.
-
-Inside bridge-bound `AppState` handlers you can use:
-
-| API | Purpose |
-|:---|:---|
-| `self.request` | Synthetic Django request for the event |
-| `self.request.user` / `self.user` | Live Django user |
-| `self.session` | Django session |
-| `self.messages` | Mirrored Django messages |
-| `self.csrf_token` | Mirrored CSRF token |
-| `current_request()` / `current_user()` | Context helpers outside direct state access |
+The bridge binds request/response objects to the handler state branch. Inside bridge-bound handlers you can use `self.request`, `self.user`, `self.session`, `self.messages`, `self.csrf_token`, `current_request()`, and `current_user()`.
 
 Do not authorize from UI snapshot vars alone. Use the live Django user or auth decorators.
 
-## Related settings
+## Tuning and debugging
 
-| Setting | Purpose |
-|:---|:---|
-| `RX_EVENT_BRIDGE_MODE` | Settings-level global bridge mode |
-| `RX_RUN_MIDDLEWARE_CHAIN` | Run Django middleware on event requests |
-| `RX_AUTH_ONLY_MIDDLEWARE` | Middleware subset for the `auth_only` tier |
-| `RX_EVENT_MIDDLEWARE_SKIP` | Middleware skipped on synthetic event requests |
-| `RX_EVENT_BRIDGE_RESOLVER` | Dotted custom resolver |
-| `RX_EVENT_RESOLVE_URL` | Populate `request.resolver_match` |
-| `RX_EVENT_POST_FROM_PAYLOAD` | Copy event kwargs into synthetic `request.POST` |
-| `RX_AUTO_REDIRECT_FROM_MIDDLEWARE` | Convert middleware redirects into Reflex redirects |
-| `RX_EVENT_CACHE` / `RX_EVENT_CACHE_TTL` | Cache event context |
-| `RX_EVENT_CACHE_FAST_AUTH` | Reuse cached auth for `auth_only` within TTL |
-| `RX_EVENT_METRICS` / `RX_EVENT_METRICS_LOGGER` | Log bridge timing |
-| `RX_BRIDGE_DEBUG` | Log swallowed bridge hot-path exceptions |
-| `RX_DEVTOOLS` | Enable local event/query/state inspection |
+Bridge tuning settings (`RX_EVENT_CACHE`, `RX_EVENT_CACHE_FAST_AUTH`, `RX_AUTH_ONLY_MIDDLEWARE`, `RX_DEVTOOLS`, and others) are documented in [Config reference](../advanced/config.md).
 
-## Debugging
-
-Enable [Devtools](../advanced/devtools.md) to see the resolved tier, handler, timing, query count, and bound user:
-
-```python
-RX_DEVTOOLS = True
-```
-
-For bridge helpers (`current_user`, session mirrors, request lifecycle helpers, and cache invalidation), see [Bridge utilities](../advanced/bridge-utilities.md).
-
-## Streaming middleware
+Enable [Devtools](../advanced/devtools.md) to inspect resolved tier, handler timing, and query count. For helper APIs, see [Bridge utilities](../advanced/bridge-utilities.md).
 
 Add `AsyncStreamingMiddleware` last in `MIDDLEWARE` for streaming from Django HTTP views. It is skipped on synthetic Reflex event requests.
 
@@ -174,12 +142,6 @@ Add `AsyncStreamingMiddleware` last in `MIDDLEWARE` for streaming from Django HT
 
 Use bridge when handlers need Django auth, sessions, permissions, messages, language, CSRF, or middleware behavior.
 
-Avoid bridge for state that is purely local UI state. Use `bridge.mode = "smart"` or `_rx_bridge = "none"` on those classes so they do not pay Django middleware overhead.
-
-You finished the core integration path. Build something next:
-
-- [Tutorial](quickstart.md)
-- [Pages and state](../advanced/pages-and-state.md)
-- [Auth](../advanced/auth.md)
+Avoid bridge for purely local UI state. Use `bridge.mode = "smart"` or `_rx_bridge = "none"` on those classes.
 
 **Next:** [Tutorial](quickstart.md) or [Advanced](../advanced/index.md)

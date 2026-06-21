@@ -79,30 +79,34 @@ Checklist:
 | `split_dev` | off | on | on | on | Django on `runserver`, Reflex separate |
 | `reflex_only` | off | off | on | off | Reflex UI only, no Django HTTP/request context |
 
+Full guide: `docs/learn/profiles.md`. Explicit pillar blocks override profile defaults.
+
 ## Four integration pillars
 
-Learn path: Integration -> Embed -> Mount -> Proxy -> Bridge (`docs/learn/`).
+Learn path: Integration -> Profiles -> Embed -> Mount -> Proxy -> Bridge (`docs/learn/`).
 
 ### Embed
 
+- Plugin keys: `embed.enabled` only.
 - Runs Django HTTP inside the Reflex backend during dev/integrated runs.
 - Default on with `profile: "integrated"`.
 - Turn off with `profile: "split_dev"` or `embed: {"enabled": False}` plus `proxy.server`.
 - Setting `RX_PROXY_SERVER` for split dev can imply embed off when no explicit plugin `embed` block is provided.
-- Production uses your own reverse proxy or Reflex production command, not the dev Vite proxy.
 
 ### Mount
 
+- Plugin keys: `mount.enabled`, `mount.mount_prefix`, `mount.django_prefix`.
+- Legacy flat keys: `auto_mount`, `mount_prefix`, `django_prefix`.
 - Tells Django which URL paths it owns; adds SPA catch-all for everything else.
-- Default on with `integrated`; auto-detects `/admin`, `/api` from `urlpatterns`.
+- Default on with `integrated` and `split_dev`; auto-detects `/admin`, `/api` from `urlpatterns`.
 - Override: `mount: {"django_prefix": ("/admin", "/api"), "mount_prefix": "/"}`.
 - List Django routes first in `urls.py`; register SPA pages with `app.add_page` in `{app}/{app}.py`.
-- Optional decorated pages live in `{app}/{RX_PAGE_MODULE}.py`; default `RX_PAGE_MODULE = "views"`.
 - `RX_RENDER_SPA_VIA_TEMPLATE_ENGINE=True` post-processes only HTML SPA shell responses with Django `RequestContext`; set it to `False` to serve Reflex `index.html` exactly as exported.
 - Turn off: `mount: {"enabled": False}`. Then wire URLs yourself.
 
 ### Proxy
 
+- Plugin keys: `proxy.enabled`, `proxy.server`, `proxy.separate_dev_ports`.
 - Connects Vite on :3000 to backends during local dev.
 - Browse http://localhost:3000/; backend on :8000 serves Django paths, `/_event`, `/_upload`.
 - Split dev: `profile: "split_dev"` with `proxy: {"server": "http://127.0.0.1:8000"}`.
@@ -112,10 +116,11 @@ Learn path: Integration -> Embed -> Mount -> Proxy -> Bridge (`docs/learn/`).
 
 ### Bridge
 
+- Plugin keys: `bridge.enabled`, `bridge.mode`, `bridge.run_middleware_chain`, `bridge.resolver`.
 - Runs Django middleware on Reflex events and binds request/user to the handler state when the resolved tier includes Django context.
 - Default on with `profile: "integrated"`, mode `full`.
 - `bridge.enabled = false` or `profile: "reflex_only"` means no `self.request` / `current_request()` on events.
-- Subclass `AppState`, `DjangoUserState`, or `ModelState` when handlers need Django context.
+- Django-aware state: `AppState`, `DjangoUserState`, `ModelState`, `DjangoAuthState`, or `AuthBridgeMixin` subclasses.
 - Authorize with `self.request.user` in handlers; reactive vars (`self.is_authenticated`, `self.username`) are UI snapshots only.
 - Modes: `full`, `smart`, `none`.
 - Tiers: `full`, `auth_only`, `none`. Upload events are never below `auth_only`.
@@ -268,8 +273,9 @@ These are removed v3/v4 patterns. Do not generate them:
 ## Documentation index
 
 - docs/index.md — home
-- docs/learn/index.md — learn overview and profiles
+- docs/learn/index.md — learn overview and profiles link
 - docs/learn/integration.md — install, wire Django, run
+- docs/learn/profiles.md — integrated, split_dev, reflex_only presets
 - docs/learn/embed.md — Django HTTP in Reflex backend
 - docs/learn/mount.md — URL prefixes and SPA catch-all
 - docs/learn/proxy.md — port 3000 dev wiring
